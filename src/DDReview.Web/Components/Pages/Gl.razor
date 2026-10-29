@@ -28,7 +28,7 @@ else
                 <option value="@true">Detail with balance check</option>
             </select>
         </label>
-        <label>Posting flags <input type="number" min="0" max="31" @bind="arFlag" title="Bit mask passed to the SQL function (2 = standard)" /></label>
+        <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
         <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
     </EditForm>
 
@@ -68,7 +68,7 @@ else
     private readonly HashSet<int> selected = [];
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
     private bool detail = true, busy;
-    private int arFlag = 2;
+    private int arFlag = 3;
     private string? error;
     private GlBalanceReport? report;
     private IReadOnlyList<GlLine>? detailLines;
