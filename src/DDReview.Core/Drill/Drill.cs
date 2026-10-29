@@ -170,25 +170,50 @@ public sealed class DrillKeyResolver
     ];
     static readonly Regex Safe = new(@"^[0-9,:\- ]*$", RegexOptions.Compiled);
 
-    /// <summary>The value to store as the filter for a clicked row. Falls back to the plain id when there is no function or the answer is not a clean list.</summary>
-    public async Task<string> ResolveAsync(string connectionString, DrillColumn col, DataRow row, CancellationToken ct = default)
+    static string Cell(DataRow row, string column) =>
+        row.Table.Columns.Contains(column) && row[column] is not DBNull
+            ? Convert.ToString(row[column], System.Globalization.CultureInfo.InvariantCulture)!.Trim() : "";
+
+    /// <summary>A cell is clickable when it has what the filter is built from: the name for name-looked-up dimensions (as in the old grid), otherwise the id.</summary>
+    public static bool CanClick(DataRow row, DrillColumn col) =>
+        Cell(row, col.NameFunction is not null && Functions.Contains(col.NameFunction) ? col.Display[^1] : col.IdColumn).Length > 0;
+
+    /// <summary>
+    /// The filter for a click: the clicked row plus every checked row (the old grid's row check boxes), each added once.
+    /// Name-looked-up dimensions call the client database function once per row, feeding it the list so far, as the old grid did;
+    /// the others join the row ids. Returns "" when nothing clean can be built.
+    /// </summary>
+    public async Task<string> ResolveAsync(string connectionString, DrillColumn col, DataRow clicked, IEnumerable<DataRow>? checkedRows = null, CancellationToken ct = default)
     {
-        string Id() => row.Table.Columns.Contains(col.IdColumn) && row[col.IdColumn] is not DBNull ? Convert.ToString(row[col.IdColumn], System.Globalization.CultureInfo.InvariantCulture)!.Trim() : "";
-        if (col.NameFunction is null || !Functions.Contains(col.NameFunction)) return Safe.IsMatch(Id()) ? Id() : "";
-        var nameCol = col.Display[^1];
-        if (!row.Table.Columns.Contains(nameCol) || row[nameCol] is DBNull) return Safe.IsMatch(Id()) ? Id() : "";
+        var rows = new List<DataRow> { clicked };
+        if (checkedRows is not null) foreach (var r in checkedRows) if (!rows.Contains(r)) rows.Add(r);
+        bool byName = col.NameFunction is not null && Functions.Contains(col.NameFunction);
+        if (!byName)
+        {
+            var ids = rows.Select(r => Cell(r, col.IdColumn)).Where(x => x.Length > 0).Distinct().ToList();
+            var joined = string.Join(",", ids);
+            return Safe.IsMatch(joined) ? joined : "";
+        }
+        var acc = "";
         try
         {
             await using var cn = new SqlConnection(connectionString);
             await cn.OpenAsync(ct);
-            await using var cmd = new SqlCommand($"select dbo.{col.NameFunction}(@a, @b)", cn);
-            cmd.Parameters.Add(new SqlParameter("@a", SqlDbType.VarChar, 8000) { Value = "" });
-            cmd.Parameters.Add(new SqlParameter("@b", SqlDbType.VarChar, 500) { Value = Convert.ToString(row[nameCol])!.Trim() });
-            var o = await cmd.ExecuteScalarAsync(ct);
-            var s = o is null or DBNull ? "" : Convert.ToString(o)!.Trim();
-            if (s.Length > 0 && Safe.IsMatch(s)) return s;
+            foreach (var r in rows)
+            {
+                var name = Cell(r, col.Display[^1]);
+                if (name.Length == 0) continue;
+                await using var cmd = new SqlCommand($"select dbo.{col.NameFunction}(@a, @b)", cn);
+                cmd.Parameters.Add(new SqlParameter("@a", SqlDbType.VarChar, 8000) { Value = acc });
+                cmd.Parameters.Add(new SqlParameter("@b", SqlDbType.VarChar, 500) { Value = name });
+                var o = await cmd.ExecuteScalarAsync(ct);
+                var next = o is null or DBNull ? "" : Convert.ToString(o)!.Trim();
+                if (next.Length > 0 && Safe.IsMatch(next)) acc = next;
+            }
         }
-        catch (SqlException) { /* fall back to the id below */ }
-        return Safe.IsMatch(Id()) ? Id() : "";
+        catch (SqlException) { acc = ""; }
+        if (acc.Length > 0) return acc;
+        var fallback = string.Join(",", rows.Select(r => Cell(r, col.IdColumn)).Where(x => x.Length > 0).Distinct());   // the function failed: plain ids
+        return Safe.IsMatch(fallback) ? fallback : "";
     }
 }

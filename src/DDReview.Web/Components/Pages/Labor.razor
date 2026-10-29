@@ -60,6 +60,7 @@ else
         }
         <table class="sales">
             <thead><tr>
+                <th></th>
                 @for (int i = 0; i < cols.Count; i++)
                 {
                     var c = cols[i]; var dc = colDrill[i];
@@ -75,7 +76,7 @@ else
             <tbody>
                 @foreach (DataRow row in Ordered())
                 {
-                    <tr>@for (int i = 0; i < cols.Count; i++)
+                    <tr><td class="sel"><input type="checkbox" title="Select this row" checked="@checkedRows.Contains(row)" @onchange="e => Check(row, (bool)e.Value!)" /></td>@for (int i = 0; i < cols.Count; i++)
                     {
                         var c = cols[i]; var dc = colDrill[i];
                         <td class="@Cls(c)">
@@ -88,7 +89,7 @@ else
             @if (!punch)
             {
                 <tfoot>
-                    <tr class="total">
+                    <tr class="total"><td></td>
                         @for (int i = 0; i < cols.Count; i++)
                         {
                             var c = cols[i];
@@ -151,12 +152,14 @@ else
     private async Task RowClick(DrillColumn dc, DataRow row)
     {
         if (ctx is null || busy) return;
-        var v = await resolver.ResolveAsync(ctx.ClientConnectionString, dc, row);
+        var v = await resolver.ResolveAsync(ctx.ClientConnectionString, dc, row, checkedRows);
         if (v.Length == 0) return;
         state.RowClick(Cat, dc.Key, v);
         await ExecuteAsync();
     }
-    private bool CanClick(DataRow row, DrillColumn dc) => row.Table.Columns.Contains(dc.IdColumn) && row[dc.IdColumn] is not DBNull;
+    private readonly HashSet<DataRow> checkedRows = [];
+    private static bool CanClick(DataRow row, DrillColumn dc) => DrillKeyResolver.CanClick(row, dc);
+    private void Check(DataRow row, bool on) { if (on) checkedRows.Add(row); else checkedRows.Remove(row); }
     private void Sort(SalesColumn c) => state.Sort(c.Header, c.Kind != SalesCellKind.Text);
     private string Mark(SalesColumn c) => state.SortHeader == c.Header ? (state.SortDescending ? " ▼" : " ▲") : "";
     private IEnumerable<DataRow> Ordered()
@@ -176,7 +179,7 @@ else
     private async Task ExecuteAsync()
     {
         if (ctx is null || busy) return;
-        error = null; result = null;
+        error = null; result = null; checkedRows.Clear();
         var dims = state.Dimensions<LaborDimensions>();
         var allowedIds = stores.Select(s => s.StoreId).ToHashSet();                         // re-check against the access list
         var (ids, lists) = DrillFilters.Split(state, Cat, selected.Where(allowedIds.Contains));

@@ -127,4 +127,32 @@ public class DrillTests
         // N/D: A = 0.5, b = 0.1, zero denominators sort as empty (low)
         Assert.Equal(["A", "b"], GridSort.Rows(t, GridSort.Column(t, "N", "D"), true).Take(2).Select(r => (string)r["Name"]).ToArray());
     }
+
+    static DataTable Items()
+    {
+        var t = new DataTable();
+        t.Columns.Add("SaleType", typeof(string)); t.Columns.Add("SaleTypeID", typeof(string)); t.Columns.Add("MainTypeID", typeof(int)); t.Columns.Add("MainType", typeof(string));
+        t.Rows.Add("Dine In", DBNull.Value, 1, "Food"); t.Rows.Add("Carry Out", DBNull.Value, 2, "Beer"); t.Rows.Add("Bar", DBNull.Value, 3, "Wine");
+        return t;
+    }
+
+    [Fact]
+    public void Name_looked_up_cells_are_clickable_by_name_even_when_the_id_is_empty()
+    {
+        var t = Items();
+        var sale = DrillState.Find(Cat, "SaleType")!;
+        Assert.True(DrillKeyResolver.CanClick(t.Rows[0], sale));        // SaleTypeID is null but the name is there
+        Assert.True(DrillKeyResolver.CanClick(t.Rows[0], DrillState.Find(Cat, "MainType")!));
+        Assert.False(DrillKeyResolver.CanClick(t.Rows[0], DrillState.Find(Cat, "Discount")!));   // no such column
+    }
+
+    [Fact]
+    public async Task Checked_rows_and_the_clicked_row_are_all_included_once()
+    {
+        var t = Items();
+        var main = DrillState.Find(Cat, "MainType")!;
+        var r = new DrillKeyResolver();
+        Assert.Equal("3,1", await r.ResolveAsync("", main, t.Rows[2], [t.Rows[0], t.Rows[2]]));   // clicked row first, no duplicate
+        Assert.Equal("2", await r.ResolveAsync("", main, t.Rows[1]));
+    }
 }
