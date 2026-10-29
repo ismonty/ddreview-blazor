@@ -84,7 +84,7 @@ public static class SalesLayout
             string[] charge = ["TotalSelectedCharges1", "TotalSelectedCharges2", "TotalSelectedCharges0"];
             string[] head = ["Selected Charges 1", "Selected Charges 2", "All Other Charges"];
             for (int i = 0; i < 3; i++)
-                if (Has(charge[i]) && SumOf(t, charge[i]) != 0) cols.Add(new SalesColumn(head[i], charge[i]));
+                if (Has(charge[i])) cols.Add(new SalesColumn(head[i], charge[i]));
         }
         return cols.Where(c => Has(c.Column) && (c.Denominator is null || Has(c.Denominator))).ToList();
     }
@@ -123,7 +123,6 @@ public static class SalesLayout
     }
 
     private static decimal ToDecimal(object v) => v is DBNull ? 0m : Convert.ToDecimal(v, CultureInfo.InvariantCulture);
-    private static decimal SumOf(DataTable t, string col) => t.Rows.Cast<DataRow>().Sum(r => ToDecimal(r[col]));
     private static string FirstText(DataTable t, string col)
     {
         if (!t.Columns.Contains(col)) return "";
