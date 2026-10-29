@@ -1,0 +1,26 @@
+@page "/"
+@attribute [Authorize]
+@inject UserContextService Users
+
+<PageTitle>DD Review</PageTitle>
+<h1>DD Review</h1>
+@if (ctx is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <p>Signed in as <strong>@ctx.UserName</strong>.</p>
+    <ul class="menu">
+        @if (ctx.Access.CanSee(DDReview.Core.Tenancy.ReportKind.DebitCredit) || ctx.Access.Administrator)
+        {
+            <li><a href="/gl">General ledger review</a></li>
+        }
+    </ul>
+    <p class="muted">Sales and Receipts reviews are the next slices.</p>
+}
+
+@code {
+    private DDReview.Web.UserContext? ctx;
+    protected override async Task OnInitializedAsync() => ctx = await Users.GetAsync();
+}

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DDReview.Core/DDReview.Core.csproj" />
+    <Project Path="src/DDReview.Web/DDReview.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DDReview.Tests/DDReview.Tests.csproj" />
+  </Folder>
+</Solution>
