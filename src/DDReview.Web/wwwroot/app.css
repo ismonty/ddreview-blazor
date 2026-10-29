@@ -24,32 +24,76 @@ h1:focus {
         content: "An error has occurred."
     }
 
-.darker-border-checkbox.form-check-input {
-    border-color: #929292;
+/* =====================================================================
+   DD Review look and feel
+   The colours, Roboto type and layout patterns follow the original DD Review site (dark page, navy panels,
+   bold column headings, gold buttons) as carried over into the "Twin Ports (Main)" style that already
+   exists in the owner's MOOTT and BOB applications. The variables below are the same names and values as
+   that style's default block (wwwroot/app.css in those apps), so the three apps can share a look.
+   ===================================================================== */
+:root {
+  --bg: #000000; --card: #1d2731; --tile: #09314d; --field: #0b1219;
+  --row: var(--tile); --line: var(--bg); --row-gap: 4px;
+  --ink: #f7eedf; --muted: #a9bbc9; --edge: #4b7391;
+  --header: #328cc1; --header-ink: #07202f; --brand-bg: #1d2731; --brand-ink: #d9b310;
+  --link: #7abcdc; --accent: #328cc1; --accent-ink: #07202f;
+  --primary: #d9b310; --primary-ink: #111111; --gold: #d9b310;
+  --danger: #ff7a6e; --warn: #3d3510;
+  --alert-bg: #3b1a17; --alert-ink: #ffd0cb; --alert-line: #6b2a24;
+  --ok-bg: #12351f; --ok-ink: #b8f0c8;
+  color-scheme: dark;
 }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--link); }
+h1 { margin: .2rem 0 .6rem; font-size: 1.6rem; } h2 { font-size: 1.1rem; margin: 1rem 0 .6rem; }
+h1:focus, h1:focus-visible { outline: none; }
+.muted { color: var(--muted); }
+.error { color: var(--danger); }
 
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
-    color: var(--bs-secondary-color);
-    text-align: end;
-}
+header.top { display: flex; gap: 1.2rem; align-items: center; background: var(--header); color: var(--header-ink); padding: .6rem 1rem; }
+header.top a { color: var(--header-ink); text-decoration: none; font-weight: 700; }
+header.top a.brand { color: var(--brand-ink); background: var(--brand-bg); padding: .15rem .7rem; border-radius: 6px; font-size: 1.15rem; }
+header.top nav { flex: 1; display: flex; gap: 1.1rem; flex-wrap: wrap; }
+header.top nav a:hover { text-decoration: underline; }
+.logout { display: flex; gap: .6rem; align-items: center; margin: 0; }
+main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
 
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-    text-align: start;
-}
-/* DDReview layout */
-header.top{display:flex;gap:1.5rem;align-items:center;padding:.6rem 1rem;background:#0b2545;color:#fff}
-header.top a{color:#fff;text-decoration:none}.brand{font-weight:700}
-header.top nav{flex:1}.logout{display:flex;gap:.6rem;align-items:center;margin:0}
-main{padding:1rem;max-width:1200px;margin:0 auto}
-.login-card{max-width:340px;margin:4rem auto;padding:1.5rem;border:1px solid #ccd;border-radius:8px}
-.login-card label,.filters label{display:block;margin:.6rem 0;font-weight:600}
-.login-card input{display:block;width:100%;padding:.4rem}
-.muted{color:#667}.error{color:#b00020}
-.filters{display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;margin-bottom:1rem}
-.filters fieldset{border:1px solid #ccd;border-radius:6px}.filters label.inline{display:block;font-weight:400;margin:.2rem 0}
-.banner{padding:.7rem 1rem;border-radius:6px;font-weight:700;margin:1rem 0}.banner.ok{background:#e3f6e8;color:#0a5c2b}.banner.bad{background:#fde7e9;color:#8a0017}
-table{border-collapse:collapse;width:100%;margin:.5rem 0}th,td{padding:.3rem .5rem;border-bottom:1px solid #e3e3ea;text-align:left}
-th.n,td.n{text-align:right;font-variant-numeric:tabular-nums}tr.suspense td{background:#fff4d6}tr.total td{font-weight:700;border-top:2px solid #99a}
+input, select, textarea { font: inherit; padding: .5rem .6rem; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); color: var(--ink); min-width: 0; }
+select option { background: var(--field); color: var(--ink); }
+button { font: inherit; padding: .45rem 1.1rem; border-radius: 999px; border: 1px solid var(--primary); background: var(--primary); color: var(--primary-ink); font-weight: 700; cursor: pointer; }
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+header.top button { background: var(--brand-bg); color: var(--brand-ink); border-color: var(--brand-bg); padding: .25rem .8rem; }
 
-table.receipts td.stack, table.receipts th.stack { white-space: nowrap; vertical-align: top; }
-table.receipts .b { font-weight: 700; }
+.login-card { max-width: 360px; margin: 4rem auto; padding: 1.5rem; background: var(--card); border: 1px solid var(--edge); border-radius: 10px; }
+.login-card label { display: flex; flex-direction: column; gap: .2rem; margin: .7rem 0; font-size: .85rem; color: var(--muted); }
+.login-card input { width: 100%; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-bottom: 1rem; padding: 1rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.filters label { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: var(--muted); }
+.filters fieldset { border: 1px solid var(--edge); border-radius: 8px; }
+.filters legend { color: var(--gold); font-weight: 700; padding: 0 .4rem; }
+.filters label.inline { flex-direction: row; align-items: center; gap: .4rem; font-size: 1rem; color: var(--ink); margin: .2rem 0; }
+.filters label.inline input { padding: 0; }
+
+.banner { padding: .7rem 1rem; border-radius: 8px; font-weight: 700; margin: 1rem 0; }
+.banner.ok { background: var(--ok-bg); color: var(--ok-ink); }
+.banner.bad { background: var(--alert-bg); color: var(--alert-ink); border: 1px solid var(--alert-line); }
+
+/* Tables: each row is a navy tile separated by a gap, like the original review grids */
+table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
+th, td { padding: .4rem .6rem; text-align: left; }
+td { background: var(--row); border-bottom: var(--row-gap) solid var(--line); }
+th { font-size: .85rem; font-weight: 700; color: var(--ink); border-bottom: 1px solid var(--edge); vertical-align: bottom; }
+th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
+tr.suspense td { background: var(--warn); }
+tr.total td { font-weight: 700; color: var(--gold); }
+table.receipts th.stack, table.receipts td.stack { white-space: nowrap; vertical-align: top; }
+table.receipts td.stack .b { font-weight: 700; }
+table.receipts td:first-child, table.receipts td:nth-child(2) { font-weight: 700; }
+ul.menu { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .7rem; }
+ul.menu li a { display: block; padding: .8rem 1.4rem; background: var(--tile); border: 1px solid var(--edge); border-left: 5px solid var(--gold); border-radius: 10px; text-decoration: none; font-weight: 700; color: var(--ink); }
+ul.menu li a:hover { border-color: var(--accent); }
+@media (max-width: 640px) { table { font-size: .85rem; } main { padding: .6rem; } }
+

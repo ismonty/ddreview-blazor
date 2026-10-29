@@ -12,14 +12,19 @@ else
 {
     <p>Signed in as <strong>@ctx.UserName</strong>.</p>
     <ul class="menu">
-        @if (ctx.Access.CanSee(DDReview.Core.Tenancy.ReportKind.DebitCredit) || ctx.Access.Administrator)
+        @if (ctx.Access.CanSee(DDReview.Core.Tenancy.ReportKind.Sales))
         {
             <li><a href="/sales">Sales review</a></li>
+        }
+        @if (ctx.Access.CanSee(DDReview.Core.Tenancy.ReportKind.Receipts))
+        {
             <li><a href="/receipts">Receipts review</a></li>
+        }
+        @if (ctx.Access.CanSee(DDReview.Core.Tenancy.ReportKind.DebitCredit))
+        {
             <li><a href="/gl">General ledger review</a></li>
         }
     </ul>
-    <p class="muted">Sales and Receipts reviews are the next slices.</p>
 }
 
 @code {

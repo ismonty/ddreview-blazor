@@ -46,3 +46,6 @@ Dimensions never seen in 11,175 logged scripts (deferred): FrequentDinerPlan, Fr
 - `ReceiptsService` probes the client DB for the `ProfitCenterID` column and the "Cash Tips Earned" detail id (same probes as the old login), asks for deposit detail only when a detail dimension is used.
 - `ReceiptsLayout` defines the 10 stacked columns of the old grid; a test checks every value against the live result row and screenshot.
 - Still to confirm on a live database: `/receipts` against the restored Valentini's copy (week of 10/21-10/27 should show 35,618.81 expected).
+
+## Look and feel
+The original DD Review colours, type and layout were carried over by the owner into the "Twin Ports (Main)" style that exists in the MOOTT and BOB applications. This app uses the same variable names and values as that style's default block (`--bg`, `--card`, `--tile`, `--ink`, `--header`, `--primary`, `--gold` ...) and the same self-hosted Roboto, so end users of the old site see a familiar look and the apps can share one theme. To restyle, change the variables at the top of `src/DDReview.Web/wwwroot/app.css`.
