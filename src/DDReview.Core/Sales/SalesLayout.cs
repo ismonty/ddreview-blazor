@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace DDReview.Core.Sales;
 
-public enum SalesCellKind { Text, Number, Percent }
+public enum SalesCellKind { Text, Number, Percent, Date, Time }
 
 /// <summary>One visible column of the Sales Review grid. Percent columns divide Numerator by Denominator.</summary>
 public sealed record SalesColumn(string Header, string Column, SalesCellKind Kind = SalesCellKind.Number,
@@ -99,7 +99,7 @@ public static class SalesLayout
         foreach (var g in groups)
         {
             var sums = new Dictionary<string, decimal>();
-            foreach (var c in cols.Where(c => c.Kind != SalesCellKind.Text))
+            foreach (var c in cols.Where(c => c.Kind is SalesCellKind.Number or SalesCellKind.Percent))
                 foreach (var name in new[] { c.Column, c.Denominator }.Where(n => n is not null).Cast<string>())
                     if (!sums.ContainsKey(name)) sums[name] = g.Sum(r => ToDecimal(r[name]));
             result.Add((g.Key, sums));

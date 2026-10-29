@@ -49,3 +49,11 @@ Dimensions never seen in 11,175 logged scripts (deferred): FrequentDinerPlan, Fr
 
 ## Look and feel
 The original DD Review colours, type and layout were carried over by the owner into the "Twin Ports (Main)" style that exists in the MOOTT and BOB applications. This app uses the same variable names and values as that style's default block (`--bg`, `--card`, `--tile`, `--ink`, `--header`, `--primary`, `--gold` ...) and the same self-hosted Roboto, so end users of the old site see a familiar look and the apps can share one theme. To restyle, change the variables at the top of `src/DDReview.Web/wwwroot/app.css`.
+
+## Slice 4: Labor review (unverified against production)
+
+- `Labor/Legacy/DataAccessLaborReview.cs` is the old generator with the ADO/Retrieve methods removed; `LaborService` configures it from a `LaborRequest` and runs the script with the 22 header `set` lines turned into parameters (shared `SalesService.Parameterize`).
+- Punch detail implies Employee, as the old button did. The old header script sets `@EndDayNumber` from the start day; that quirk is kept, only the data script is run.
+- `LaborLayout` follows `LaborReviewPage`: dimension columns, optional Date/Start/End punch columns, Mon..Sun per display mode (Hours, Dollars, Both, Verbose = adds sales and labor %), Total Hours / $ / Sales / Labor %, OT and DT hours.
+- **No captured production scripts exist for labor** (the old labor page never logged them). Until the Extended Events capture is done on the production server, the generator is a source-faithful port with no byte-for-byte check. Add a characterization test like the Sales one when scripts arrive.
+- Not ported yet: the header block above the grid, Excel, Previous/Next, drill, order-by, and the last three total controls (`tct[13..15]`) whose column mapping in the old code looks unused.

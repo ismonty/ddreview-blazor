@@ -20,6 +20,10 @@ else
         {
             <li><a href="/receipts">Receipts review</a></li>
         }
+        @if (ctx.Access.CanSee(DDReview.Core.Tenancy.ReportKind.Payroll))
+        {
+            <li><a href="/labor">Payroll review</a></li>
+        }
         @if (ctx.Access.CanSee(DDReview.Core.Tenancy.ReportKind.DebitCredit))
         {
             <li><a href="/gl">General ledger review</a></li>

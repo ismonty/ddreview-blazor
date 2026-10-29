@@ -1,0 +1,138 @@
+@page "/labor"
+@attribute [Authorize]
+@using System.Data
+@using DDReview.Core.Gl
+@using DDReview.Core.Labor
+@using DDReview.Core.Sales
+@using DDReview.Core.Tenancy
+@inject UserContextService Users
+@inject LaborService LaborSvc
+
+<PageTitle>Labor review</PageTitle>
+<h1>Labor review</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <EditForm Model="this" OnSubmit="RunAsync" FormName="labor" class="filters">
+        <fieldset>
+            <legend>Stores</legend>
+            @foreach (var s in stores)
+            {
+                <label class="inline"><input type="checkbox" checked="@selected.Contains(s.StoreId)" @onchange="e => Toggle(s.StoreId, (bool)e.Value!)" /> @s.StoreNumber – @s.StoreName</label>
+            }
+        </fieldset>
+        <fieldset>
+            <legend>Group by</legend>
+            @foreach (var d in Choices)
+            {
+                <label class="inline"><input type="checkbox" checked="@dims.HasFlag(d.Value)" @onchange="e => ToggleDim(d.Value, (bool)e.Value!)" /> @d.Label</label>
+            }
+        </fieldset>
+        <label>From <input type="date" @bind="start" /></label>
+        <label>To <input type="date" @bind="end" /></label>
+        <label>Show
+            <select @bind="mode">
+                <option value="@LaborDisplay.Hours">Hours</option>
+                <option value="@LaborDisplay.Dollars">Dollars</option>
+                <option value="@LaborDisplay.Both">Hours and dollars</option>
+                <option value="@LaborDisplay.Verbose">Sales and labor %</option>
+            </select>
+        </label>
+        <label class="inline"><input type="checkbox" @bind="weekdays" /> Weekdays</label>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+    </EditForm>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (result is not null)
+    {
+        <p class="range">@($"{rangeStart:dddd, MMMM d, yyyy} - {rangeEnd:dddd, MMMM d, yyyy}")</p>
+        <table class="sales">
+            <thead><tr>@foreach (var c in cols) {<th class="@Cls(c)">@c.Header</th>}</tr></thead>
+            <tbody>
+                @foreach (DataRow row in result.Rows)
+                {
+                    <tr>@foreach (var c in cols) {<td class="@Cls(c)">@LaborLayout.Format(row, c)</td>}</tr>
+                }
+            </tbody>
+            @if (!punch)
+            {
+                <tfoot>
+                    <tr class="total">
+                        @for (int i = 0; i < cols.Count; i++)
+                        {
+                            var c = cols[i];
+                            if (c.Kind is SalesCellKind.Number or SalesCellKind.Percent)
+                            {
+                                <td class="n">@(c.Kind == SalesCellKind.Percent ? SalesLayout.FormatPercent(totals[c.Column], totals[c.Denominator!]) : SalesLayout.FormatNumber(totals[c.Column]))</td>
+                            }
+                            else { <td>@(i == 0 ? "Total" : "")</td> }
+                        }
+                    </tr>
+                </tfoot>
+            }
+        </table>
+        <p class="rowcount">Showing @result.Rows.Count Rows</p>
+    }
+}
+
+@code {
+    private record Choice(LaborDimensions Value, string Label);
+    private static readonly Choice[] Choices =
+    [
+        new(LaborDimensions.Store, "Store"), new(LaborDimensions.StoreGroup, "Store group"), new(LaborDimensions.LaborType, "Labor type"),
+        new(LaborDimensions.LaborGroup, "Labor group"), new(LaborDimensions.LaborDepartment, "Labor dept."), new(LaborDimensions.Employee, "Employee"),
+        new(LaborDimensions.OriginalPayrollID, "Original payroll ID"), new(LaborDimensions.DayHourSlot, "Day hour"),
+        new(LaborDimensions.DayTimeSlot, "Quarter hour"), new(LaborDimensions.PunchDetail, "Punch detail"),
+    ];
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy, weekdays = true, punch;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private readonly HashSet<int> selected = [];
+    private LaborDimensions dims = LaborDimensions.Store;
+    private LaborDisplay mode = LaborDisplay.Hours;
+    private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1), rangeStart, rangeEnd;
+    private string? error;
+    private DataTable? result;
+    private List<SalesColumn> cols = [];
+    private Dictionary<string, decimal> totals = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+        foreach (var s in stores) selected.Add(s.StoreId);
+    }
+
+    private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+    private void ToggleDim(LaborDimensions d, bool on) => dims = on ? dims | d : dims & ~d;
+    private static string? Cls(SalesColumn c) => c.Kind is SalesCellKind.Number or SalesCellKind.Percent ? "n" : null;
+
+    private async Task RunAsync()
+    {
+        if (ctx is null || busy) return;
+        error = null; result = null;
+        var ids = selected.Where(stores.Select(s => s.StoreId).ToHashSet().Contains).ToList();   // re-check against the access list
+        if (ids.Count == 0) { error = "Pick at least one store."; return; }
+        if (dims == LaborDimensions.None) { error = "Pick at least one thing to group by."; return; }
+        if (end < start) { error = "The end date is before the start date."; return; }
+        busy = true;
+        try
+        {
+            var req = new LaborRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids);
+            result = await LaborSvc.RunAsync(ctx.ClientConnectionString, req);
+            cols = LaborLayout.Build(dims, mode, result, weekdays);
+            punch = dims.HasFlag(LaborDimensions.PunchDetail);
+            totals = SalesLayout.Totals(result, cols).FirstOrDefault().Sums ?? [];
+            rangeStart = start; rangeEnd = end;
+        }
+        catch (Exception ex) { error = "The query failed: " + ex.Message; }
+        finally { busy = false; }
+    }
+}
