@@ -39,7 +39,9 @@ public sealed class LoginService(ICentralDirectory central, LoginThrottle thrott
         if (string.IsNullOrWhiteSpace(match.ClientDsn))
             return new LoginResult(LoginOutcome.NoClientDatabase, match);
 
-        var loginId = await central.LogLoginAsync(match.WebUserId, userAgent, ip, hostName, ct);
+        int loginId;
+        try { loginId = await central.LogLoginAsync(match.WebUserId, userAgent, ip, hostName, ct); }
+        catch (Microsoft.Data.SqlClient.SqlException) { loginId = 0; } // the audit-log write must never block a valid sign-in
         return new LoginResult(LoginOutcome.Success, match, loginId);
     }
 }
