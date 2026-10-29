@@ -105,3 +105,47 @@ table.sales td.n, table.sales th.n { text-align: right; font-variant-numeric: ta
 table.sales tfoot tr.total td { font-weight: 700; border-top: 2px solid currentColor; }
 p.rowcount { font-size: .85rem; opacity: .75; }
 table.sales td.shade { background: color-mix(in srgb, currentColor 12%, transparent); }
+
+/* ---- Home tabs (Dashboard, Daily Summary, This Week, Last Week, Alerts, Reports) ---- */
+h1.client { font-size: 1.5rem; margin: .2rem 0 .5rem; }
+nav.tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; }
+nav.tabs a { background: var(--header); color: var(--header-ink); padding: .35rem .9rem; text-decoration: none; font-size: .95rem; border-radius: 3px 3px 0 0; }
+nav.tabs a.on { background: var(--card); color: var(--ink); font-weight: 700; }
+nav.tabs .tab-logout { margin: 0 0 0 auto; }
+nav.tabs .tab-logout button { background: var(--header); color: var(--header-ink); border: 0; padding: .35rem .9rem; border-radius: 3px 3px 0 0; font: inherit; }
+section.tabpanel { background: var(--card); border: 1px solid var(--edge); padding: .8rem; }
+.banner.late-banner { background: #8b008b; color: #fff; text-align: center; padding: .6rem; margin-bottom: .8rem; border: 1px solid var(--edge); }
+.datebar { display: flex; gap: .7rem; flex-wrap: wrap; align-items: center; border: 1px solid var(--gold); background: var(--tile); padding: .4rem .7rem; margin: 0 auto .8rem; width: fit-content; max-width: 100%; }
+.datebar label { font-weight: 700; font-size: .9rem; }
+.datebar input, .datebar select { background: var(--field); color: var(--ink); border: 1px solid var(--edge); padding: .15rem .3rem; }
+button.gold, .alerts button { background: var(--gold); color: #2b2100; border: 0; border-radius: 10px; padding: .15rem .8rem; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.alerts button { margin-left: .3rem; background: #eee; color: #111; border: 1px solid #888; border-radius: 3px; font-weight: 400; padding: .2rem .6rem; }
+.gauges { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .5rem; margin: .5rem 0 1rem; }
+.charts { display: flex; gap: .6rem; flex-wrap: wrap; }
+.chartbox { background: #0e4a73; border: 1px solid var(--edge); padding: .4rem; }
+.chartbox.wide { flex: 3 1 420px; } .chartbox.narrow { flex: 1 1 200px; }
+p.legend { display: flex; flex-wrap: wrap; gap: .8rem; justify-content: center; font-size: .75rem; background: #c5dcee; color: #123; padding: .3rem; margin: .3rem 0 0; }
+p.legend i { display: inline-block; width: 22px; height: 9px; margin-right: .3rem; border: 1px solid #567; }
+.alerts-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; }
+table.alerts-grid { width: 100%; border-collapse: collapse; margin: .6rem 0 1rem; color: #111; }
+table.alerts-grid caption { text-align: left; font-weight: 700; color: var(--ink); background: #fff0; padding: .3rem 0; }
+table.alerts-grid th { background: #fff; text-align: left; border: 2px solid #000; padding: .15rem .4rem; }
+table.alerts-grid td { background: #f1f1f1; border: 1px solid #555; padding: .15rem .4rem; }
+table.alerts-grid tbody tr:nth-child(even) td { background: #d8d6d6; }
+table.alerts-grid .n { text-align: right; } table.alerts-grid .c { text-align: center; }
+table.numbers { width: 100%; border-collapse: collapse; margin: 0 0 1rem; }
+table.numbers caption { display: flex; justify-content: space-between; text-align: left; padding: .5rem 0 .2rem; }
+table.numbers caption .sec { font-weight: 700; } table.numbers caption .who { text-align: right; font-size: .9rem; }
+table.numbers th, table.numbers td { border: 1px solid var(--edge); padding: .1rem .4rem; background: var(--card); }
+table.numbers tbody tr:nth-child(even) td { background: #253139; }
+table.numbers th { font-size: .8rem; } table.numbers .n { text-align: right; font-variant-numeric: tabular-nums; }
+table.numbers tr.total td { font-weight: 700; }
+table.daily { width: 100%; border-collapse: collapse; }
+table.daily th { background: var(--tile); border: 1px solid #000; padding: .3rem; font-size: .85rem; vertical-align: bottom; }
+table.daily td { background: var(--tile); border: 1px solid #000; padding: .2rem .4rem; vertical-align: top; font-size: .82rem; }
+table.daily .n div, table.daily .lbl div { line-height: 1.5; } table.daily .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.daily td.store { text-align: center; background: #5b0b5b; } table.daily td.store.late { background: #7a1f7a; }
+table.daily td.store b { display: block; text-transform: uppercase; } table.daily td.store small { display: block; font-size: .7rem; }
+table.daily .graph { min-width: 420px; background: #0b3957; } table.daily .bars { display: flex; justify-content: space-between; } 
+table.daily .amounts { display: grid; grid-template-columns: repeat(6, 1fr); text-align: right; font-variant-numeric: tabular-nums; }
+table.daily tr.total td { font-weight: 700; } table.daily .lbl.small { font-size: .75rem; }

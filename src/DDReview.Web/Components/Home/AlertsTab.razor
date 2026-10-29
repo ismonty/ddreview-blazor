@@ -1,0 +1,73 @@
+@using System.Data
+@using DDReview.Core.Home
+@inject HomeService Home
+<div class="alerts">
+    <div class="alerts-head">
+        <h2>Management Alerts</h2>
+        <span>
+            <button type="button" @onclick="() => showStatus = !showStatus">Sales Update Status</button>
+            <button type="button" @onclick="() => Go(monthsBack + 1)">Previous Month</button>
+            <button type="button" @onclick="() => Go(0)">Current Month</button>
+            <button type="button" @onclick="() => Go(Math.Max(0, monthsBack - 1))">Next Month</button>
+        </span>
+    </div>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    else if (table is null) { <p>Loading…</p> }
+    else
+    {
+        <p class="muted">@DateTime.Today.AddMonths(-monthsBack).ToString("MMMM yyyy")</p>
+        @if (showStatus) { @Section(table, [1]) }
+        @Section(table, [2, 4])
+    }
+</div>
+@code {
+    [Parameter, EditorRequired] public UserContextHolder Ctx { get; set; } = null!;
+    private DataTable? table; private string? error; private int monthsBack; private bool showStatus;
+
+    protected override async Task OnParametersSetAsync() { if (table is null && error is null) await Load(); }
+    private async Task Go(int m) { monthsBack = m; await Load(); }
+    private async Task Load()
+    {
+        try { table = await Home.AlertsAsync(Ctx.ConnectionString, Ctx.StoreIds, monthsBack); error = null; }
+        catch (Exception ex) { error = "The alerts could not be loaded: " + ex.Message; }
+    }
+
+    private RenderFragment Section(DataTable t, int[] sections) => b =>
+    {
+        var rows = t.Rows.Cast<DataRow>().Where(r => r["SectionNumber"] is not DBNull && sections.Contains(Convert.ToInt32(r["SectionNumber"]))).ToList();
+        int seq = 0;
+        if (rows.Count == 0) { b.OpenElement(seq++, "p"); b.AddAttribute(seq++, "class", "muted"); b.AddContent(seq++, sections.Contains(1) ? "Every store's sales are up to date." : "No alerts this month."); b.CloseElement(); return; }
+        foreach (var g in rows.GroupBy(r => r["SectionNumber"]))
+        {
+            var isVoid = g.Key is not DBNull && Convert.ToInt32(g.Key) != 1;
+            b.OpenElement(seq++, "table"); b.AddAttribute(seq++, "class", "alerts-grid");
+            b.OpenElement(seq++, "caption"); b.AddContent(seq++, g.First()["SectionName"] as string ?? ""); b.CloseElement();
+            b.OpenElement(seq++, "thead"); b.OpenElement(seq++, "tr");
+            string[] heads = isVoid
+                ? ["Store Name", "Posting Date", "Submission Date", "Voids", "Sales", "Void %", "Most Voided Item", "Most Voided $", "Most Voided #"]
+                : ["Store Name", "Posting Date", "Submission Date"];
+            for (int i = 0; i < heads.Length; i++) { b.OpenElement(seq++, "th"); if (isVoid && i is 3 or 4 or 5 or 7 or 8) b.AddAttribute(seq++, "class", "n"); b.AddContent(seq++, heads[i]); b.CloseElement(); }
+            b.CloseElement(); b.CloseElement();
+            b.OpenElement(seq++, "tbody");
+            foreach (var r in g)
+            {
+                b.OpenElement(seq++, "tr");
+                Cell(b, ref seq, r["StoreReportName"], null); Cell(b, ref seq, Fmt(r["PostingDate"], "MM/dd/yy"), "c"); Cell(b, ref seq, Fmt(r["MaxBatchSubmitted"], "MM/dd/yy HH:mm"), "c");
+                if (isVoid)
+                {
+                    Cell(b, ref seq, Num(r, "TotalVoids"), "n"); Cell(b, ref seq, Num(r, "TotalSales"), "n"); Cell(b, ref seq, Num(r, "VoidPercentage"), "n");
+                    Cell(b, ref seq, r["TopVoidedMenuItem"], "c"); Cell(b, ref seq, Num(r, "TopVoidedMenuItemAmount"), "n"); Cell(b, ref seq, Num(r, "TopVoidedMenuItemQuantity"), "n");
+                }
+                b.CloseElement();
+            }
+            b.CloseElement(); b.CloseElement();
+        }
+    };
+    private static void Cell(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder b, ref int seq, object? v, string? cls)
+    {
+        b.OpenElement(seq++, "td"); if (cls is not null) b.AddAttribute(seq++, "class", cls);
+        b.AddContent(seq++, v is DBNull or null ? "" : v.ToString()); b.CloseElement();
+    }
+    private static string Fmt(object v, string f) => v is DateTime d ? d.ToString(f, System.Globalization.CultureInfo.InvariantCulture) : "";
+    private static string Num(DataRow r, string c) => r.Table.Columns.Contains(c) && r[c] is not DBNull ? Convert.ToDecimal(r[c]).ToString("N2", System.Globalization.CultureInfo.InvariantCulture) : "";
+}

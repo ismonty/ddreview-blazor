@@ -21,6 +21,7 @@ builder.Services.AddSingleton<ITenantConnectionFactory, TenantConnectionFactory>
 builder.Services.AddSingleton<ClientAccessService>();
 builder.Services.AddSingleton<GlService>();
 builder.Services.AddSingleton<DDReview.Core.Sales.SalesService>();
+builder.Services.AddSingleton<DDReview.Core.Home.HomeService>();
 builder.Services.AddSingleton<DDReview.Core.Receipts.ReceiptsService>();
 builder.Services.AddSingleton<DDReview.Core.Labor.LaborService>();
 builder.Services.AddSingleton<LoginThrottle>();

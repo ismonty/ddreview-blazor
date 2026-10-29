@@ -1,0 +1,63 @@
+@using System.Data
+@using System.Globalization
+@using DDReview.Core.Home
+@inject HomeService Home
+<DateBar Start="start" End="end" Compare="compare" ShowCompare="false" Stores="Ctx.Stores" StoreId="storeId" OnChange="Apply" />
+@if (error is not null) { <p class="error" role="alert">@error</p> }
+else if (sections is null) { <p>Loading…</p> }
+else if (sections.Count == 0) { <p class="muted">No numbers for that range.</p> }
+else
+{
+    var heads = NumbersSection.DayHeaders(sections[0].Start);
+    @foreach (var s in sections)
+    {
+        <table class="numbers">
+            <caption>
+                <span class="sec">@s.Name</span>
+                <span class="who">@(s.StoreName.Length > 0 ? s.StoreName : storeId == 0 ? "All Stores" : "")<br />@(s.Start?.ToString("d", CultureInfo.InvariantCulture)) - @(s.End?.ToString("d", CultureInfo.InvariantCulture))</span>
+            </caption>
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    @foreach (var (d, w) in heads) { <th class="n"><small>@d</small> @w</th> }
+                    <th class="n">Total</th><th class="n">%</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in s.Rows)
+                {
+                    var total = r.Table.Columns.Contains("TotalBit") && r["TotalBit"] is bool tb && tb;
+                    <tr class="@(total ? "total" : null)">
+                        <td>@r["Descriptor"]</td>
+                        @for (int i = 0; i < 7; i++) { <td class="n">@N(r, "D" + i)</td> }
+                        <td class="n">@N(r, "LineTotal")</td><td class="n">@N(r, "LineTotalPercentOfSectionTotal")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+@code {
+    [Parameter, EditorRequired] public UserContextHolder Ctx { get; set; } = null!;
+    /// <summary>0 = this week, -1 = last week.</summary>
+    [Parameter] public int WeeksBack { get; set; }
+    private DateOnly start, end, compare; private int storeId; private List<NumbersSection>? sections; private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        start = HomeService.WeekStart(DateOnly.FromDateTime(DateTime.Today)).AddDays(7 * WeeksBack);
+        end = start.AddDays(6); compare = start.AddDays(-364);
+        await Load();
+    }
+    private Task Apply(DateBar.Value v) { start = v.Start; end = v.End; compare = v.Compare; storeId = v.StoreId; return Load(); }
+    private async Task Load()
+    {
+        try
+        {
+            var t = await Home.NumbersAsync(Ctx.ConnectionString, Ctx.StoreIds, storeId == 0 ? null : storeId, start, end, start.AddDays(-364));
+            sections = NumbersSection.From(t); error = null;
+        }
+        catch (Exception ex) { error = "The numbers could not be loaded: " + ex.Message; }
+    }
+    private static string N(DataRow r, string c) => r.Table.Columns.Contains(c) && r[c] is not DBNull ? Convert.ToDecimal(r[c], CultureInfo.InvariantCulture).ToString("N2", CultureInfo.InvariantCulture) : "";
+}

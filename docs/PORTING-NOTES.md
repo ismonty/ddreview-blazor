@@ -57,3 +57,14 @@ The original DD Review colours, type and layout were carried over by the owner i
 - `LaborLayout` follows `LaborReviewPage`: dimension columns, optional Date/Start/End punch columns, Mon..Sun per display mode (Hours, Dollars, Both, Verbose = adds sales and labor %), Total Hours / $ / Sales / Labor %, OT and DT hours.
 - **No captured production scripts exist for labor** (the old labor page never logged them). Until the Extended Events capture is done on the production server, the generator is a source-faithful port with no byte-for-byte check. Add a characterization test like the Sales one when scripts arrive.
 - Not ported yet: the header block above the grid, Excel, Previous/Next, drill, order-by, and the last three total controls (`tct[13..15]`) whose column mapping in the old code looks unused.
+
+## Slice 5: the home tabs (unverified against the live database)
+
+Source: `DDReviewMarauder/Default.aspx(.cs)` and `App_Code/DefaultCommon.cs`. Every number comes from client-database SQL functions; the port only calls them with real parameters:
+`fn_DashBoardAlerts`, `fn_DashBoardSummary` (This Week / Last Week), `fn_DailySummaryByStore` / `ByWeekDay` / `ByCalendarDay`, `fn_StoreRegisterProcessingStatus`, and `cs_spDailySummaryByStoreCheckPreTotalSales` (the old page ran it before the summary; it is called best-effort).
+Store list = the stores allowed for Sales (old `StoreListAuthorizedSales`). Default dates: Dashboard and Daily Summary = yesterday vs 364 days back; This Week / Last Week = Monday..Sunday.
+
+Differences from the old screens, on purpose:
+- Dundas gauges and charts are plain SVG (`SvgGauge`, `BarChart`, `BulletBar`); same data, similar face.
+- Daily Summary: the old page showed Day Part 1 as a ratio (sales / last year's, e.g. 1.58) instead of the amount, and zeros for the Day Part totals on the total row. The port shows the amount, and sums the day parts in the total row.
+- Not ported yet: the Options and Downloads/Payments tabs, the user's saved tab labels and default date ranges (`DateRangePickerDefaults`), the Affordable Care Act alert, and the quick gauge.

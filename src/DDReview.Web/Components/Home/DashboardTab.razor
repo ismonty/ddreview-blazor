@@ -1,0 +1,80 @@
+@using System.Data
+@using System.Globalization
+@using DDReview.Core.Gl
+@using DDReview.Core.Home
+@inject HomeService Home
+@if (late.Count > 0)
+{
+    <div class="banner late-banner">
+        @foreach (var (desc, names) in late) { <div><b>@desc</b><br /><small>@names</small></div> }
+    </div>
+}
+<DateBar Start="start" End="end" Compare="compare" ShowScope="true" Scope="scope" OnChange="Apply" />
+@if (error is not null) { <p class="error" role="alert">@error</p> }
+else if (tot is null) { <p>Loading…</p> }
+else
+{
+    <div class="gauges">
+        <SvgGauge Label="Void %" Value="tot.VoidPct" Max="smallMax" ReadoutValue="(double)tot.Voids" Size="130" Tip="@($"Voids: ${tot.Voids:N2}, {tot.VoidPct:N2}%.")" />
+        <SvgGauge Label="Labor %" Value="tot.LaborPct" Max="laborMax" ReadoutValue="(double)tot.Labor" Size="170" Tip="@($"Labor: ${tot.Labor:N2}, {tot.LaborPct:N2}%.")" />
+        <SvgGauge Label="Sales" Big="true" Value="(double)tot.Sales" Value2="(double)tot.PreviousSales" Max="salesMax" ReadoutValue="(double)tot.Sales" Size="230"
+                  Tip="@($"Net sales ${tot.Sales:N2}; last year ${tot.PreviousSales:N2}; budget ${tot.Budget:N2}.")" />
+        <SvgGauge Label="Costs" Value="tot.CostPct" Value2="tot.PurchasesPct" Max="laborMax" ReadoutValue="(double)tot.ProductCost" Size="170"
+                  Tip="@($"Theoretical product cost ${tot.ProductCost:N2}, {tot.CostPct:N2}%; purchases ${tot.Purchases:N2}, {tot.PurchasesPct:N2}%.")" />
+        <SvgGauge Label="Discounts" Value="tot.DiscountPct" Max="smallMax" ReadoutValue="(double)tot.Discounts" Size="130" Tip="@($"Discounts: ${tot.Discounts:N2}, {tot.DiscountPct:N2}%.")" />
+    </div>
+    <div class="charts">
+        <div class="chartbox wide"><BarChart Title="Sales By Store" Groups="groups" /></div>
+        <div class="chartbox narrow"><BarChart Title="Total Sales" Groups="totalGroup" ShowLegend="false" /></div>
+    </div>
+}
+@code {
+    [Parameter, EditorRequired] public UserContextHolder Ctx { get; set; } = null!;
+    private DateOnly start, end, compare; private DashboardScope scope = DashboardScope.DateRange;
+    private DashboardTotals? tot; private string? error;
+    private double smallMax = 100, laborMax = 100, salesMax = 1000;
+    private List<BarChart.Group> groups = [], totalGroup = [];
+    private List<(string Desc, string Names)> late = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        end = start = DateOnly.FromDateTime(DateTime.Today.AddDays(-1));
+        compare = start.AddDays(-364);
+        await Load();
+    }
+    private Task Apply(DateBar.Value v) { start = v.Start; end = v.End; compare = v.Compare; scope = v.Scope; return Load(); }
+    private async Task Load()
+    {
+        try
+        {
+            var t = await Home.DashboardAsync(Ctx.ConnectionString, Ctx.StoreIds, scope, start, end, compare);
+            tot = DashboardTotals.From(t);
+            smallMax = DashboardTotals.NiceMax(Math.Max(Math.Max(tot.VoidPct, tot.DiscountPct), Math.Max(tot.PurchasesPct, tot.CostPct)));
+            laborMax = DashboardTotals.NiceMax(Math.Max(tot.LaborPct, tot.CostPct));
+            salesMax = DashboardTotals.NiceMax((double)Math.Max(tot.Sales, Math.Max(tot.PreviousSales, tot.Budget)));
+            groups = t.Rows.Cast<DataRow>().Select((r, i) => new BarChart.Group(Label(r, t, i), Values(r, t))).ToList();
+            totalGroup = [new BarChart.Group("Total", new Dictionary<string, double>
+            {
+                ["Purchases"] = (double)tot.Purchases, ["Labor"] = (double)tot.Labor, ["Theoretical Product Cost"] = (double)tot.ProductCost,
+                ["Discounts"] = (double)tot.Discounts, ["Net"] = (double)tot.Sales, ["Budget"] = (double)tot.Budget, ["Last Year"] = (double)tot.PreviousSales,
+            })];
+            var st = await Home.StatusAsync(Ctx.ConnectionString, Ctx.StoreIds);
+            late = st.Rows.Cast<DataRow>().Where(r => r["StoreProcessingStatus"] is not DBNull && Convert.ToInt32(r["StoreProcessingStatus"]) > 0)
+                .Select(r => (r["StoreProcessingStatusDescription"]?.ToString() ?? "", r["StoreNameList"]?.ToString() ?? "")).ToList();
+            error = null;
+        }
+        catch (Exception ex) { error = "The dashboard could not be loaded: " + ex.Message; }
+    }
+    static string Label(DataRow r, DataTable t, int i)
+    {
+        foreach (var c in new[] { "StoreName", "WeekDayName", "DayName", "CalendarDayName" })
+            if (t.Columns.Contains(c) && r[c] is not DBNull) return r[c].ToString()!.Trim();
+        return (i + 1).ToString(CultureInfo.InvariantCulture);
+    }
+    static double D(DataRow r, string c) => r.Table.Columns.Contains(c) && r[c] is not DBNull ? (double)Convert.ToDecimal(r[c], CultureInfo.InvariantCulture) : 0;
+    static Dictionary<string, double> Values(DataRow r, DataTable t) => new()
+    {
+        ["Purchases"] = D(r, "TotalPurchases"), ["Labor"] = D(r, "TotalLabor"), ["Theoretical Product Cost"] = D(r, "TotalProductCost"),
+        ["Discounts"] = Math.Abs(D(r, "TotalDiscounts")), ["Net"] = D(r, "TotalSales"), ["Budget"] = D(r, "TotalSalesBudget"), ["Last Year"] = D(r, "PreviousTotalSales"),
+    };
+}

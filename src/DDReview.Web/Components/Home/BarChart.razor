@@ -1,0 +1,70 @@
+@* Sales-by-store bars (replaces the Dundas chart): last year and budget as wide pale backdrops, net sales in front, costs as thin bars. *@
+@using System.Globalization
+@{
+    double max = Math.Max(1, Groups.SelectMany(g => g.Values.Values).DefaultIfEmpty(1).Max());
+    double top = DDReview.Core.Home.DashboardTotals.NiceMax(max / 1.05);
+    int w = 600, h = 300, left = 56, bottom = 30, topPad = 14;
+    double pw = w - left - 10, ph = h - bottom - topPad;
+    double Y(double v) => topPad + ph - ph * v / top;
+    double slot = Groups.Count == 0 ? pw : pw / Groups.Count;
+}
+<svg viewBox="0 0 @w @h" class="chart" role="img" aria-label="@Title" width="100%">
+    <g><text x="@(w / 2)" y="12" text-anchor="middle" font-size="12" fill="var(--ink)">@Title</text></g>
+    <rect x="@left" y="@topPad" width="@F(pw)" height="@F(ph)" fill="#7aa9c9" />
+    @for (int i = 0; i <= 4; i++)
+    {
+        var v = top * i / 4;
+        <line x1="@left" x2="@(left + pw)" y1="@F(Y(v))" y2="@F(Y(v))" stroke="#2c4b63" stroke-dasharray="3 3" />
+        <g><text x="@(left - 4)" y="@F(Y(v) + 3)" text-anchor="end" font-size="10" fill="var(--muted)">@v.ToString("0", CultureInfo.InvariantCulture)</text></g>
+    }
+    @for (int gi = 0; gi < Groups.Count; gi++)
+    {
+        var g = Groups[gi]; var x0 = left + gi * slot; var cx = x0 + slot / 2;
+        double bw = Math.Min(70, slot * 0.8);
+        @Bar(cx - bw / 2, bw, g.Values.GetValueOrDefault("Last Year"), "#dbe7f1", "Last Year")
+        @Bar(cx - bw * 0.35, bw * 0.7, g.Values.GetValueOrDefault("Budget"), "#8aa0b2", "Budget")
+        @Bar(cx - bw * 0.2, bw * 0.4, g.Values.GetValueOrDefault("Net"), "#7d9be8", "Net")
+        var small = new[] { "Purchases", "Labor", "Theoretical Product Cost", "Discounts" };
+        for (int si = 0; si < small.Length; si++)
+        {
+            var sw = bw / 8;
+            @Bar(cx - bw / 2 + si * sw * 1.2, sw, g.Values.GetValueOrDefault(small[si]), Colors[small[si]], small[si])
+        }
+        <g><text x="@F(cx)" y="@(h - 12)" text-anchor="middle" font-size="10" fill="var(--ink)">@g.Label</text></g>
+    }
+</svg>
+@if (ShowLegend)
+{
+    <p class="legend">
+        @foreach (var (k, c) in Colors) { <span><i style="background:@c"></i>@k</span> }
+    </p>
+}
+@code {
+    public sealed record Group(string Label, Dictionary<string, double> Values);
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public List<Group> Groups { get; set; } = [];
+    [Parameter] public bool ShowLegend { get; set; } = true;
+    static readonly Dictionary<string, string> Colors = new()
+    {
+        ["Purchases"] = "#b6c9dc", ["Labor"] = "#8aa6c0", ["Theoretical Product Cost"] = "#93aee8", ["Discounts"] = "#a9b9d0",
+        ["Net"] = "#7d9be8", ["Budget"] = "#8aa0b2", ["Last Year"] = "#dbe7f1",
+    };
+    static string F(double d) => d.ToString("0.##", CultureInfo.InvariantCulture);
+    RenderFragment Bar(double x, double bw, double v, string fill, string name) => builder =>
+    {
+        if (v <= 0) return;
+        double y = Y2(v);
+        builder.OpenElement(0, "rect");
+        builder.AddAttribute(1, "x", F(x)); builder.AddAttribute(2, "y", F(y)); builder.AddAttribute(3, "width", F(bw));
+        builder.AddAttribute(4, "height", F(Math.Max(0, 300 - 30 - y))); builder.AddAttribute(5, "fill", fill);
+        builder.AddAttribute(6, "stroke", "#33506a");
+        builder.OpenElement(7, "title"); builder.AddContent(8, name + ": " + v.ToString("N2", CultureInfo.InvariantCulture)); builder.CloseElement();
+        builder.CloseElement();
+    };
+    double Y2(double v)
+    {
+        double max = Math.Max(1, Groups.SelectMany(g => g.Values.Values).DefaultIfEmpty(1).Max());
+        double top = DDReview.Core.Home.DashboardTotals.NiceMax(max / 1.05);
+        return 14 + 256 - 256 * v / top;
+    }
+}
