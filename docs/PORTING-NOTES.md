@@ -56,7 +56,7 @@ The original DD Review colours, type and layout were carried over by the owner i
 - Punch detail implies Employee, as the old button did. The old header script sets `@EndDayNumber` from the start day; that quirk is kept, only the data script is run.
 - `LaborLayout` follows `LaborReviewPage`: dimension columns, optional Date/Start/End punch columns, Mon..Sun per display mode (Hours, Dollars, Both, Verbose = adds sales and labor %), Total Hours / $ / Sales / Labor %, OT and DT hours.
 - **No captured production scripts exist for labor** (the old labor page never logged them). Until the Extended Events capture is done on the production server, the generator is a source-faithful port with no byte-for-byte check. Add a characterization test like the Sales one when scripts arrive.
-- Not ported yet: the header block above the grid, Excel, Previous/Next, drill, order-by, and the last three total controls (`tct[13..15]`) whose column mapping in the old code looks unused.
+- Not ported yet: the header block above the grid, Excel, Previous/Next, and the last three total controls (`tct[13..15]`) whose column mapping in the old code looks unused.
 
 ## Slice 5: the home tabs (unverified against the live database)
 
@@ -71,4 +71,21 @@ Differences from the old screens, on purpose:
 
 ## Slice 6: footer buttons
 
-Previous / Next (shift the date range by its own length and rerun), Hide/Show Weekdays (Sales and Labor), and Download as Excel on Sales, Receipts and Labor. The workbook comes from `XlsxWriter` (hand-written minimal .xlsx, no package; checked by opening a sample in LibreOffice). Receipts exports each stacked line as its own column. Not ported yet: drill up/down by clicking a row, order-by on headers, Link/Print, Specials and Daily Discounts buttons, Export Daily Sales, the L0..L3 and LY buttons.
+Previous / Next (shift the date range by its own length and rerun), Hide/Show Weekdays (Sales and Labor), and Download as Excel on Sales, Receipts and Labor. The workbook comes from `XlsxWriter` (hand-written minimal .xlsx, no package; checked by opening a sample in LibreOffice). Receipts exports each stacked line as its own column. Not ported yet: Link/Print, Specials and Daily Discounts buttons, Export Daily Sales, the L0..L3 and LY buttons.
+
+## Slice 7: drill and order-by (Sales, Receipts, Labor)
+
+Source: `ReviewPage.cs` ClickState / ReviewControlColumnItemTemplate / HeaderColumnClass, and the control-column tables of the three review pages. Code: `Core/Drill/Drill.cs` (state, filters, sort, name lookup) and `DrillCatalogs.cs` (one table per review: dimension, display columns, id column, next dimension, name function). UI: `DrillHeader.razor` plus the three pages.
+
+Behaviour kept from the old grid:
+- Clicking a **row cell** of a dimension sets that dimension's filter to the row, turns that dimension off and turns on its "next" dimension (`ClearFlagAndSet`). Filters of other dimensions stay.
+- Clicking a **header title** shows only that dimension, filters kept (`ClearFlagsAndSet`).
+- Header buttons: **Up** (Drill Up: add this dimension), **Right** (Drill Right: add the next one), **All** (Show All: drop this dimension's filter; shown only while a filter is on).
+- Same-named things in several stores (menu items, discounts, staff, ...) are clicked by name; the id list comes from the client database's own `fn_ParsePairSetStringAdd*` function, as before (parameterized here; if it fails or returns anything but digits/colons/spaces the plain id is used).
+- The Run/Submit button starts a fresh report (filters and sort cleared); Previous/Next keep them.
+
+Changes and decisions:
+- **A Store filter can only narrow the stores the user already has** (`DrillFilters.Split`); it never reaches the generator's store list as typed. Unit-tested.
+- **Order-by**: number headers sort on click (high to low first, again to reverse); dimension columns have a small sort button (their title click is the drill, as in the old grid); sorting uses the day/week/hour number rather than the text where the old grid did. Receipts' stacked headers sort per line. Percent columns sort by the ratio.
+- Not done: the saved per-column sort strings and the "Back/Forward" click-state history buttons; the "Forget This" header block that listed the active filters by name (a one-line "Filtered on" list with a clear button replaces it).
+- Unverified against a live database: the result tables are expected to carry the id columns named in the catalog (`StoreID`, `MainTypeID`, ...). A cell whose id column is missing is simply not clickable, so the failure mode is "no link", not a wrong filter. Check on turbo which rows are clickable.

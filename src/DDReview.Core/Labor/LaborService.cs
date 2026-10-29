@@ -23,8 +23,8 @@ public sealed record LaborRequest(
 /// <summary>Runs the ported labor generator. Header-set values become SQL parameters (same approach as SalesService).</summary>
 public sealed class LaborService
 {
-    static readonly Regex SafeList = new(@"^[0-9,:\-]*$", RegexOptions.Compiled);
-    static readonly HashSet<string> FilterNames = ["LaborType", "LaborGroup", "LaborDepartment", "Employee", "PayrollID", "DayHourSlot", "DayTimeSlot"];
+    static readonly Regex SafeList = new(@"^[0-9,:\- ]*$", RegexOptions.Compiled);
+    static readonly HashSet<string> FilterNames = ["StoreGroup", "LaborType", "LaborGroup", "LaborDepartment", "Employee", "PayrollID", "DayHourSlot", "DayTimeSlot"];
 
     /// <summary>The script exactly as the legacy generator builds it (tests and diagnostics).</summary>
     public string BuildScript(LaborRequest req) => Configure(req).BuildDataScript();

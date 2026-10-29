@@ -150,3 +150,13 @@ table.daily .graph { min-width: 420px; background: #0b3957; } table.daily .bars 
 table.daily .amounts { display: grid; grid-template-columns: repeat(6, 1fr); text-align: right; font-variant-numeric: tabular-nums; }
 table.daily tr.total td { font-weight: 700; } table.daily .lbl.small { font-size: .75rem; }
 .footbuttons { display: flex; gap: .5rem; flex-wrap: wrap; margin: .8rem 0; }
+
+/* drill / sort controls in review grid headers and cells */
+button.hlink, button.cell { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 700; color: inherit; cursor: pointer; text-align: inherit; text-decoration: underline; text-underline-offset: 2px; }
+button.hlink:hover, button.cell:hover { text-decoration-thickness: 2px; }
+button.cell { font-weight: 700; }
+.hbtns { display: flex; gap: .2rem; margin-top: .2rem; }
+.hbtns button { font-size: .65rem; font-weight: 600; padding: 0 .3rem; border: 1px solid var(--gold); background: var(--tile); color: inherit; border-radius: 3px; cursor: pointer; line-height: 1.4; }
+.hbtns button:hover { background: var(--gold); color: #000; }
+p.filters-on { margin: .2rem 0; font-size: .85rem; }
+p.filters-on button { font-size: .75rem; margin-left: .3rem; }

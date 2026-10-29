@@ -25,7 +25,7 @@ public sealed record SalesRequest(
 
 public sealed class SalesService
 {
-    static readonly Regex SafeList = new(@"^[0-9,:\-]*$", RegexOptions.Compiled);
+    static readonly Regex SafeList = new(@"^[0-9,:\- ]*$", RegexOptions.Compiled);
     static readonly Regex HeaderSet = new(@"^(?<pre>[ \t]*)set @(?<n>\w+)\s*=\s*(?<v>[^\r\n]*)", RegexOptions.Multiline | RegexOptions.Compiled);
 
     /// <summary>Builds the script exactly as the legacy generator would (used by tests and for diagnostics).</summary>

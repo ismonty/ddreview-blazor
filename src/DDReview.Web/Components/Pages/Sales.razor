@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @using System.Data
 @using DDReview.Core.Gl
+@using DDReview.Core.Drill
 @using DDReview.Core.Sales
 @using DDReview.Core.Tenancy
 @inject UserContextService Users
@@ -28,7 +29,7 @@ else
             <legend>Group by</legend>
             @foreach (var d in Choices)
             {
-                <label class="inline"><input type="checkbox" checked="@dims.HasFlag(d.Value)" @onchange="e => ToggleDim(d.Value, (bool)e.Value!)" /> @d.Label</label>
+                <label class="inline"><input type="checkbox" checked="@state.Flags.Contains(d.Value.ToString())" @onchange="e => ToggleDim(d.Value, (bool)e.Value!)" /> @d.Label</label>
             }
         </fieldset>
         <label>From <input type="date" @bind="start" /></label>
@@ -48,14 +49,37 @@ else
     @if (result is not null)
     {
         <p class="range">@($"{rangeStart:dddd, MMMM d, yyyy} - {rangeEnd:dddd, MMMM d, yyyy}")</p>
+        @if (state.Filters.Count > 0)
+        {
+            <p class="filters-on">Filtered on:
+                @foreach (var k in state.Filters.Keys.ToList()) {<button type="button" class="hlink" title="Show All" @onclick="() => Act(s => s.ShowAll(k))">@k ✕</button>}
+            </p>
+        }
         <table class="sales">
             <thead><tr>
-                @foreach (var c in cols) {<th class="@(c.Kind == SalesCellKind.Text ? null : "n")">@c.Header</th>}
+                @for (int i = 0; i < cols.Count; i++)
+                {
+                    var c = cols[i]; var dc = colDrill[i];
+                    if (dc is not null)
+                    {
+                        <DrillHeader Title="@c.Header" Dimension="true" Buttons="@(c.Column == dc.Display[^1])" Filtered="@state.Filters.ContainsKey(dc.Key)"
+                                     NextTitle="@dc.NextKey" Mark="@Mark(c)" OnTitle="() => Act(s => s.ShowOnly(dc.Key))" OnUp="() => Act(s => s.DrillUp(dc.Key))"
+                                     OnRight="() => Act(s => s.DrillRight(Cat, dc.Key))" OnShowAll="() => Act(s => s.ShowAll(dc.Key))" OnSort="() => Sort(c)" />
+                    }
+                    else { <DrillHeader Title="@c.Header" Css="@(c.Kind == SalesCellKind.Text ? null : "n")" Sortable="@(c.Kind != SalesCellKind.Text)" Mark="@Mark(c)" OnSort="() => Sort(c)" /> }
+                }
             </tr></thead>
             <tbody>
-                @foreach (DataRow row in result.Rows)
+                @foreach (DataRow row in Ordered())
                 {
-                    <tr>@foreach (var c in cols) {<td class="@(c.Kind == SalesCellKind.Text ? null : "n") @(Shade(row, c) ? "shade" : null)" title="@Tip(row, c)">@SalesLayout.Format(row, c)</td>}</tr>
+                    <tr>@for (int i = 0; i < cols.Count; i++)
+                    {
+                        var c = cols[i]; var dc = colDrill[i];
+                        <td class="@(c.Kind == SalesCellKind.Text ? null : "n") @(Shade(row, c) ? "shade" : null)" title="@Tip(row, c)">
+                            @if (dc is not null && CanClick(row, dc)) { <button type="button" class="cell" @onclick="() => RowClick(dc, row)">@SalesLayout.Format(row, c)</button> }
+                            else { @SalesLayout.Format(row, c) }
+                        </td>
+                    }</tr>
                 }
             </tbody>
             <tfoot>
@@ -92,7 +116,11 @@ else
     private bool allowed, busy;
     private IReadOnlyList<StoreInfo> stores = [];
     private readonly HashSet<int> selected = [];
-    private SalesDimensions dims = SalesDimensions.Store;
+    private static readonly IReadOnlyList<DrillColumn> Cat = DrillCatalogs.Sales;
+    private readonly DrillState state = NewState();
+    private static DrillState NewState() { var s = new DrillState(); s.Flags.Add("Store"); return s; }
+    private List<DrillColumn?> colDrill = [];
+    private readonly DrillKeyResolver resolver = new();
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
     private string compare = "";
     private bool weekdays = true;
@@ -114,13 +142,39 @@ else
     }
 
     private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
-    private void ToggleDim(SalesDimensions d, bool on) => dims = on ? dims | d : dims & ~d;
+    private void ToggleDim(SalesDimensions d, bool on) { if (on) state.Flags.Add(d.ToString()); else state.Flags.Remove(d.ToString()); }
 
-    private async Task RunAsync()
+    private async Task Act(Action<DrillState> change) { change(state); await ExecuteAsync(); }
+    private async Task RowClick(DrillColumn dc, DataRow row)
+    {
+        if (ctx is null || busy) return;
+        var v = await resolver.ResolveAsync(ctx.ClientConnectionString, dc, row);
+        if (v.Length == 0) return;
+        state.RowClick(Cat, dc.Key, v);
+        await ExecuteAsync();
+    }
+    private bool CanClick(DataRow row, DrillColumn dc) => row.Table.Columns.Contains(dc.IdColumn) && row[dc.IdColumn] is not DBNull;
+    private void Sort(SalesColumn c) => state.Sort(c.Header, c.Kind != SalesCellKind.Text);
+    private string Mark(SalesColumn c) => state.SortHeader == c.Header ? (state.SortDescending ? " ▼" : " ▲") : "";
+    private IEnumerable<DataRow> Ordered()
+    {
+        var c = state.SortHeader is null ? null : cols.FirstOrDefault(x => x.Header == state.SortHeader);
+        if (c is null || result is null) return result!.Rows.Cast<DataRow>();
+        var dc = DrillState.ForDisplay(Cat, c.Column);
+        var key = dc?.SortColumn is not null && result.Columns.Contains(dc.SortColumn) ? GridSort.Column(result, dc.SortColumn) : GridSort.Column(result, c.Column, c.Denominator);
+        return GridSort.Rows(result, key, state.SortDescending);
+    }
+
+    /// <summary>The Run button: a fresh report, so filters and sort start over.</summary>
+    private async Task RunAsync() { state.Filters.Clear(); state.SortHeader = null; await ExecuteAsync(); }
+
+    private async Task ExecuteAsync()
     {
         if (ctx is null || busy) return;
         error = null; result = null;
-        var ids = selected.Where(stores.Select(s => s.StoreId).ToHashSet().Contains).ToList();   // re-check against the access list
+        var dims = state.Dimensions<SalesDimensions>();
+        var allowedIds = stores.Select(s => s.StoreId).ToHashSet();                         // re-check against the access list
+        var (ids, lists) = DrillFilters.Split(state, Cat, selected.Where(allowedIds.Contains));
         if (ids.Count == 0) { error = "Pick at least one store."; return; }
         if (dims == SalesDimensions.None) { error = "Pick at least one thing to group by."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
@@ -128,10 +182,12 @@ else
         try
         {
             int? off = int.TryParse(compare, out var o) ? o : null;
-            var req = new SalesRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids, off);
+            var filters = lists.Count == 0 ? null : lists.ToDictionary(kv => Enum.Parse<SalesDimensions>(kv.Key), kv => kv.Value);
+            var req = new SalesRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids, off, filters);
             result = await SalesSvc.RunAsync(ctx.ClientConnectionString, req);
             ranDims = dims;
             cols = SalesLayout.Build(ranDims, result, weekdays);
+            colDrill = cols.Select(c => c.Kind == SalesCellKind.Text ? DrillState.ForDisplay(Cat, c.Column) : null).ToList();
             totals = SalesLayout.Totals(result, cols);
             rangeStart = start; rangeEnd = end;
         }
@@ -142,13 +198,13 @@ else
     private void ToggleWeekdays()
     {
         weekdays = !weekdays;
-        if (result is not null) { cols = SalesLayout.Build(ranDims, result, weekdays); totals = SalesLayout.Totals(result, cols); }
+        if (result is not null) { cols = SalesLayout.Build(ranDims, result, weekdays); colDrill = cols.Select(c => c.Kind == SalesCellKind.Text ? DrillState.ForDisplay(Cat, c.Column) : null).ToList(); totals = SalesLayout.Totals(result, cols); }
     }
     private async Task Shift(int dir)
     {
         var days = (int)(end - start).TotalDays + 1;
         start = start.AddDays(dir * days); end = end.AddDays(dir * days);
-        await RunAsync();
+        await ExecuteAsync();
     }
     private async Task ExcelAsync()
     {
