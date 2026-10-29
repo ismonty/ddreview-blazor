@@ -212,8 +212,8 @@ public sealed class DrillKeyResolver
             }
         }
         catch (SqlException) { acc = ""; }
-        if (acc.Length > 0) return acc;
-        var fallback = string.Join(",", rows.Select(r => Cell(r, col.IdColumn)).Where(x => x.Length > 0).Distinct());   // the function failed: plain ids
-        return Safe.IsMatch(fallback) ? fallback : "";
+        // If the function fails or answers with something unclean, do nothing rather than fall back to one store's id:
+        // the same name has a different id in each store, so a plain id would silently drop the other stores.
+        return acc;
     }
 }
