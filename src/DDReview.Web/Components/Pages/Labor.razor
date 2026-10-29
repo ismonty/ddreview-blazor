@@ -7,6 +7,8 @@
 @using DDReview.Core.Tenancy
 @inject UserContextService Users
 @inject LaborService LaborSvc
+@inject IJSRuntime JS
+@using DDReview.Web.Components.Home
 
 <PageTitle>Labor review</PageTitle>
 <h1>Labor review</h1>
@@ -75,6 +77,7 @@ else
             }
         </table>
         <p class="rowcount">Showing @result.Rows.Count Rows</p>
+        <ReportButtons Busy="busy" ShowWeekdaysToggle="true" Weekdays="weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnToggleWeekdays="ToggleWeekdays" OnExcel="ExcelAsync" />
     }
 }
 
@@ -94,6 +97,7 @@ else
     private readonly HashSet<int> selected = [];
     private LaborDimensions dims = LaborDimensions.Store;
     private LaborDisplay mode = LaborDisplay.Hours;
+    private LaborDimensions ranDims; private LaborDisplay ranMode;
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1), rangeStart, rangeEnd;
     private string? error;
     private DataTable? result;
@@ -127,12 +131,36 @@ else
         {
             var req = new LaborRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids);
             result = await LaborSvc.RunAsync(ctx.ClientConnectionString, req);
-            cols = LaborLayout.Build(dims, mode, result, weekdays);
+            ranDims = dims; ranMode = mode;
+            cols = LaborLayout.Build(ranDims, ranMode, result, weekdays);
             punch = dims.HasFlag(LaborDimensions.PunchDetail);
             totals = SalesLayout.Totals(result, cols).FirstOrDefault().Sums ?? [];
             rangeStart = start; rangeEnd = end;
         }
         catch (Exception ex) { error = "The query failed: " + ex.Message; }
         finally { busy = false; }
+    }
+
+    private void ToggleWeekdays()
+    {
+        weekdays = !weekdays;
+        if (result is null) return;
+        cols = LaborLayout.Build(ranDims, ranMode, result, weekdays);
+        totals = SalesLayout.Totals(result, cols).FirstOrDefault().Sums ?? [];
+    }
+    private async Task Shift(int dir)
+    {
+        var days = (int)(end - start).TotalDays + 1;
+        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        await RunAsync();
+    }
+    private async Task ExcelAsync()
+    {
+        if (result is null) return;
+        var (h, rows, tot) = SalesLayout.Export(result, cols, LaborLayout.Format);
+        var title = $"Labor review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}";
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Labor", title, h, rows, punch ? null : tot);
+        await JS.InvokeVoidAsync("ddDownload", $"LaborReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
 }

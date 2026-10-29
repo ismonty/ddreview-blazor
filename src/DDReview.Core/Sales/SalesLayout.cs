@@ -107,6 +107,22 @@ public static class SalesLayout
         return result;
     }
 
+    /// <summary>Rows for an Excel download: text as text, numbers as numbers, percent columns as the formatted percent; plus the totals row.</summary>
+    public static (List<string> Headers, List<object?[]> Rows, object?[]? Totals) Export(DataTable t, IReadOnlyList<SalesColumn> cols, Func<DataRow, SalesColumn, string>? format = null)
+    {
+        format ??= Format;
+        object? Cell(DataRow r, SalesColumn c) => r[c.Column] is DBNull ? null : c.Kind == SalesCellKind.Number ? ToDecimal(r[c.Column]) : format(r, c);
+        var rows = t.Rows.Cast<DataRow>().Select(r => cols.Select(c => Cell(r, c)).ToArray()).ToList();
+        var tot = Totals(t, cols).FirstOrDefault().Sums;
+        object?[]? totals = tot is null ? null : cols.Select((c, i) => c.Kind switch
+        {
+            SalesCellKind.Number => (object?)tot[c.Column],
+            SalesCellKind.Percent => FormatPercent(tot[c.Column], tot[c.Denominator!]),
+            _ => i == 0 ? "Total" : null,
+        }).ToArray();
+        return (cols.Select(c => c.Header).ToList(), rows, totals);
+    }
+
     public static string FormatNumber(decimal v) => v.ToString("N2", CultureInfo.InvariantCulture);
     public static string FormatPercent(decimal num, decimal den) => den == 0 ? "" : (num / den * 100m).ToString("N2", CultureInfo.InvariantCulture) + "%";
 

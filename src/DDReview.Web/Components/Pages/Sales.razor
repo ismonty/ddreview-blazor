@@ -6,6 +6,8 @@
 @using DDReview.Core.Tenancy
 @inject UserContextService Users
 @inject SalesService SalesSvc
+@inject IJSRuntime JS
+@using DDReview.Web.Components.Home
 
 <PageTitle>Sales review</PageTitle>
 <h1>Sales review</h1>
@@ -71,6 +73,7 @@ else
             </tfoot>
         </table>
         <p class="rowcount">Showing @result.Rows.Count Rows</p>
+        <ReportButtons Busy="busy" ShowWeekdaysToggle="true" Weekdays="weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnToggleWeekdays="ToggleWeekdays" OnExcel="ExcelAsync" />
     }
 }
 
@@ -92,6 +95,8 @@ else
     private SalesDimensions dims = SalesDimensions.Store;
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
     private string compare = "";
+    private bool weekdays = true;
+    private SalesDimensions ranDims;
     private string? error;
     private DataTable? result;
     private List<SalesColumn> cols = [];
@@ -125,7 +130,8 @@ else
             int? off = int.TryParse(compare, out var o) ? o : null;
             var req = new SalesRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids, off);
             result = await SalesSvc.RunAsync(ctx.ClientConnectionString, req);
-            cols = SalesLayout.Build(dims, result);
+            ranDims = dims;
+            cols = SalesLayout.Build(ranDims, result, weekdays);
             totals = SalesLayout.Totals(result, cols);
             rangeStart = start; rangeEnd = end;
         }
@@ -133,6 +139,26 @@ else
         finally { busy = false; }
     }
 
+    private void ToggleWeekdays()
+    {
+        weekdays = !weekdays;
+        if (result is not null) { cols = SalesLayout.Build(ranDims, result, weekdays); totals = SalesLayout.Totals(result, cols); }
+    }
+    private async Task Shift(int dir)
+    {
+        var days = (int)(end - start).TotalDays + 1;
+        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        await RunAsync();
+    }
+    private async Task ExcelAsync()
+    {
+        if (result is null) return;
+        var (h, rows, tot) = SalesLayout.Export(result, cols);
+        var title = $"Sales review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}";
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Sales", title, h, rows, tot);
+        await JS.InvokeVoidAsync("ddDownload", $"SalesReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    }
     private static bool Shade(DataRow row, SalesColumn c) =>
         c.ShadeColumn is not null && row[c.ShadeColumn] is not DBNull && Convert.ToDecimal(row[c.ShadeColumn]) > 0;
     private static string? Tip(DataRow row, SalesColumn c) =>

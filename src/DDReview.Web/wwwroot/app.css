@@ -149,3 +149,4 @@ table.daily td.store b { display: block; text-transform: uppercase; } table.dail
 table.daily .graph { min-width: 420px; background: #0b3957; } table.daily .bars { display: flex; justify-content: space-between; } 
 table.daily .amounts { display: grid; grid-template-columns: repeat(6, 1fr); text-align: right; font-variant-numeric: tabular-nums; }
 table.daily tr.total td { font-weight: 700; } table.daily .lbl.small { font-size: .75rem; }
+.footbuttons { display: flex; gap: .5rem; flex-wrap: wrap; margin: .8rem 0; }

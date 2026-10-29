@@ -68,3 +68,7 @@ Differences from the old screens, on purpose:
 - Dundas gauges and charts are plain SVG (`SvgGauge`, `BarChart`, `BulletBar`); same data, similar face.
 - Daily Summary: the old page showed Day Part 1 as a ratio (sales / last year's, e.g. 1.58) instead of the amount, and zeros for the Day Part totals on the total row. The port shows the amount, and sums the day parts in the total row.
 - Not ported yet: the Options and Downloads/Payments tabs, the user's saved tab labels and default date ranges (`DateRangePickerDefaults`), the Affordable Care Act alert, and the quick gauge.
+
+## Slice 6: footer buttons
+
+Previous / Next (shift the date range by its own length and rerun), Hide/Show Weekdays (Sales and Labor), and Download as Excel on Sales, Receipts and Labor. The workbook comes from `XlsxWriter` (hand-written minimal .xlsx, no package; checked by opening a sample in LibreOffice). Receipts exports each stacked line as its own column. Not ported yet: drill up/down by clicking a row, order-by on headers, Link/Print, Specials and Daily Discounts buttons, Export Daily Sales, the L0..L3 and LY buttons.

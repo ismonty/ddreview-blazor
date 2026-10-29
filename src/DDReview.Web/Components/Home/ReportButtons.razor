@@ -1,0 +1,16 @@
+@* The footer buttons the old review grids had: Previous / Next date range, Hide/Show Weekdays, Download as Excel. *@
+<div class="footbuttons">
+    <button type="button" class="gold" @onclick="OnPrevious" disabled="@Busy">Previous</button>
+    <button type="button" class="gold" @onclick="OnNext" disabled="@Busy">Next</button>
+    @if (ShowWeekdaysToggle) { <button type="button" class="gold" @onclick="OnToggleWeekdays">@(Weekdays ? "Hide Weekdays" : "Show Weekdays")</button> }
+    <button type="button" class="gold" @onclick="OnExcel">Download as Excel</button>
+</div>
+@code {
+    [Parameter] public EventCallback OnPrevious { get; set; }
+    [Parameter] public EventCallback OnNext { get; set; }
+    [Parameter] public EventCallback OnExcel { get; set; }
+    [Parameter] public EventCallback OnToggleWeekdays { get; set; }
+    [Parameter] public bool ShowWeekdaysToggle { get; set; }
+    [Parameter] public bool Weekdays { get; set; } = true;
+    [Parameter] public bool Busy { get; set; }
+}

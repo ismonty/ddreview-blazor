@@ -55,3 +55,19 @@ public static class ReceiptsLayout
     static decimal Num(DataRow row, string column) =>
         row.Table.Columns.Contains(column) && row[column] is not DBNull ? Convert.ToDecimal(row[column]) : 0m;
 }
+
+public static class ReceiptsExport
+{
+    /// <summary>Flattens the stacked cells into one Excel column per line ("Title: Label"); leading columns come first.</summary>
+    public static (List<string> Headers, List<object?[]> Rows) Build(DataTable t, IReadOnlyList<(string Label, string Column)> leading)
+    {
+        var lines = ReceiptsLayout.Columns.SelectMany(c => c.Lines).ToList();
+        var headers = leading.Select(l => l.Label).Concat(lines.Select(l => l.Label)).ToList();
+        var rows = t.Rows.Cast<DataRow>().Select(r =>
+            leading.Select(l => r.Table.Columns.Contains(l.Column) && r[l.Column] is not DBNull ? r[l.Column] : null)
+                .Concat(lines.Select(l => l.Format == CellFormat.Percent ? (object?)ReceiptsLayout.Format(r, l)
+                    : r.Table.Columns.Contains(l.Column) && r[l.Column] is not DBNull ? Convert.ToDecimal(r[l.Column]) : (object?)null))
+                .ToArray()).ToList();
+        return (headers, rows);
+    }
+}

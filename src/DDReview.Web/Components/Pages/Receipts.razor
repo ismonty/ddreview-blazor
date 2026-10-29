@@ -6,6 +6,8 @@
 @using DDReview.Core.Tenancy
 @inject UserContextService Users
 @inject ReceiptsService ReceiptsSvc
+@inject IJSRuntime JS
+@using DDReview.Web.Components.Home
 
 <PageTitle>Receipts review</PageTitle>
 <h1>Receipts review</h1>
@@ -62,6 +64,7 @@ else
                 }
             </tbody>
         </table>
+        <ReportButtons Busy="busy" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
     }
 }
 
@@ -100,6 +103,7 @@ else
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
     private string? error;
     private DataTable? result;
+    private ReceiptsDimensions ranDims; private DateTime rangeStart, rangeEnd;
 
     protected override async Task OnInitializedAsync()
     {
@@ -127,8 +131,25 @@ else
         {
             var req = new ReceiptsRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids);
             result = await ReceiptsSvc.RunAsync(ctx.ClientConnectionString, req);
+            ranDims = dims; rangeStart = start; rangeEnd = end;
         }
         catch (Exception ex) { error = "The query failed: " + ex.Message; }
         finally { busy = false; }
+    }
+
+    private async Task Shift(int dir)
+    {
+        var days = (int)(end - start).TotalDays + 1;
+        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        await RunAsync();
+    }
+    private async Task ExcelAsync()
+    {
+        if (result is null) return;
+        var lead = AllLeading.Where(l => ranDims.HasFlag(l.Dim)).Select(l => (l.Label, l.Column)).ToList();
+        var (h, rows) = ReceiptsExport.Build(result, lead);
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Receipts", $"Receipts review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}", h, rows);
+        await JS.InvokeVoidAsync("ddDownload", $"ReceiptsReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
 }

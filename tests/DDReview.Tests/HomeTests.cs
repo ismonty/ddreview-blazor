@@ -62,3 +62,24 @@ public class HomeTests
         Assert.Equal(("11/02", "Mon"), mid[0]); Assert.Equal(("10/28", "Wed"), mid[2]);
     }
 }
+
+public class XlsxWriterTests
+{
+    [Fact]
+    public void Writes_WellFormedWorkbook_WithNumbersAndEscaping()
+    {
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Sales/Test", "Title & <more>", ["A", "B"],
+            [new object?[] { "x < y", 1234.5m }, new object?[] { null, 2m }], new object?[] { "Total", 1236.5m });
+        using var z = new System.IO.Compression.ZipArchive(new MemoryStream(bytes));
+        foreach (var e in z.Entries)
+        {
+            using var s = e.Open();
+            System.Xml.Linq.XDocument.Load(s);                       // every part is well-formed XML
+        }
+        using var sheet = new StreamReader(z.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        var xml = sheet.ReadToEnd();
+        Assert.Contains("<v>1234.5</v>", xml);
+        Assert.Contains("x &lt; y", xml);
+        Assert.Contains("Title &amp; &lt;more&gt;", xml);
+    }
+}
