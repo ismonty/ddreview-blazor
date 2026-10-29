@@ -50,3 +50,6 @@ main{padding:1rem;max-width:1200px;margin:0 auto}
 .banner{padding:.7rem 1rem;border-radius:6px;font-weight:700;margin:1rem 0}.banner.ok{background:#e3f6e8;color:#0a5c2b}.banner.bad{background:#fde7e9;color:#8a0017}
 table{border-collapse:collapse;width:100%;margin:.5rem 0}th,td{padding:.3rem .5rem;border-bottom:1px solid #e3e3ea;text-align:left}
 th.n,td.n{text-align:right;font-variant-numeric:tabular-nums}tr.suspense td{background:#fff4d6}tr.total td{font-weight:700;border-top:2px solid #99a}
+
+table.receipts td.stack, table.receipts th.stack { white-space: nowrap; vertical-align: top; }
+table.receipts .b { font-weight: 700; }

@@ -1,0 +1,134 @@
+@page "/receipts"
+@attribute [Authorize]
+@using System.Data
+@using DDReview.Core.Gl
+@using DDReview.Core.Receipts
+@using DDReview.Core.Tenancy
+@inject UserContextService Users
+@inject ReceiptsService ReceiptsSvc
+
+<PageTitle>Receipts review</PageTitle>
+<h1>Receipts review</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <EditForm Model="this" OnSubmit="RunAsync" FormName="receipts" class="filters">
+        <fieldset>
+            <legend>Stores</legend>
+            @foreach (var s in stores)
+            {
+                <label class="inline"><input type="checkbox" checked="@selected.Contains(s.StoreId)" @onchange="e => Toggle(s.StoreId, (bool)e.Value!)" /> @s.StoreNumber – @s.StoreName</label>
+            }
+        </fieldset>
+        <fieldset>
+            <legend>View by</legend>
+            @foreach (var d in Choices)
+            {
+                <label class="inline"><input type="checkbox" checked="@dims.HasFlag(d.Value)" @onchange="e => ToggleDim(d.Value, (bool)e.Value!)" /> @d.Label</label>
+            }
+        </fieldset>
+        <label>Starting date <input type="date" @bind="start" /></label>
+        <label>Ending date <input type="date" @bind="end" /></label>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Submit")</button>
+    </EditForm>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (result is not null)
+    {
+        <p>@result.Rows.Count record(s)</p>
+        <table class="receipts">
+            <thead>
+                <tr>
+                    @foreach (var l in Leading) {<th>@l.Label</th>}
+                    @foreach (var c in ReceiptsLayout.Columns)
+                    {
+                        <th class="n stack">@foreach (var line in c.Lines) {<div>@line.Label</div>}</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (DataRow row in result.Rows)
+                {
+                    <tr>
+                        @foreach (var l in Leading) {<td>@Text(row, l.Column)</td>}
+                        @foreach (var c in ReceiptsLayout.Columns)
+                        {
+                            <td class="n stack">@foreach (var line in c.Lines) {<div class="@(line.Bold ? "b" : null)">@ReceiptsLayout.Format(row, line)</div>}</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private record Choice(ReceiptsDimensions Value, string Label);
+    private record Lead(string Label, string Column, ReceiptsDimensions Dim);
+    private static readonly Choice[] Choices =
+    [
+        new(ReceiptsDimensions.Store, "Store"), new(ReceiptsDimensions.StoreGroup, "Store group"), new(ReceiptsDimensions.ProfitCenter, "Profit center"),
+        new(ReceiptsDimensions.ReceiptClass, "Receipt class"), new(ReceiptsDimensions.ReceiptType, "Receipt type"),
+        new(ReceiptsDimensions.Cashier, "Cashier"), new(ReceiptsDimensions.CashierStaffDepartment, "Cashier department"),
+        new(ReceiptsDimensions.Server, "Server"), new(ReceiptsDimensions.ServerStaffDepartment, "Server department"),
+        new(ReceiptsDimensions.CheckNumber, "Check"), new(ReceiptsDimensions.CreditCardBatchNumber, "Card batch"),
+        new(ReceiptsDimensions.CashierSessionNumber, "Cashier session"), new(ReceiptsDimensions.DayName, "Day"),
+        new(ReceiptsDimensions.WeekName, "Week"), new(ReceiptsDimensions.DayHourNumber, "Hour"),
+    ];
+    private IEnumerable<Lead> Leading => AllLeading.Where(l => dims.HasFlag(l.Dim));
+    private static readonly Lead[] AllLeading =
+    [
+        new("Store group", "StoreGroupName", ReceiptsDimensions.StoreGroup), new("Store #", "StoreNumber", ReceiptsDimensions.Store),
+        new("Store name", "StoreName", ReceiptsDimensions.Store), new("Profit center", "ProfitCenter", ReceiptsDimensions.ProfitCenter),
+        new("Receipt class", "ReceiptClass", ReceiptsDimensions.ReceiptClass), new("Receipt type", "ReceiptType", ReceiptsDimensions.ReceiptType),
+        new("Card batch", "CreditCardBatchNumber", ReceiptsDimensions.CreditCardBatchNumber),
+        new("Cashier dept", "CashierStaffDepartmentName", ReceiptsDimensions.CashierStaffDepartment), new("Cashier", "CashierName", ReceiptsDimensions.Cashier),
+        new("Server dept", "ServerStaffDepartmentName", ReceiptsDimensions.ServerStaffDepartment), new("Server", "ServerName", ReceiptsDimensions.Server),
+        new("Check", "CheckNumber", ReceiptsDimensions.CheckNumber), new("Day", "DayName", ReceiptsDimensions.DayName),
+        new("Week", "WeekName", ReceiptsDimensions.WeekName), new("Session", "CashierSessionNumber", ReceiptsDimensions.CashierSessionNumber),
+        new("Hour", "DayHourName", ReceiptsDimensions.DayHourNumber),
+    ];
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private readonly HashSet<int> selected = [];
+    private ReceiptsDimensions dims = ReceiptsDimensions.Store;
+    private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
+    private string? error;
+    private DataTable? result;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Receipts);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAsync(ctx.ClientConnectionString, ctx.Access.Stores[ReportKind.Receipts]);
+        foreach (var s in stores) selected.Add(s.StoreId);
+    }
+
+    private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+    private void ToggleDim(ReceiptsDimensions d, bool on) => dims = on ? dims | d : dims & ~d;
+    private static string Text(DataRow row, string col) => row.Table.Columns.Contains(col) && row[col] is not DBNull ? row[col].ToString() ?? "" : "";
+
+    private async Task RunAsync()
+    {
+        if (ctx is null || busy) return;
+        error = null; result = null;
+        var ids = selected.Where(ctx.Access.Stores[ReportKind.Receipts].Contains).ToList();   // re-check against the access list
+        if (ids.Count == 0) { error = "Pick at least one store."; return; }
+        if (end < start) { error = "The end date is before the start date."; return; }
+        busy = true;
+        try
+        {
+            var req = new ReceiptsRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids);
+            result = await ReceiptsSvc.RunAsync(ctx.ClientConnectionString, req);
+        }
+        catch (Exception ex) { error = "The query failed: " + ex.Message; }
+        finally { busy = false; }
+    }
+}

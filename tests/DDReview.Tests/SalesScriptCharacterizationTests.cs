@@ -107,7 +107,7 @@ public class SalesParameterizationTests
     {
         var script = "declare @StoreFlag bit\nset @StoreFlag=1\nset @StoreListCSV='1,2,3'\nset @StartDayNumber=8000\nset @CompareStartDayNumber=-2147475306\nset @IncludeVoids=0\nset @Other=5\n";
         var (sql, p) = DDReview.Core.Sales.SalesService.Parameterize(script);
-        Assert.Contains("set @StoreListCSV=@p_StoreListCSV", sql);
+        Assert.Contains("set @StoreListCSV = @p_StoreListCSV", sql);
         Assert.Contains("set @Other=5", sql);
         Assert.Equal(5, p.Count);
         Assert.DoesNotContain("1,2,3", sql);

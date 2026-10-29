@@ -26,7 +26,7 @@ public sealed record SalesRequest(
 public sealed class SalesService
 {
     static readonly Regex SafeList = new(@"^[0-9,:\-]*$", RegexOptions.Compiled);
-    static readonly Regex HeaderSet = new(@"^(?<pre>[ \t]*)set @(?<n>\w+)=(?<v>[^\r\n]*)", RegexOptions.Multiline | RegexOptions.Compiled);
+    static readonly Regex HeaderSet = new(@"^(?<pre>[ \t]*)set @(?<n>\w+)\s*=\s*(?<v>[^\r\n]*)", RegexOptions.Multiline | RegexOptions.Compiled);
 
     /// <summary>Builds the script exactly as the legacy generator would (used by tests and for diagnostics).</summary>
     public string BuildScript(string connectionString, SalesRequest req, ISalesLookups? lookups = null)
@@ -108,7 +108,7 @@ public sealed class SalesService
             }
             else return m.Value;
             pars.Add(p);
-            return m.Groups["pre"].Value + "set @" + n + "=" + p.ParameterName;
+            return m.Groups["pre"].Value + "set @" + n + " = " + p.ParameterName;
         });
         return (sql, pars);
     }

@@ -4,7 +4,7 @@
     <a href="/" class="brand">DD Review</a>
     <AuthorizeView>
         <Authorized>
-            <nav><a href="/sales">Sales</a> <a href="/gl">General ledger</a></nav>
+            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/gl">General ledger</a></nav>
             <form method="post" action="/account/logout" class="logout">
                 <AntiforgeryToken />
                 <span>@context.User.Identity?.Name</span>

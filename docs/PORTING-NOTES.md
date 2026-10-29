@@ -39,3 +39,10 @@ Dimensions never seen in 11,175 logged scripts (deferred): FrequentDinerPlan, Fr
   `^[0-9,:\-]*$` (the generator still inlines lists in the body), and store ids are intersected with the user's
   authorized stores before the script is built.
 - Not yet verified against a live database from the cloud workspace: run `/sales` locally against the restored test copies.
+
+## Slice 3: Receipts Review
+- Generator: `src/DDReview.Core/Receipts/Legacy/DataAccessReceiptsReview.cs` (from `DDReviewAppCode/App_Code`, DB/session helpers removed).
+  `ReceiptsScriptCharacterizationTests` reproduces a captured live script exactly (set `DDREVIEW_RECEIPTS_SCRIPTS`; add more .sql files to extend).
+- `ReceiptsService` probes the client DB for the `ProfitCenterID` column and the "Cash Tips Earned" detail id (same probes as the old login), asks for deposit detail only when a detail dimension is used.
+- `ReceiptsLayout` defines the 10 stacked columns of the old grid; a test checks every value against the live result row and screenshot.
+- Still to confirm on a live database: `/receipts` against the restored Valentini's copy (week of 10/21-10/27 should show 35,618.81 expected).
