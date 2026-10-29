@@ -143,3 +143,19 @@ sealed class SalesScriptCharacterizationTests_Lookups : DDReview.Core.Sales.Lega
         return t;
     }
 }
+
+public class UserAccessTests
+{
+    [Fact]
+    public void Unrestricted_user_can_see_every_report_and_restricted_user_only_theirs()
+    {
+        var open = new DDReview.Core.Tenancy.UserAccess();
+        foreach (var k in Enum.GetValues<DDReview.Core.Tenancy.ReportKind>()) open.AllStores.Add(k);
+        Assert.True(open.CanSee(DDReview.Core.Tenancy.ReportKind.Receipts));
+
+        var some = new DDReview.Core.Tenancy.UserAccess();
+        some.Stores[DDReview.Core.Tenancy.ReportKind.Sales].Add(1);
+        Assert.True(some.CanSee(DDReview.Core.Tenancy.ReportKind.Sales));
+        Assert.False(some.CanSee(DDReview.Core.Tenancy.ReportKind.Receipts));
+    }
+}

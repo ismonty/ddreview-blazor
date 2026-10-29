@@ -88,7 +88,7 @@ else
         if (ctx is null) return;
         allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Sales);
         if (!allowed) return;
-        stores = await StoreLookup.LoadAsync(ctx.ClientConnectionString, ctx.Access.Stores[ReportKind.Sales]);
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Sales);
         foreach (var s in stores) selected.Add(s.StoreId);
     }
 
@@ -99,7 +99,7 @@ else
     {
         if (ctx is null || busy) return;
         error = null; result = null;
-        var ids = selected.Where(ctx.Access.Stores[ReportKind.Sales].Contains).ToList();   // re-check against the access list
+        var ids = selected.Where(stores.Select(s => s.StoreId).ToHashSet().Contains).ToList();   // re-check against the access list
         if (ids.Count == 0) { error = "Pick at least one store."; return; }
         if (dims == SalesDimensions.None) { error = "Pick at least one thing to group by."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }

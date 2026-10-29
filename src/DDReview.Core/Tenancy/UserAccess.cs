@@ -12,7 +12,10 @@ public sealed class UserAccess
     public bool Administrator { get; init; }
     public Dictionary<ReportKind, HashSet<int>> Stores { get; } = Enum.GetValues<ReportKind>().ToDictionary(k => k, _ => new HashSet<int>());
 
-    public bool CanSee(ReportKind kind) => Stores[kind].Count > 0;
+    /// <summary>Reports where the user has no store restriction (old rule: no store rows for the user = authorized for all stores).</summary>
+    public HashSet<ReportKind> AllStores { get; } = [];
+
+    public bool CanSee(ReportKind kind) => AllStores.Contains(kind) || Stores[kind].Count > 0;
     public string StoreListCsv(ReportKind kind) => string.Join(",", Stores[kind].OrderBy(x => x));
 }
 
@@ -42,7 +45,7 @@ order by wuss.StoreID", cn) { CommandTimeout = 60 };
         while (await r.ReadAsync(ct))
         {
             access ??= new UserAccess { ClientWebUserId = (int)r["WebUserID"], UserName = (string)r["UserName"], Administrator = (bool)r["Administrator"] };
-            if (r["StoreID"] is DBNull) continue;
+            if (r["StoreID"] is DBNull) { foreach (var k in Enum.GetValues<ReportKind>()) access.AllStores.Add(k); continue; }
             var id = (int)r["StoreID"];
             void Add(ReportKind k, string col) { if ((bool)r[col]) access.Stores[k].Add(id); }
             Add(ReportKind.Sales, "AuthorizedSales"); Add(ReportKind.Receipts, "AuthorizedReceipts");
