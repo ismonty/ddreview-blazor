@@ -26,3 +26,16 @@ New app: parameterized queries, PBKDF2 hashes in a separate table (legacy passwo
 The logged scripts are one ~65 KB template with ~25 swap points per dimension (99% shared text between variants). Plan: one embedded
 T-SQL template with typed substitution points, values passed as parameters, verified by running each of the logged scripts and the generated one against a restored database and diffing results.
 Dimensions never seen in 11,175 logged scripts (deferred): FrequentDinerPlan, FrequentDinerCustomer, CostAccount, CostTrackingItem.
+
+## Slice 2: Sales Review
+- `ARFlag` for the GL functions: 1 = GL, 2 = AR, 3 = both (confirmed by the owner).
+- `src/DDReview.Core/Sales/Legacy` is the old script generator, kept nearly verbatim behind `ISalesLookups`.
+  `SalesScriptCharacterizationTests` regenerates all 71 production scripts logged in `tblWebLoginScripts`
+  and requires a whitespace-normalized match (set `DDREVIEW_SALES_SCRIPTS` to the exported folder).
+- The old VS2008 source differed from the deployed build in three places; the logged scripts won:
+  royalty-override update block, no `StoreStaffListCSV` term in the StoreID select/group-by, no pseudo
+  profit-center union in Marauder mode.
+- `SalesService.Parameterize` turns the header `set @X=literal` lines into SqlParameters. List values must match
+  `^[0-9,:\-]*$` (the generator still inlines lists in the body), and store ids are intersected with the user's
+  authorized stores before the script is built.
+- Not yet verified against a live database from the cloud workspace: run `/sales` locally against the restored test copies.

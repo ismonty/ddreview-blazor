@@ -20,6 +20,7 @@ builder.Services.AddSingleton<ICentralDirectory, CentralDirectory>();
 builder.Services.AddSingleton<ITenantConnectionFactory, TenantConnectionFactory>();
 builder.Services.AddSingleton<ClientAccessService>();
 builder.Services.AddSingleton<GlService>();
+builder.Services.AddSingleton<DDReview.Core.Sales.SalesService>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton(sp => new LoginService(sp.GetRequiredService<ICentralDirectory>(), sp.GetRequiredService<LoginThrottle>(),
     sp.GetRequiredService<IOptions<TenantOptions>>().Value.UseCredentialTable));

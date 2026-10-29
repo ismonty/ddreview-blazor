@@ -99,3 +99,47 @@ public class SalesScriptCharacterizationTests
         Assert.True(failures.Count == 0, failures.Count + " mismatches:\n" + string.Join("\n", failures));
     }
 }
+
+public class SalesParameterizationTests
+{
+    [Fact]
+    public void Header_values_become_parameters_and_unsafe_lists_are_rejected()
+    {
+        var script = "declare @StoreFlag bit\nset @StoreFlag=1\nset @StoreListCSV='1,2,3'\nset @StartDayNumber=8000\nset @CompareStartDayNumber=-2147475306\nset @IncludeVoids=0\nset @Other=5\n";
+        var (sql, p) = DDReview.Core.Sales.SalesService.Parameterize(script);
+        Assert.Contains("set @StoreListCSV=@p_StoreListCSV", sql);
+        Assert.Contains("set @Other=5", sql);
+        Assert.Equal(5, p.Count);
+        Assert.DoesNotContain("1,2,3", sql);
+        Assert.Throws<InvalidOperationException>(() =>
+            DDReview.Core.Sales.SalesService.Parameterize("set @StoreListCSV='1); drop table x;--'\n"));
+    }
+
+    [Fact]
+    public void Service_script_for_store_report_has_expected_header()
+    {
+        var svc = new DDReview.Core.Sales.SalesService();
+        var req = new DDReview.Core.Sales.SalesRequest(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 7),
+            DDReview.Core.Sales.SalesDimensions.Store, [1]);
+        var lookups = new SalesScriptCharacterizationTests_Lookups();
+        var s = svc.BuildScript("", req, lookups);
+        Assert.Contains("set @StoreFlag=1", s);
+        Assert.Contains("set @StoreListCSV='1'", s);
+        Assert.Contains("set @StartDayNumber=" + DDReview.Core.Support.DayNumber.FromDate(new DateOnly(2026, 10, 1)), s);
+    }
+}
+
+sealed class SalesScriptCharacterizationTests_Lookups : DDReview.Core.Sales.Legacy.ISalesLookups
+{
+    public System.Data.DataTable GetTable(string name, string sql)
+    {
+        var t = new System.Data.DataTable(name);
+        if (name == "DayPartTable")
+        {
+            t.Columns.Add("StartTime", typeof(short)); t.Columns.Add("EndTime", typeof(short));
+            t.Columns.Add("DayPartID", typeof(short)); t.Columns.Add("DayPart", typeof(string));
+        }
+        else t.Columns.Add("BatchID", typeof(int));
+        return t;
+    }
+}

@@ -1,0 +1,124 @@
+@page "/sales"
+@attribute [Authorize]
+@using System.Data
+@using DDReview.Core.Gl
+@using DDReview.Core.Sales
+@using DDReview.Core.Tenancy
+@inject UserContextService Users
+@inject SalesService SalesSvc
+
+<PageTitle>Sales review</PageTitle>
+<h1>Sales review</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <EditForm Model="this" OnSubmit="RunAsync" FormName="sales" class="filters">
+        <fieldset>
+            <legend>Stores</legend>
+            @foreach (var s in stores)
+            {
+                <label class="inline"><input type="checkbox" checked="@selected.Contains(s.StoreId)" @onchange="e => Toggle(s.StoreId, (bool)e.Value!)" /> @s.StoreNumber – @s.StoreName</label>
+            }
+        </fieldset>
+        <fieldset>
+            <legend>Group by</legend>
+            @foreach (var d in Choices)
+            {
+                <label class="inline"><input type="checkbox" checked="@dims.HasFlag(d.Value)" @onchange="e => ToggleDim(d.Value, (bool)e.Value!)" /> @d.Label</label>
+            }
+        </fieldset>
+        <label>From <input type="date" @bind="start" /></label>
+        <label>To <input type="date" @bind="end" /></label>
+        <label>Compare to
+            <select @bind="compare">
+                <option value="">None</option>
+                <option value="-364">Same days last year (364 days back)</option>
+                <option value="-7">Previous week</option>
+            </select>
+        </label>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+    </EditForm>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (result is not null)
+    {
+        <h2>@result.Rows.Count rows</h2>
+        <table>
+            <thead><tr>@foreach (var c in cols) {<th class="@(IsNumeric(c) ? "n" : null)">@Pretty(c.ColumnName)</th>}</tr></thead>
+            <tbody>
+                @foreach (DataRow row in result.Rows)
+                {
+                    <tr>@foreach (var c in cols) {<td class="@(IsNumeric(c) ? "n" : null)">@Fmt(row[c])</td>}</tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private record Choice(SalesDimensions Value, string Label);
+    private static readonly Choice[] Choices =
+    [
+        new(SalesDimensions.Store, "Store"), new(SalesDimensions.StoreGroup, "Store group"), new(SalesDimensions.ProfitCenter, "Profit center"),
+        new(SalesDimensions.MainType, "Main type"), new(SalesDimensions.MainGroup, "Main group"), new(SalesDimensions.SaleType, "Sale type"),
+        new(SalesDimensions.MenuItem, "Menu item"), new(SalesDimensions.Discount, "Discount"), new(SalesDimensions.StoreStaff, "Staff"),
+        new(SalesDimensions.DayPart, "Day part"), new(SalesDimensions.DayHour, "Hour"), new(SalesDimensions.WeekDay, "Weekday"),
+        new(SalesDimensions.Day, "Day"), new(SalesDimensions.Week, "Week"),
+    ];
+    // Plumbing columns the old grids hid from the user.
+    private static readonly string[] Hidden = ["RowID", "CompareIndex", "DayPartSort", "StoreGroupSort", "MenuItemRow", "DiscountRow"];
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private readonly HashSet<int> selected = [];
+    private SalesDimensions dims = SalesDimensions.Store;
+    private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
+    private string compare = "";
+    private string? error;
+    private DataTable? result;
+    private List<DataColumn> cols = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Sales);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAsync(ctx.ClientConnectionString, ctx.Access.Stores[ReportKind.Sales]);
+        foreach (var s in stores) selected.Add(s.StoreId);
+    }
+
+    private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+    private void ToggleDim(SalesDimensions d, bool on) => dims = on ? dims | d : dims & ~d;
+
+    private async Task RunAsync()
+    {
+        if (ctx is null || busy) return;
+        error = null; result = null;
+        var ids = selected.Where(ctx.Access.Stores[ReportKind.Sales].Contains).ToList();   // re-check against the access list
+        if (ids.Count == 0) { error = "Pick at least one store."; return; }
+        if (dims == SalesDimensions.None) { error = "Pick at least one thing to group by."; return; }
+        if (end < start) { error = "The end date is before the start date."; return; }
+        busy = true;
+        try
+        {
+            int? off = int.TryParse(compare, out var o) ? o : null;
+            var req = new SalesRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids, off);
+            result = await SalesSvc.RunAsync(ctx.ClientConnectionString, req);
+            cols = result.Columns.Cast<DataColumn>().Where(c => !Hidden.Contains(c.ColumnName)
+                    && !c.ColumnName.StartsWith("BSS", StringComparison.Ordinal)
+                    && !c.ColumnName.StartsWith("Royalty", StringComparison.Ordinal)
+                    && !(c.ColumnName.EndsWith("ID", StringComparison.Ordinal) && c.ColumnName != "StoreID")).ToList();
+        }
+        catch (Exception ex) { error = "The query failed: " + ex.Message; }
+        finally { busy = false; }
+    }
+
+    private static bool IsNumeric(DataColumn c) => c.DataType == typeof(decimal) || c.DataType == typeof(double) || c.DataType == typeof(int) || c.DataType == typeof(long) || c.DataType == typeof(short);
+    private static string Pretty(string n) => System.Text.RegularExpressions.Regex.Replace(n, "(?<=[a-z])(?=[A-Z])", " ");
+    private static string Fmt(object v) => v switch { DBNull => "", decimal d => d.ToString("N2"), double d => d.ToString("N2"), DateTime t => t.ToString("d"), _ => v.ToString() ?? "" };
+}

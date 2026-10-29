@@ -14,6 +14,7 @@ else
     <ul class="menu">
         @if (ctx.Access.CanSee(DDReview.Core.Tenancy.ReportKind.DebitCredit) || ctx.Access.Administrator)
         {
+            <li><a href="/sales">Sales review</a></li>
             <li><a href="/gl">General ledger review</a></li>
         }
     </ul>
