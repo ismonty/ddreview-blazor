@@ -97,3 +97,11 @@ ul.menu li a { display: block; padding: .8rem 1.4rem; background: var(--tile); b
 ul.menu li a:hover { border-color: var(--accent); }
 @media (max-width: 640px) { table { font-size: .85rem; } main { padding: .6rem; } }
 
+
+/* Sales review grid (matches the old page: bold headers, right-aligned numbers, bold totals row) */
+p.range { font-weight: 700; margin: .75rem 0 .25rem; }
+table.sales th { font-weight: 700; white-space: nowrap; }
+table.sales td.n, table.sales th.n { text-align: right; font-variant-numeric: tabular-nums; }
+table.sales tfoot tr.total td { font-weight: 700; border-top: 2px solid currentColor; }
+p.rowcount { font-size: .85rem; opacity: .75; }
+table.sales td.shade { background: color-mix(in srgb, currentColor 12%, transparent); }

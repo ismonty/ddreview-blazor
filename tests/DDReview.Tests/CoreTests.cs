@@ -130,3 +130,42 @@ public class GlBalanceTests
         return list;
     }
 }
+
+public class SalesLayoutTests
+{
+    private static System.Data.DataTable Table(params string[] cols)
+    {
+        var t = new System.Data.DataTable();
+        foreach (var c in cols) t.Columns.Add(c, c.Contains("Name") || c == "MainType" || c.EndsWith("Label") ? typeof(string) : typeof(decimal));
+        return t;
+    }
+
+    [Fact]
+    public void ByMainType_ShowsDimensionDaysAndTotals_NoStoreColumns()
+    {
+        var t = Table("MainType", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "TotalSales", "Discounts", "NetSales", "Quantity", "TotalVoids");
+        var cols = DDReview.Core.Sales.SalesLayout.Build(DDReview.Core.Sales.SalesDimensions.MainType, t);
+        Assert.Equal(["Main Type", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Sales Total", "Discounts", "Net", "Quantity"], cols.Select(c => c.Header));
+    }
+
+    [Fact]
+    public void ByStoreOnly_ShowsVoidsAndRefundPercent_ByDayHidesWeekdays()
+    {
+        var t = Table("StoreNumber", "StoreName", "DayName", "D1", "TotalSales", "Discounts", "NetSales", "Quantity", "TotalVoids", "TotalRefunds");
+        var store = DDReview.Core.Sales.SalesLayout.Build(DDReview.Core.Sales.SalesDimensions.Store, t).Select(c => c.Header).ToList();
+        Assert.Contains("Void %", store); Assert.Contains("Refund %", store); Assert.Contains("Mon", store);
+        var byDay = DDReview.Core.Sales.SalesLayout.Build(DDReview.Core.Sales.SalesDimensions.Store | DDReview.Core.Sales.SalesDimensions.Day, t).Select(c => c.Header).ToList();
+        Assert.DoesNotContain("Mon", byDay); Assert.DoesNotContain("Void %", byDay); Assert.Contains("Day", byDay);
+    }
+
+    [Fact]
+    public void TotalsRow_SumsAndRecomputesPercent()
+    {
+        var t = Table("StoreNumber", "StoreName", "TotalSales", "TotalVoids");
+        t.Rows.Add(1m, "A", 100m, 1m); t.Rows.Add(2m, "B", 300m, 3m);
+        var cols = DDReview.Core.Sales.SalesLayout.Build(DDReview.Core.Sales.SalesDimensions.Store, t);
+        var sums = DDReview.Core.Sales.SalesLayout.Totals(t, cols).Single().Sums;
+        Assert.Equal(400m, sums["TotalSales"]);
+        Assert.Equal("1.00%", DDReview.Core.Sales.SalesLayout.FormatPercent(sums["TotalVoids"], sums["TotalSales"]));
+    }
+}

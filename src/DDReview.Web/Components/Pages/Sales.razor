@@ -45,16 +45,32 @@ else
 
     @if (result is not null)
     {
-        <h2>@result.Rows.Count rows</h2>
-        <table>
-            <thead><tr>@foreach (var c in cols) {<th class="@(IsNumeric(c) ? "n" : null)">@Pretty(c.ColumnName)</th>}</tr></thead>
+        <p class="range">@($"{rangeStart:dddd, MMMM d, yyyy} - {rangeEnd:dddd, MMMM d, yyyy}")</p>
+        <table class="sales">
+            <thead><tr>
+                @foreach (var c in cols) {<th class="@(c.Kind == SalesCellKind.Text ? null : "n")">@c.Header</th>}
+            </tr></thead>
             <tbody>
                 @foreach (DataRow row in result.Rows)
                 {
-                    <tr>@foreach (var c in cols) {<td class="@(IsNumeric(c) ? "n" : null)">@Fmt(row[c])</td>}</tr>
+                    <tr>@foreach (var c in cols) {<td class="@(c.Kind == SalesCellKind.Text ? null : "n") @(Shade(row, c) ? "shade" : null)" title="@Tip(row, c)">@SalesLayout.Format(row, c)</td>}</tr>
                 }
             </tbody>
+            <tfoot>
+                @foreach (var (idx, sums) in totals)
+                {
+                    <tr class="total">
+                        @for (int i = 0; i < cols.Count; i++)
+                        {
+                            var c = cols[i];
+                            if (c.Kind == SalesCellKind.Text) { <td>@(i == 0 ? (idx is null || Convert.ToInt32(idx) == 0 ? "Total" : "Total (compare)") : "")</td> }
+                            else { <td class="n">@(c.Kind == SalesCellKind.Percent ? SalesLayout.FormatPercent(sums[c.Column], sums[c.Denominator!]) : SalesLayout.FormatNumber(sums[c.Column]))</td> }
+                        }
+                    </tr>
+                }
+            </tfoot>
         </table>
+        <p class="rowcount">Showing @result.Rows.Count Rows</p>
     }
 }
 
@@ -68,8 +84,6 @@ else
         new(SalesDimensions.DayPart, "Day part"), new(SalesDimensions.DayHour, "Hour"), new(SalesDimensions.WeekDay, "Weekday"),
         new(SalesDimensions.Day, "Day"), new(SalesDimensions.Week, "Week"),
     ];
-    // Plumbing columns the old grids hid from the user.
-    private static readonly string[] Hidden = ["RowID", "CompareIndex", "DayPartSort", "StoreGroupSort", "MenuItemRow", "DiscountRow"];
 
     private DDReview.Web.UserContext? ctx;
     private bool allowed, busy;
@@ -80,7 +94,9 @@ else
     private string compare = "";
     private string? error;
     private DataTable? result;
-    private List<DataColumn> cols = [];
+    private List<SalesColumn> cols = [];
+    private List<(object? Index, Dictionary<string, decimal> Sums)> totals = [];
+    private DateTime rangeStart, rangeEnd;
 
     protected override async Task OnInitializedAsync()
     {
@@ -109,16 +125,16 @@ else
             int? off = int.TryParse(compare, out var o) ? o : null;
             var req = new SalesRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids, off);
             result = await SalesSvc.RunAsync(ctx.ClientConnectionString, req);
-            cols = result.Columns.Cast<DataColumn>().Where(c => !Hidden.Contains(c.ColumnName)
-                    && !c.ColumnName.StartsWith("BSS", StringComparison.Ordinal)
-                    && !c.ColumnName.StartsWith("Royalty", StringComparison.Ordinal)
-                    && !(c.ColumnName.EndsWith("ID", StringComparison.Ordinal) && c.ColumnName != "StoreID")).ToList();
+            cols = SalesLayout.Build(dims, result);
+            totals = SalesLayout.Totals(result, cols);
+            rangeStart = start; rangeEnd = end;
         }
         catch (Exception ex) { error = "The query failed: " + ex.Message; }
         finally { busy = false; }
     }
 
-    private static bool IsNumeric(DataColumn c) => c.DataType == typeof(decimal) || c.DataType == typeof(double) || c.DataType == typeof(int) || c.DataType == typeof(long) || c.DataType == typeof(short);
-    private static string Pretty(string n) => System.Text.RegularExpressions.Regex.Replace(n, "(?<=[a-z])(?=[A-Z])", " ");
-    private static string Fmt(object v) => v switch { DBNull => "", decimal d => d.ToString("N2"), double d => d.ToString("N2"), DateTime t => t.ToString("d"), _ => v.ToString() ?? "" };
+    private static bool Shade(DataRow row, SalesColumn c) =>
+        c.ShadeColumn is not null && row[c.ShadeColumn] is not DBNull && Convert.ToDecimal(row[c.ShadeColumn]) > 0;
+    private static string? Tip(DataRow row, SalesColumn c) =>
+        c.ToolTipColumn is not null && row[c.ToolTipColumn] is not DBNull ? row[c.ToolTipColumn].ToString() : null;
 }
