@@ -40,6 +40,7 @@ else
     @if (result is not null)
     {
         <p class="range">@($"{rangeStart:dddd, MMMM d, yyyy} - {rangeEnd:dddd, MMMM d, yyyy}")</p>
+        @if (result.Rows.Count == 0) { <p>No labor records for these stores, dates and filters.</p> }
         @if (state.Filters.Count > 0)
         {
             <p class="filters-on">Filtered on:

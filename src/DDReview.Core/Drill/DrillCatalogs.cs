@@ -50,7 +50,7 @@ public static class DrillCatalogs
         new("LaborType", ["StaffDepartmentType"], "StaffDepartmentTypeID", "LaborGroup"),
         new("LaborGroup", ["StaffDepartmentGroup"], "StaffDepartmentGroupID", "LaborDepartment", Fn + "StaffDepartmentGroup"),
         new("LaborDepartment", ["StaffDepartmentName"], "StaffDepartmentID", "Employee", Fn + "StaffDepartmentName"),
-        new("Employee", ["PayrollIdentifier", "EmployeeName"], "PayrollID", "Employee"),
+        new("Employee", ["PayrollIdentifier", "EmployeeName"], "PayrollID", "PunchDetail"),   // clicking an employee opens their punches
         new("OriginalPayrollID", ["PayrollID"], "PayrollID", "OriginalPayrollID", FilterName: "PayrollID"),
         new("DayHourSlot", ["DayHourSlotName"], "DayHourSlot", "DayTimeSlot", SortColumn: "DayHourSlot"),
         new("DayTimeSlot", ["DayTimeSlotName"], "DayTimeSlot", "Employee", SortColumn: "DayTimeSlot"),
