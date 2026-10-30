@@ -6,3 +6,8 @@ window.ddDownload = function (name, base64, type) {
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
 };
+
+// Close any open dropdown-style multi-select when the click lands outside it.
+document.addEventListener("click", function (e) {
+    document.querySelectorAll("details.ms[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); });
+});

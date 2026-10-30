@@ -5,6 +5,8 @@
 @inject UserContextService Users
 @inject GlService GlSvc
 
+@using DDReview.Web.Components.Home
+
 <PageTitle>General ledger review</PageTitle>
 <h1>General ledger review</h1>
 
@@ -13,13 +15,7 @@ else if (!allowed) { <p class="error">You are not authorized for this report.</p
 else
 {
     <EditForm Model="this" OnSubmit="RunAsync" FormName="gl" class="filters">
-        <fieldset>
-            <legend>Stores</legend>
-            @foreach (var s in stores)
-            {
-                <label class="inline"><input type="checkbox" checked="@selected.Contains(s.StoreId)" @onchange="e => Toggle(s.StoreId, (bool)e.Value!)" /> @s.StoreNumber – @s.StoreName</label>
-            }
-        </fieldset>
+        <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
         <label>From <input type="date" @bind="start" /></label>
         <label>To <input type="date" @bind="end" /></label>
         <label>Mode
@@ -62,6 +58,8 @@ else
 }
 
 @code {
+    private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
+
     private DDReview.Web.UserContext? ctx;
     private bool allowed;
     private IReadOnlyList<StoreInfo> stores = [];

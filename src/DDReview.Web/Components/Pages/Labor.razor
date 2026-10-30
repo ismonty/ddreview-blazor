@@ -19,20 +19,8 @@ else if (!allowed) { <p class="error">You are not authorized for this report.</p
 else
 {
     <EditForm Model="this" OnSubmit="RunAsync" FormName="labor" class="filters">
-        <fieldset>
-            <legend>Stores</legend>
-            @foreach (var s in stores)
-            {
-                <label class="inline"><input type="checkbox" checked="@selected.Contains(s.StoreId)" @onchange="e => Toggle(s.StoreId, (bool)e.Value!)" /> @s.StoreNumber – @s.StoreName</label>
-            }
-        </fieldset>
-        <fieldset>
-            <legend>Group by</legend>
-            @foreach (var d in Choices)
-            {
-                <label class="inline"><input type="checkbox" checked="@state.Flags.Contains(d.Value.ToString())" @onchange="e => ToggleDim(d.Value, (bool)e.Value!)" /> @d.Label</label>
-            }
-        </fieldset>
+        <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
+        <MultiSelect Caption="Group by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<LaborDimensions>(t.Key), t.On)" />
         <label>From <input type="date" @bind="start" /></label>
         <label>To <input type="date" @bind="end" /></label>
         <label>Show
@@ -89,7 +77,7 @@ else
             @if (!punch)
             {
                 <tfoot>
-                    <tr class="total"><td></td>
+                    <tr class="total"><td>Total</td>
                         @for (int i = 0; i < cols.Count; i++)
                         {
                             var c = cols[i];
@@ -97,7 +85,7 @@ else
                             {
                                 <td class="n">@(c.Kind == SalesCellKind.Percent ? SalesLayout.FormatPercent(totals[c.Column], totals[c.Denominator!]) : SalesLayout.FormatNumber(totals[c.Column]))</td>
                             }
-                            else { <td>@(i == 0 ? "Total" : "")</td> }
+                            else { <td></td> }
                         }
                     </tr>
                 </tfoot>
@@ -109,6 +97,9 @@ else
 }
 
 @code {
+    private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
+    private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
+
     private record Choice(LaborDimensions Value, string Label);
     private static readonly Choice[] Choices =
     [

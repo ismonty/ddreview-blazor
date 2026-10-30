@@ -18,20 +18,8 @@ else if (!allowed) { <p class="error">You are not authorized for this report.</p
 else
 {
     <EditForm Model="this" OnSubmit="RunAsync" FormName="sales" class="filters">
-        <fieldset>
-            <legend>Stores</legend>
-            @foreach (var s in stores)
-            {
-                <label class="inline"><input type="checkbox" checked="@selected.Contains(s.StoreId)" @onchange="e => Toggle(s.StoreId, (bool)e.Value!)" /> @s.StoreNumber – @s.StoreName</label>
-            }
-        </fieldset>
-        <fieldset>
-            <legend>Group by</legend>
-            @foreach (var d in Choices)
-            {
-                <label class="inline"><input type="checkbox" checked="@state.Flags.Contains(d.Value.ToString())" @onchange="e => ToggleDim(d.Value, (bool)e.Value!)" /> @d.Label</label>
-            }
-        </fieldset>
+        <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
+        <MultiSelect Caption="Group by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<SalesDimensions>(t.Key), t.On)" />
         <label>From <input type="date" @bind="start" /></label>
         <label>To <input type="date" @bind="end" /></label>
         <label>Compare to
@@ -86,11 +74,11 @@ else
             <tfoot>
                 @foreach (var (idx, sums) in totals)
                 {
-                    <tr class="total"><td></td>
+                    <tr class="total"><td>@(idx is null || Convert.ToInt32(idx) == 0 ? "Total" : "Total (compare)")</td>
                         @for (int i = 0; i < cols.Count; i++)
                         {
                             var c = cols[i];
-                            if (c.Kind == SalesCellKind.Text) { <td>@(i == 0 ? (idx is null || Convert.ToInt32(idx) == 0 ? "Total" : "Total (compare)") : "")</td> }
+                            if (c.Kind == SalesCellKind.Text) { <td></td> }
                             else { <td class="n">@(c.Kind == SalesCellKind.Percent ? SalesLayout.FormatPercent(sums[c.Column], sums[c.Denominator!]) : SalesLayout.FormatNumber(sums[c.Column]))</td> }
                         }
                     </tr>
@@ -103,6 +91,9 @@ else
 }
 
 @code {
+    private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
+    private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
+
     private record Choice(SalesDimensions Value, string Label);
     private static readonly Choice[] Choices =
     [

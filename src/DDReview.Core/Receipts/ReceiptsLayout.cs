@@ -52,6 +52,40 @@ public static class ReceiptsLayout
         return line.Format == CellFormat.Count ? v.ToString("N0") : v.ToString("N2");
     }
 
+    // Average columns are ratios of two totals, so the Total row recomputes them from the summed columns, not by adding averages.
+    static readonly Dictionary<string, (string Num, string Den)> Averages = new()
+    {
+        ["AverageNetSalesPerTable"] = ("TotalNetReceiptAmount", "TotalCheckCount"),
+        ["AverageNetSalesPerGuest"] = ("TotalNetReceiptAmount", "TotalDeclaredCoverCount"),
+        ["AverageNetSalesPerPayment"] = ("TotalNetReceiptAmount", "TotalCount"),
+        ["AverageTipPerTable"] = ("TotalTipsAmount", "TotalCheckCount"),
+        ["AverageTipGuest"] = ("TotalTipsAmount", "TotalDeclaredCoverCount"),
+        ["AverageTipsPerPayment"] = ("TotalTipsAmount", "TotalCount"),
+    };
+
+    /// <summary>Column sums over every row, used by the Total row at the bottom of the grid.</summary>
+    public static Dictionary<string, decimal> Sums(DataTable t)
+    {
+        var sums = new Dictionary<string, decimal>();
+        foreach (var name in new[] { "TotalNetReceiptAmount", "TotalCheckCount", "TotalDeclaredCoverCount", "TotalCount", "TotalTipsAmount" }
+                     .Concat(Columns.SelectMany(c => c.Lines).SelectMany(l => new[] { l.Column, l.NumeratorColumn, l.DenominatorColumn }))
+                     .Where(n => !string.IsNullOrEmpty(n)).Cast<string>())
+            if (!sums.ContainsKey(name) && t.Columns.Contains(name))
+                sums[name] = t.Rows.Cast<DataRow>().Sum(r => r[name] is DBNull ? 0m : Convert.ToDecimal(r[name]));
+        return sums;
+    }
+
+    /// <summary>One line of the Total row: sums for money and counts, recomputed ratios for percent and average lines.</summary>
+    public static string FormatTotal(IReadOnlyDictionary<string, decimal> sums, StackLine line)
+    {
+        decimal S(string c) => sums.TryGetValue(c, out var v) ? v : 0m;
+        if (line.Format == CellFormat.Percent)
+            return S(line.DenominatorColumn!) == 0 ? "" : (S(line.NumeratorColumn!) / S(line.DenominatorColumn!) * 100m).ToString("N2") + "%";
+        if (Averages.TryGetValue(line.Column, out var a))
+            return S(a.Den) == 0 ? "" : (S(a.Num) / S(a.Den)).ToString("N2");
+        return line.Format == CellFormat.Count ? S(line.Column).ToString("N0") : S(line.Column).ToString("N2");
+    }
+
     static decimal Num(DataRow row, string column) =>
         row.Table.Columns.Contains(column) && row[column] is not DBNull ? Convert.ToDecimal(row[column]) : 0m;
 }

@@ -18,20 +18,8 @@ else if (!allowed) { <p class="error">You are not authorized for this report.</p
 else
 {
     <EditForm Model="this" OnSubmit="RunAsync" FormName="receipts" class="filters">
-        <fieldset>
-            <legend>Stores</legend>
-            @foreach (var s in stores)
-            {
-                <label class="inline"><input type="checkbox" checked="@selected.Contains(s.StoreId)" @onchange="e => Toggle(s.StoreId, (bool)e.Value!)" /> @s.StoreNumber – @s.StoreName</label>
-            }
-        </fieldset>
-        <fieldset>
-            <legend>View by</legend>
-            @foreach (var d in Choices)
-            {
-                <label class="inline"><input type="checkbox" checked="@state.Flags.Contains(d.Value.ToString())" @onchange="e => ToggleDim(d.Value, (bool)e.Value!)" /> @d.Label</label>
-            }
-        </fieldset>
+        <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
+        <MultiSelect Caption="View by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<ReceiptsDimensions>(t.Key), t.On)" />
         <label>Starting date <input type="date" @bind="start" /></label>
         <label>Ending date <input type="date" @bind="end" /></label>
         <button type="submit" disabled="@busy">@(busy ? "Running…" : "Submit")</button>
@@ -86,12 +74,26 @@ else
                     </tr>
                 }
             </tbody>
+            <tfoot>
+                @{ var sums = ReceiptsLayout.Sums(result); }
+                <tr class="total">
+                    <td>Total</td>
+                    @foreach (var l in Leading) { <td></td> }
+                    @foreach (var c in ReceiptsLayout.Columns)
+                    {
+                        <td class="n stack">@foreach (var line in c.Lines) {<div class="@(line.Bold ? "b" : null)">@ReceiptsLayout.FormatTotal(sums, line)</div>}</td>
+                    }
+                </tr>
+            </tfoot>
         </table>
         <ReportButtons Busy="busy" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
     }
 }
 
 @code {
+    private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
+    private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
+
     private record Choice(ReceiptsDimensions Value, string Label);
     private record Lead(string Label, string Column, ReceiptsDimensions Dim);
     private static readonly Choice[] Choices =

@@ -102,7 +102,7 @@ ul.menu li a:hover { border-color: var(--accent); }
 p.range { font-weight: 700; margin: .75rem 0 .25rem; }
 table.sales th { font-weight: 700; white-space: nowrap; }
 table.sales td.n, table.sales th.n { text-align: right; font-variant-numeric: tabular-nums; }
-table.sales tfoot tr.total td { font-weight: 700; border-top: 2px solid currentColor; }
+table.sales tfoot tr.total td, table.receipts tfoot tr.total td { font-weight: 700; border-top: 2px solid currentColor; }
 p.rowcount { font-size: .85rem; opacity: .75; }
 table.sales td.shade { background: color-mix(in srgb, currentColor 12%, transparent); }
 
@@ -160,3 +160,14 @@ button.cell { font-weight: 700; }
 .hbtns button:hover { background: var(--gold); color: #000; }
 p.filters-on { margin: .2rem 0; font-size: .85rem; }
 p.filters-on button { font-size: .75rem; margin-left: .3rem; }
+
+/* dropdown-style multi-select (Stores, View by) */
+details.ms { position: relative; }
+details.ms > summary.ms-btn { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .5rem; min-width: 14rem; padding: .45rem .7rem; border: 1px solid var(--edge); border-radius: 8px; background: var(--card); color: var(--ink); }
+details.ms > summary.ms-btn::-webkit-details-marker { display: none; }
+details.ms > summary.ms-btn::after { content: "\25BE"; margin-left: auto; }
+details.ms .ms-cap { color: var(--gold); font-weight: 700; }
+details.ms .ms-sum { color: var(--muted); font-size: .9rem; }
+details.ms .ms-panel { position: absolute; z-index: 20; top: calc(100% + 2px); left: 0; min-width: 100%; max-height: 22rem; overflow: auto; padding: .5rem .7rem; background: var(--card); border: 1px solid var(--edge); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.35); white-space: nowrap; }
+details.ms .ms-panel label.inline { display: flex; }
+details.ms .ms-tools { display: flex; gap: .8rem; padding-bottom: .3rem; margin-bottom: .3rem; border-bottom: 1px solid var(--line); }
