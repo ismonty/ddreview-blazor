@@ -1917,8 +1917,8 @@ namespace DDReview.Core.Receipts.Legacy {
 					Select.Dimension TopReceiptClassDimension = dd;
 					kc = new Select.KeyDataColumn(dd);
 						dd.KeyColumn = kc;
-						kc.ColumnName = "ReceiptClass";
-						kc.KeyExpression = "ReceiptClass";
+						kc.ColumnName = "ReceiptClassID";
+						kc.KeyExpression = "ReceiptClassID";
 					dc = new Select.DataColumn(dd);
 						dd.DataColumns.Add(dc);
 						dc.ColumnName = "ReceiptClass";
