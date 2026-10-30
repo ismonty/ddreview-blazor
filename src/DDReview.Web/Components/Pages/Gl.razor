@@ -32,10 +32,12 @@ else
 
     @if (report is not null)
     {
-        <div class="@(report.Balanced ? "banner ok" : "banner bad")" role="status">
-            @(report.Balanced ? "Balanced" : "OUT OF BALANCE") — debits @report.TotalDebit.ToString("N2"), credits @report.TotalCredit.ToString("N2")
-            @if (!report.Balanced) { <span> (difference @report.Difference.ToString("N2"))</span> }
-        </div>
+        @if (!report.Balanced)
+        {
+            <div class="banner bad" role="status">
+                OUT OF BALANCE — debits @report.TotalDebit.ToString("N2"), credits @report.TotalCredit.ToString("N2") (difference @report.Difference.ToString("N2"))
+            </div>
+        }
         @if (report.OutOfBalance.Any())
         {
             <h2>Batches out of balance</h2>
@@ -47,17 +49,35 @@ else
     {
         <h2>@detailLines.Count(l => l.Debit != 0 || l.Credit != 0) lines</h2>
         <table><thead><tr><th>Batch</th><th>Date</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
-        <tbody>@foreach (var l in detailLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody></table>
+        @{ var shown = detailLines.Where(l => l.Debit != 0 || l.Credit != 0).ToList(); }
+        @foreach (var day in shown.GroupBy(l => l.PostingDate.Date).OrderBy(g => g.Key))
+        {
+            var dd = day.Sum(l => l.Debit); var dc = day.Sum(l => l.Credit);
+            <tbody class="gl-day">
+                @foreach (var l in day) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}
+                <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc)</td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
+                <tr class="gl-gap"><td colspan="7"></td></tr>
+            </tbody>
+        }
+        @{ var gd = shown.Sum(l => l.Debit); var gc = shown.Sum(l => l.Credit); }
+        <tbody class="gl-grand">
+            <tr class="total"><td colspan="5">Grand total @BalanceNote(gd, gc)</td><td class="n">@gd.ToString("N2")</td><td class="n">@gc.ToString("N2")</td></tr>
+        </tbody></table>
     }
     @if (summaryLines is not null)
     {
         <h2>@summaryLines.Count(l => l.Debit != 0 || l.Credit != 0) rows</h2>
         <table><thead><tr><th>Store</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
-        <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@l.StoreName</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody></table>
+        <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@l.StoreName</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
+        @{ var sr = summaryLines.Where(l => l.TotalLine == 0).ToList(); var sd = sr.Sum(l => l.Debit); var sc = sr.Sum(l => l.Credit); }
+        <tbody class="gl-grand"><tr class="total"><td colspan="4">Grand total @BalanceNote(sd, sc)</td><td class="n">@sd.ToString("N2")</td><td class="n">@sc.ToString("N2")</td></tr></tbody></table>
     }
 }
 
 @code {
+    private static string BalanceNote(decimal debit, decimal credit) =>
+        debit == credit ? "(balanced)" : "(OUT OF BALANCE by " + (debit - credit).ToString("N2") + ")";
+
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
 
     private DDReview.Web.UserContext? ctx;

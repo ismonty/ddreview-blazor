@@ -169,3 +169,8 @@ details.ms .ms-sum { color: var(--muted); font-size: .9rem; }
 details.ms .ms-panel { position: absolute; z-index: 20; top: calc(100% + 2px); left: 0; min-width: 100%; max-height: 22rem; overflow: auto; padding: .5rem .7rem; background: var(--card); border: 1px solid var(--edge); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.35); white-space: nowrap; }
 details.ms .ms-panel label.inline { display: flex; }
 details.ms .ms-tools { display: flex; gap: .8rem; padding-bottom: .3rem; margin-bottom: .3rem; border-bottom: 1px solid var(--line); }
+
+/* General ledger: a little air between days */
+tr.gl-gap td { height: 1.1rem; padding: 0; border: 0; }
+tbody.gl-day tr.total td, tbody.gl-grand tr.total td { border-top: 1px solid currentColor; }
+tbody.gl-grand tr.total td { border-top: 2px solid currentColor; }
