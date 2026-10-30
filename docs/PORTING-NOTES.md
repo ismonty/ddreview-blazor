@@ -91,3 +91,9 @@ Changes and decisions:
 - Unverified against a live database: the result tables are expected to carry the id columns named in the catalog (`StoreID`, `MainTypeID`, ...). A cell whose id column is missing is simply not clickable, so the failure mode is "no link", not a wrong filter. Check on turbo which rows are clickable.
 
 Follow-up (row check boxes): every row has a check box. Clicking a dimension cell uses the clicked row plus all checked rows (clicked first, each once): ids are joined, and name-looked-up dimensions feed each name through the client function with the list so far, as the old grid did. Checks clear on every new run. Cells of name-looked-up dimensions (Sale Type, Menu Item, Discount, staff, ...) are clickable by name; before, they wrongly needed the id column, which is empty for them.
+
+## Slice 8: QuickBooks posting (new projects)
+See `docs/QUICKBOOKS.md`. `DDReview.QuickBooks` (library) and `DDReview.QuickBooks.Win` (x86 WinForms) post GL and A/R into QuickBooks Desktop,
+or write IIF/CSV/QBXML files. Tests: plan golden-tested against the October Access plan (sanitised store and tax names), A/R cases with synthetic customers,
+engine against a fake QuickBooks (preview, first post, re-post unchanged, modify, parent account types, missing references), import-file balance checks.
+Publish: `dotnet publish src/DDReview.QuickBooks.Win -c Release -r win-x86 --self-contained` (x86 is required).

@@ -29,6 +29,7 @@ sealed class MainForm : Form
     readonly Button _loadStores = new() { Text = "Connect and load stores", AutoSize = true };
     readonly Button _preview = new() { Text = "Preview (changes nothing)", AutoSize = true, Enabled = false };
     readonly Button _post = new() { Text = "Post to QuickBooks...", AutoSize = true, Enabled = false };
+    readonly Button _export = new() { Text = "Save import files...", AutoSize = true, Enabled = false };
     readonly Button _cancel = new() { Text = "Cancel", AutoSize = true, Enabled = false };
     readonly TextBox _log = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false, Font = new Font("Consolas", 9f) };
     readonly Label _status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
@@ -81,7 +82,7 @@ sealed class MainForm : Form
         middle.Panel2.Controls.Add(opts);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8, 4, 8, 4) };
-        buttons.Controls.AddRange(new Control[] { _preview, _post, _cancel });
+        buttons.Controls.AddRange(new Control[] { _preview, _post, _export, _cancel });
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -100,6 +101,7 @@ sealed class MainForm : Form
         _preview.Click += async (_, _) => await RunAsync(commit: false);
         _post.Click += async (_, _) => await PostAsync();
         _cancel.Click += (_, _) => _cts?.Cancel();
+        _export.Click += (_, _) => ExportFiles();
         FormClosing += (_, _) => SaveSettings();
 
         Log("This program posts the general ledger and accounts receivable from your DD database into QuickBooks Desktop.");
@@ -133,7 +135,7 @@ sealed class MainForm : Form
         _status.Text = status;
         _cancel.Enabled = busy;
         _loadStores.Enabled = _preview.Enabled = !busy;
-        _post.Enabled = !busy && _plan != null;
+        _post.Enabled = _export.Enabled = !busy && _plan != null;
         UseWaitCursor = busy;
     }
 
@@ -255,6 +257,23 @@ sealed class MainForm : Form
             Log("PROBLEMS:");
             foreach (var f in r.Failures) Log($"  {f.What}: {f.Message}");
         }
+    }
+
+    void ExportFiles()
+    {
+        if (_plan == null || _planFor == null) return;
+        using var dlg = new FolderBrowserDialog { Description = "Choose a folder for the QuickBooks import files (IIF, CSV and QBXML)." };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var name = $"DDQuickBooks-{_planFor.Start:yyyyMMdd}-{_planFor.End:yyyyMMdd}";
+            var files = DDReview.QuickBooks.Export.ImportFiles.WriteAll(_plan, dlg.SelectedPath, name);
+            Log("");
+            Log("Saved:");
+            foreach (var f in files) Log("  " + f);
+            Log("IIF: in QuickBooks choose File > Utilities > Import > IIF Files.");
+        }
+        catch (Exception ex) { Log("Could not save the files: " + ex.Message); MessageBox.Show(this, ex.Message, Text); }
     }
 
     async Task PostAsync()
