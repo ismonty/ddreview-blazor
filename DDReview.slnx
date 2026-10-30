@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/DDReview.Core/DDReview.Core.csproj" />
+    <Project Path="src/DDReview.QuickBooks/DDReview.QuickBooks.csproj" />
     <Project Path="src/DDReview.Web/DDReview.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">

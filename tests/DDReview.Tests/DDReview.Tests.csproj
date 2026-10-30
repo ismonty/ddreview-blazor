@@ -20,6 +20,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DDReview.Core\DDReview.Core.csproj" />
+    <ProjectReference Include="..\..\src\DDReview.QuickBooks\DDReview.QuickBooks.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="QuickBooks\Data\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
