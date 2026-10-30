@@ -10,7 +10,7 @@
 @inject IJSRuntime JS
 @using DDReview.Web.Components.Home
 
-<PageTitle>Sales review</PageTitle>
+<PageTitle>MontySoft DD Review™</PageTitle>
 <h1>Sales review</h1>
 
 @if (ctx is null) { <p>Loading…</p> }
@@ -40,7 +40,7 @@ else
         @if (state.Filters.Count > 0)
         {
             <p class="filters-on">Filtered on:
-                @foreach (var k in state.Filters.Keys.ToList()) {<button type="button" class="hlink" title="Show All" @onclick="() => Act(s => s.ShowAll(k))">@k ✕</button>}
+                @foreach (var k in state.Filters.Keys.ToList()) {<button type="button" class="hlink" title="Show All" @onclick="() => Act(s => s.ShowAll(k))">@FilterLabel(k) ✕</button>}
             </p>
         }
         <table class="sales">
@@ -91,6 +91,8 @@ else
 }
 
 @code {
+    private string FilterLabel(string k) { var n = FilterText.Names(result, Cat, k); return n.Length == 0 ? k : k + ": " + n; }
+
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
     private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
 

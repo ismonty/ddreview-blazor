@@ -85,13 +85,11 @@ header.top button { background: var(--brand-bg); color: var(--brand-ink); border
 table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
 th, td { padding: .4rem .6rem; text-align: left; }
 td { background: var(--row); border-bottom: var(--row-gap) solid var(--line); }
-th { font-size: .85rem; font-weight: 700; color: var(--ink); border-bottom: 1px solid var(--edge); vertical-align: bottom; }
+th { font-size: .85rem; font-weight: 400; color: var(--ink); border-bottom: 1px solid var(--edge); vertical-align: bottom; }
 th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
 tr.suspense td { background: var(--warn); }
-tr.total td { font-weight: 700; color: var(--gold); }
+tr.total td { color: var(--gold); }
 table.receipts th.stack, table.receipts td.stack { white-space: nowrap; vertical-align: top; }
-table.receipts td.stack .b { font-weight: 700; }
-table.receipts td:first-child, table.receipts td:nth-child(2) { font-weight: 700; }
 ul.menu { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .7rem; }
 ul.menu li a { display: block; padding: .8rem 1.4rem; background: var(--tile); border: 1px solid var(--edge); border-left: 5px solid var(--gold); border-radius: 10px; text-decoration: none; font-weight: 700; color: var(--ink); }
 ul.menu li a:hover { border-color: var(--accent); }
@@ -99,10 +97,10 @@ ul.menu li a:hover { border-color: var(--accent); }
 
 
 /* Sales review grid (matches the old page: bold headers, right-aligned numbers, bold totals row) */
-p.range { font-weight: 700; margin: .75rem 0 .25rem; }
-table.sales th { font-weight: 700; white-space: nowrap; }
+p.range { margin: .75rem 0 .25rem; }
+table.sales th { white-space: nowrap; }
 table.sales td.n, table.sales th.n { text-align: right; font-variant-numeric: tabular-nums; }
-table.sales tfoot tr.total td, table.receipts tfoot tr.total td { font-weight: 700; border-top: 2px solid currentColor; }
+table.sales tfoot tr.total td, table.receipts tfoot tr.total td { border-top: 2px solid currentColor; }
 p.rowcount { font-size: .85rem; opacity: .75; }
 table.sales td.shade { background: color-mix(in srgb, currentColor 12%, transparent); }
 
@@ -152,8 +150,8 @@ table.daily tr.total td { font-weight: 700; } table.daily .lbl.small { font-size
 .footbuttons { display: flex; gap: .5rem; flex-wrap: wrap; margin: .8rem 0; }
 
 /* drill / sort controls in review grid headers and cells */
-button.hlink, button.cell { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 700; color: inherit; cursor: pointer; text-align: inherit; text-decoration: underline; text-underline-offset: 2px; }
-button.hlink:hover, button.cell:hover { text-decoration-thickness: 2px; }
+button.hlink, button.cell { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 700; color: inherit; cursor: pointer; text-align: inherit; text-decoration: none; text-underline-offset: 2px; }
+button.hlink:hover, button.cell:hover { color: var(--gold); }
 button.cell { font-weight: 700; }
 .hbtns { display: flex; gap: .2rem; margin-top: .2rem; }
 .hbtns button { font-size: .65rem; font-weight: 600; padding: 0 .3rem; border: 1px solid var(--gold); background: var(--tile); color: inherit; border-radius: 3px; cursor: pointer; line-height: 1.4; }

@@ -217,3 +217,26 @@ public sealed class DrillKeyResolver
         return acc;
     }
 }
+
+/// <summary>Names for the "Filtered on" line: what each active filter is limited to, read from the result's own name columns
+/// (the report fills them with the filtered names, or "All", even for a dimension that isn't grouped by).</summary>
+public static class FilterText
+{
+    public static string Names(System.Data.DataTable? result, IReadOnlyList<DrillColumn> cat, string key, int max = 4)
+    {
+        var col = DrillState.Find(cat, key);
+        if (result is null || col is null) return "";
+        var names = new List<string>();
+        foreach (var c in col.Display)
+        {
+            if (!result.Columns.Contains(c)) continue;
+            var part = result.Rows.Cast<System.Data.DataRow>()
+                .Select(r => r[c] is DBNull ? "" : Convert.ToString(r[c])!.Trim())
+                .Where(v => v.Length > 0 && !v.Equals("All", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
+            if (part.Count > 0) { names = part; if (c == col.Display[^1]) break; }
+        }
+        if (names.Count == 0) return "";
+        var more = names.Count > max ? $" +{names.Count - max} more" : "";
+        return string.Join(", ", names.Take(max)) + more;
+    }
+}
