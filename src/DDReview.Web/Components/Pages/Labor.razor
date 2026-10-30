@@ -74,7 +74,7 @@ else
                     }</tr>
                 }
             </tbody>
-            @if (!punch)
+            @if (!punch && result.Rows.Count > 0 && totals.Count > 0)
             {
                 <tfoot>
                     <tr class="total"><td>Total</td>
