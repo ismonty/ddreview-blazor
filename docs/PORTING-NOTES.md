@@ -97,3 +97,13 @@ See `docs/QUICKBOOKS.md`. `DDReview.QuickBooks` (library) and `DDReview.QuickBoo
 or write IIF/CSV/QBXML files. Tests: plan golden-tested against the October Access plan (sanitised store and tax names), A/R cases with synthetic customers,
 engine against a fake QuickBooks (preview, first post, re-post unchanged, modify, parent account types, missing references), import-file balance checks.
 Publish: `dotnet publish src/DDReview.QuickBooks.Win -c Release -r win-x86 --self-contained` (x86 is required).
+
+## Slice 9: drill filters as a table-valued parameter
+The name-looked-up filter lists ("1,2,3:8901,8902 1,2:8903 3:8904": stores with items, because one name has different ids per store) used to be pasted
+into the generated SQL as OR chains by the three `ParsePairSetOutput` methods. Now, while a `PairScope` is active (`Drill/PairSets.cs`), they emit
+`exists (select 1 from @DrillPairs dpN where dpN.Dim = N and dpN.StoreID = <store col> and dpN.ItemID = <item col>)` and the pairs travel in one
+table-valued parameter of type `dbo.DrillPair` (script `sql/002_client_drill_pair_type.sql`, run once per client database). `fn_ParsePairSetStringAdd*` are untouched and still
+turn a clicked name into ids; only their text result is parsed in C# instead of pasted. Without the type in the database, or outside a scope (tests, diagnostics),
+the old text is generated, byte for byte. Lists without a colon stay `item in (...)`.
+Unverified against a live database: run the script on a test client DB, drill a menu item across several stores, and compare totals with the text version
+(drop the type to compare).

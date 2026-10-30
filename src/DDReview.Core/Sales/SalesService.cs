@@ -39,13 +39,14 @@ public sealed class SalesService
     {
         if (req.End < req.Start) throw new ArgumentException("The end date is before the start date.");
         if (req.StoreIds.Count == 0) throw new ArgumentException("No stores selected.");
-        var script = BuildScript(connectionString, req);
+        var (script, pairs) = await DDReview.Core.Drill.PairSupport.BuildAsync(connectionString, () => BuildScript(connectionString, req), ct);
         var (sql, pars) = Parameterize(script);
 
         await using var cn = new SqlConnection(connectionString);
         await cn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 600 };
         foreach (var p in pars) cmd.Parameters.Add(p);
+        pairs?.AttachTo(cmd);
         var table = new DataTable("Sales");
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         table.Load(rd);

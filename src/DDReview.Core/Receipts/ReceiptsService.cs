@@ -98,11 +98,13 @@ public sealed class ReceiptsService
         if (req.End < req.Start) throw new ArgumentException("The end date is before the start date.");
         if (req.StoreIds.Count == 0) throw new ArgumentException("No stores selected.");
         var facts = await ProbeAsync(cs, ct);
-        var (sql, pars) = SalesService.Parameterize(BuildScript(req, facts));
+        var (script, pairs) = await DDReview.Core.Drill.PairSupport.BuildAsync(cs, () => BuildScript(req, facts), ct);
+        var (sql, pars) = SalesService.Parameterize(script);
         await using var cn = new SqlConnection(cs);
         await cn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 600 };
         foreach (var p in pars) cmd.Parameters.Add(p);
+        pairs?.AttachTo(cmd);
         var table = new DataTable("Receipts");
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         table.Load(rd);

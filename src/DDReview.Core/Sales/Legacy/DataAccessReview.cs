@@ -93,6 +93,7 @@ namespace DDReview.Core.Sales.Legacy {
 				return InputTabString.Replace(TabString(MinTabCount),"\n\t\t\t\t\t");
 				}
 			public String ParsePairSetOutput(String strInput, String str1, String str2) {
+				if (DDReview.Core.Drill.PairScope.Current != null) { var viaPairs = DDReview.Core.Drill.PairScope.Current.Output(strInput, str1, str2); if (viaPairs != null) return viaPairs; }
 				System.Text.StringBuilder sbWhere = new System.Text.StringBuilder();
 				Int32 pos1 = 0;
 				Int32 pos2 = 0;
@@ -281,6 +282,7 @@ namespace DDReview.Core.Sales.Legacy {
 					return sb.ToString();
 					}
 				private string ParsePairSetOutput(string strInput, string str1, string str2) {
+				if (DDReview.Core.Drill.PairScope.Current != null) { var viaPairs = DDReview.Core.Drill.PairScope.Current.Output(strInput, str1, str2); if (viaPairs != null) return viaPairs; }
 					System.Text.StringBuilder sbWhere = new System.Text.StringBuilder();
 					int pos1 = 0;
 					int pos2 = 0;
@@ -512,6 +514,7 @@ namespace DDReview.Core.Sales.Legacy {
 				}
 			}
 		protected string ParsePairSetOutput(string strInput, string str1, string str2) {
+				if (DDReview.Core.Drill.PairScope.Current != null) { var viaPairs = DDReview.Core.Drill.PairScope.Current.Output(strInput, str1, str2); if (viaPairs != null) return viaPairs; }
 			System.Text.StringBuilder sbWhere = new System.Text.StringBuilder();
 			int pos1 = 0;
 			int pos2 = 0;
