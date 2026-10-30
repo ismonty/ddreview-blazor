@@ -49,15 +49,15 @@ else
     }
     @if (detailLines is not null)
     {
-        <h2>@detailLines.Count lines</h2>
+        <h2>@detailLines.Count(l => l.Debit != 0 || l.Credit != 0) lines</h2>
         <table><thead><tr><th>Batch</th><th>Date</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
-        <tbody>@foreach (var l in detailLines) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody></table>
+        <tbody>@foreach (var l in detailLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody></table>
     }
     @if (summaryLines is not null)
     {
-        <h2>@summaryLines.Count rows</h2>
+        <h2>@summaryLines.Count(l => l.Debit != 0 || l.Credit != 0) rows</h2>
         <table><thead><tr><th>Store</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
-        <tbody>@foreach (var l in summaryLines) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@l.StoreName</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody></table>
+        <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@l.StoreName</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody></table>
     }
 }
 
