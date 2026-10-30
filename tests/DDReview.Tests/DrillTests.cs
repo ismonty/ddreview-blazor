@@ -100,8 +100,11 @@ public class DrillTests
         foreach (var c in DrillCatalogs.Sales) Assert.True(Enum.TryParse<SalesDimensions>(c.Key, out _), c.Key);
         foreach (var c in DrillCatalogs.Receipts) Assert.True(Enum.TryParse<ReceiptsDimensions>(c.Key, out _), c.Key);
         foreach (var c in DrillCatalogs.Labor) Assert.True(Enum.TryParse<LaborDimensions>(c.Key, out _), c.Key);
-        foreach (var cat in new[] { DrillCatalogs.Sales, DrillCatalogs.Receipts, DrillCatalogs.Labor })
+        foreach (var cat in new[] { DrillCatalogs.Sales, DrillCatalogs.Receipts })
             foreach (var c in cat) Assert.NotNull(DrillState.Find(cat, c.NextKey));
+        // Labor's Employee drills to PunchDetail, which is a dimension (a button, in the old page) rather than a column.
+        foreach (var c in DrillCatalogs.Labor)
+            Assert.True(DrillState.Find(DrillCatalogs.Labor, c.NextKey) is not null || Enum.TryParse<LaborDimensions>(c.NextKey, out _), c.NextKey);
     }
 
     [Fact]
