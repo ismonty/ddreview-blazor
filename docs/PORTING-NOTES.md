@@ -107,3 +107,15 @@ turn a clicked name into ids; only their text result is parsed in C# instead of 
 the old text is generated, byte for byte. Lists without a colon stay `item in (...)`.
 Unverified against a live database: run the script on a test client DB, drill a menu item across several stores, and compare totals with the text version
 (drop the type to compare).
+
+## Slice 10: submission reports (General Ledger)
+Source: `DDReviewMarauder/DDAdminGLARSubmissionReportGraphic.aspx.cs`. The register software stores a page for each posted batch as drawing commands in `tblCashAndSalesReport`
+(1 text, 2 bold on/off, 3 line, 4 right-aligned text, 5 centered text; positions in twips). The old page replayed them into an 8.5 x 11 inch JPEG with System.Drawing.
+Port: `Core/Gl/SubmissionReports.cs`. `SubmissionReportService` lists batches (store, date, only those that have stored commands) and reads one batch; both are plain SQL, parameterized,
+and limited to the stores the user's General Ledger access covers (the check is in the SQL, so a typed batch number for another store returns nothing). `SubmissionSvg` replays the commands as SVG
+(816 x 1056 px, Verdana 7 pt; twips / 15 = px, as before). The image comes from `GET /gl/submission-image/{batchId}` (signed-in users only, cached privately for 10 minutes).
+UI (`Gl.razor`): a "Submission report" link on each daily total line of the detail modes opens that day's reports (straight to the page when there is only one);
+a "View Submission Reports" button under the results opens all reports of the run as thumbnails (store and date in small text), tap one for the full page with Previous/Next.
+The viewer opens over the page so the report you ran stays put. Thumbnails load lazily, 48 at a time. At most 1000 reports are listed per request.
+Unverified against a live database: whether the text sits exactly where the old JPEG put it (the baseline offset is an estimate), and the SQL on a database without `tblCashAndSalesReport` (shows a "not available" message).
+
