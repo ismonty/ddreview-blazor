@@ -17,7 +17,7 @@ public static class SqlPackageSource
         cn.Open();
         using var cmd = cn.CreateCommand();
         cmd.CommandTimeout = commandTimeoutSeconds;
-        cmd.CommandText = "select * from dbo.fn_CashAndSalesGLandARMultiStoreSelectExportPackage2(@stores, @start, @end, @scope)";
+        cmd.CommandText = "select * from dbo.fn_CashAndSalesGLandARMultiStoreSelectExportPackage2(@stores, @start, @end, @scope, 0, 0)";
         cmd.Parameters.Add("@stores", SqlDbType.VarChar, 8000).Value = string.Join(",", request.StoreIds);
         cmd.Parameters.Add("@start", SqlDbType.DateTime).Value = request.Start.Date;
         cmd.Parameters.Add("@end", SqlDbType.DateTime).Value = request.End.Date;
