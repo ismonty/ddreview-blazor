@@ -1,15 +1,16 @@
-@using System.Data
+﻿@using System.Data
 @using System.Globalization
 @using DDReview.Core.Home
 @inject HomeService Home
 <DateBar Start="start" End="end" Compare="compare" ShowCompare="false" Stores="Ctx.Stores" StoreId="storeId" OnChange="Apply" />
 @if (error is not null) { <p class="error" role="alert">@error</p> }
 else if (sections is null) { <p>Loading…</p> }
-else if (sections.Count == 0) { <p class="muted">No numbers for that range.</p> }
+else if (sections.All(x => x.IsAllZero)) { <p class="muted">No numbers for that range.</p> }
 else
 {
-    var heads = NumbersSection.DayHeaders(sections[0].Start);
-    @foreach (var s in sections)
+    var shown = sections.Where(x => !x.IsAllZero).ToList();
+    var heads = NumbersSection.DayHeaders(shown[0].Start);
+    @foreach (var s in shown)
     {
         <table class="numbers">
             <caption>

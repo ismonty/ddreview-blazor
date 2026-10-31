@@ -1,10 +1,11 @@
-@using System.Data
+﻿@using System.Data
 @using System.Globalization
 @using DDReview.Core.Home
 @inject HomeService Home
 <DateBar Start="start" End="end" Compare="compare" OnChange="Apply" />
 @if (error is not null) { <p class="error" role="alert">@error</p> }
 else if (lines is null) { <p>Loading…</p> }
+else if (lines.All(l => l.IsAllZero)) { <p class="muted">No activity for that range.</p> }
 else
 {
     <table class="daily">
@@ -16,7 +17,7 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var l in lines) { @Row(l, false) }
+            @foreach (var l in lines.Where(x => !x.IsAllZero)) { @Row(l, false) }
             @Row(total!, true)
         </tbody>
     </table>

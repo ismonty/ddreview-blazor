@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
 
 namespace DDReview.Core.Home;
@@ -19,6 +19,11 @@ public sealed class DailySummaryLine
     public decimal DayPartPct(int i) => Ratio(DayPart[i] - PreviousDayPart[i], PreviousDayPart[i]);
 
     static decimal Ratio(decimal a, decimal b) => b == 0 ? 0 : a / b;
+
+    /// <summary>True when every number for the store is zero (a closed or not-yet-reporting store); the tab leaves such stores out.</summary>
+    public bool IsAllZero =>
+        Sales == 0 && PreviousSales == 0 && Budget == 0 && Gross == 0 && Discounts == 0 && Voids == 0 && Labor == 0 && ProductCost == 0
+        && Purchases == 0 && Checks == 0 && PreviousChecks == 0 && DayPart.All(x => x == 0) && PreviousDayPart.All(x => x == 0);
 
     public static readonly string[] DayPartNames = ["Day Part 1", "Day Part 2", "Day Part 3", "Day Part 4", "Drive Up", "Catering"];
     static readonly string[] DayPartColumns = ["DayPart1Sales", "DayPart2Sales", "DayPart3Sales", "DayPart4Sales", "DriveThroughSales", "CateringSales"];
@@ -105,6 +110,11 @@ public sealed record NumbersSection(int Number, string Name, string StoreName, D
         }
         return list;
     }
+
+    /// <summary>True when every day column and line total in the section is zero or empty; such a section is left out of the output.</summary>
+    public bool IsAllZero => Rows.All(r =>
+        Enumerable.Range(0, 7).Select(i => "D" + i).Append("LineTotal")
+            .All(c => !r.Table.Columns.Contains(c) || r[c] is DBNull || Convert.ToDecimal(r[c], CultureInfo.InvariantCulture) == 0m));
 
     /// <summary>The "MM/dd" + weekday labels for the seven day columns: the grid starts on a Monday, rotated to the first date.</summary>
     public static List<(string Date, string Day)> DayHeaders(DateTime? start)

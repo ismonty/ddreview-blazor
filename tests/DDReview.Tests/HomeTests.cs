@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using DDReview.Core.Home;
 using Xunit;
 
@@ -60,6 +60,32 @@ public class HomeTests
         Assert.Equal(("10/26", "Mon"), h[0]); Assert.Equal(("11/01", "Sun"), h[6]);
         var mid = NumbersSection.DayHeaders(new DateTime(2026, 10, 28));      // starts on a Wednesday: Mon/Tue columns wrap to next week
         Assert.Equal(("11/02", "Mon"), mid[0]); Assert.Equal(("10/28", "Wed"), mid[2]);
+    }
+
+    [Fact]
+    public void A_store_with_nothing_in_it_is_all_zero_and_a_busy_one_is_not()
+    {
+        var t = Summary();
+        t.Rows.Add(2m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, "Closed");
+        var lines = t.Rows.Cast<DataRow>().Select(DailySummaryLine.From).ToList();
+        Assert.False(lines[0].IsAllZero);
+        Assert.True(lines[1].IsAllZero);
+    }
+
+    [Fact]
+    public void Sections_with_only_zero_or_empty_numbers_are_flagged_all_zero()
+    {
+        var t = new DataTable();
+        t.Columns.Add("SectionNumber", typeof(int)); t.Columns.Add("SectionName", typeof(string)); t.Columns.Add("StoreName", typeof(string));
+        t.Columns.Add("StartingDate", typeof(DateTime)); t.Columns.Add("EndingDate", typeof(DateTime));
+        t.Columns.Add("Descriptor", typeof(string));
+        for (int i = 0; i < 7; i++) t.Columns.Add("D" + i, typeof(decimal));
+        t.Columns.Add("LineTotal", typeof(decimal));
+        var row = (int sec, decimal v) => { var r = t.NewRow(); r["SectionNumber"] = sec; r["SectionName"] = "S" + sec; r["Descriptor"] = "x"; for (int i = 0; i < 7; i++) r["D" + i] = v; r["LineTotal"] = v * 7; t.Rows.Add(r); };
+        row(1, 0m); row(1, 0m); row(2, 0m); row(2, 5m);
+        var s = NumbersSection.From(t);
+        Assert.True(s[0].IsAllZero);
+        Assert.False(s[1].IsAllZero);
     }
 }
 
