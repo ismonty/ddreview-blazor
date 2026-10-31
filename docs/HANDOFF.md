@@ -24,7 +24,7 @@ Every customer has their own client database (1 to ~150 stores); a central maste
 - `src/DDReview.QuickBooks` (+ `.Win`): QuickBooks Desktop posting (QBXML) and IIF/CSV files; see `docs/QUICKBOOKS.md`.
 - `sql/`: numbered scripts for the *new* objects only: 001 central password-hash table, 002 `dbo.DrillPair` type (per client DB), 003 central Google link table.
   Existing database objects (e.g. `fn_ParsePairSetStringAdd*`, `fn_CashAndSalesGLandARMultiStoreSelect*`, used by the Access presentation layer DDAdminCS) must stay intact.
-- `deploy/` + `docs/DEPLOY-STAGING.md`: IIS staging deployment (blazor.ddreview.com), built on the server from git.
+- `deploy/` + `docs/DEPLOY-STAGING.md`: IIS staging deployment (blazor-staging.ddreview.com), built on the server from git.
 - `docs/PORTING-NOTES.md`: the slice-by-slice log of what was ported, decisions, and what is unverified. Read it first.
 
 ## What is ported

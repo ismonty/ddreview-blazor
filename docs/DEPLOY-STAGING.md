@@ -1,4 +1,4 @@
-# Deploying DD Review (Blazor) to staging: blazor.ddreview.com on IIS
+# Deploying DD Review (Blazor) to staging: blazor-staging.ddreview.com on IIS
 
 The server builds the site itself from git. One script does a deploy and the same script does every update.
 
@@ -22,11 +22,11 @@ The server builds the site itself from git. One script does a deploy and the sam
    Import-Module WebAdministration
    New-WebAppPool blazor-staging.ddreview.com
    Set-ItemProperty IIS:\AppPools\blazor-staging.ddreview.com managedRuntimeVersion ''      # No Managed Code
-   New-Website -Name blazor-staging.ddreview.com -PhysicalPath C:\inetpub\blazor-staging.ddreview.com -ApplicationPool blazor-staging.ddreview.com -HostHeader blazor.ddreview.com -Port 80
+   New-Website -Name blazor-staging.ddreview.com -PhysicalPath C:\inetpub\blazor-staging.ddreview.com -ApplicationPool blazor-staging.ddreview.com -HostHeader blazor-staging.ddreview.com -Port 80
    icacls C:\inetpub\blazor-staging.ddreview.com /grant "IIS AppPool\blazor-staging.ddreview.com:(OI)(CI)M"
    ```
    When DNS and your certificate are ready add the HTTPS binding: IIS Manager > Sites > blazor-staging.ddreview.com > Bindings > Add > https,
-   host name `blazor.ddreview.com`, tick *Require Server Name Indication*, pick the certificate. **Sign-in only works over HTTPS** (the login cookie is Secure-only).
+   host name `blazor-staging.ddreview.com`, tick *Require Server Name Indication*, pick the certificate. **Sign-in only works over HTTPS** (the login cookie is Secure-only).
 5. **Settings file with the secrets** (never in git). Copy `deploy\appsettings.Production.example.json` to
    `C:\inetpub\blazor-staging.ddreview.com\appsettings.Production.json` and fill in:
    - `Tenancy:CentralConnectionString`: the central master database (DDReview-CentralMaster) and its SQL login.
@@ -35,14 +35,14 @@ The server builds the site itself from git. One script does a deploy and the sam
    - `DataProtection:KeysPath`: keeps sign-ins valid across restarts; the folder is created for you, and the app pool needs write access (step 4 gave it).
    The deploy script never overwrites this file, the `keys` folder, or `logs`.
 6. **Google sign-in (optional, off until both values are set).** Create a Google Cloud project just for DD Review and an OAuth client of type
-   *Web application* with authorized redirect URIs `https://blazor.ddreview.com/signin-google` (and `https://localhost:7004/signin-google` for development).
+   *Web application* with authorized redirect URIs `https://blazor-staging.ddreview.com/signin-google` (and `https://localhost:7004/signin-google` for development).
    Put the Client ID and Client Secret in `appsettings.Production.json` under `Authentication:Google` (locally:
    `dotnet user-secrets set "Authentication:Google:ClientId" "..."` and `...:ClientSecret`). Run `sql\003_central_google_link.sql` on the central master and give the
    central web login `SELECT, INSERT, UPDATE, DELETE` on `dbo.tblWebUserGoogle`. Then each person signs in with their password once, opens their name at the top right (Account)
    and chooses *Link Google account*; after that the *Sign in with Google* button on the login page works for them. Logins are matched by Google's account id, never by email address.
 7. **SQL Server.** From this server the central master and every client database that staging will reach must be reachable (firewall, SQL login).
    In each client database the web login needs `grant execute on type::dbo.DrillPair to [<web login user>]` (after running `sql\002_client_drill_pair_type.sql` there).
-8. **DNS**: `blazor.ddreview.com` to the server (you are handling this), plus the certificate.
+8. **DNS**: `blazor-staging.ddreview.com` to the server (you are handling this), plus the certificate.
 
 ## If the server already hosts MOOTT and Bob (it does)
 - **IIS and WebSockets are already installed**, so skip that part of step 1. Check only that the ASP.NET Core Hosting Bundle is **.NET 10**: the newest bundle runs the older .NET 8 sites too,
@@ -63,7 +63,7 @@ It pulls the checked-out branch, runs the tests, publishes, zips the live folder
 (keeps the last 8), puts up `app_offline.htm`, copies the new files, takes the site back online and requests the login page.
 Options: `-SkipTests`, `-SkipPull`, `-SiteDir`, `-BackupDir`, `-Url`.
 
-Smoke test afterwards: open https://blazor.ddreview.com, sign in, run Sales and Receipts for a day you know, compare with turbo.ddreview.com.
+Smoke test afterwards: open https://blazor-staging.ddreview.com, sign in, run Sales and Receipts for a day you know, compare with turbo.ddreview.com.
 
 ## Running it automatically
 `Deploy-Staging.ps1` asks no questions and exits with code 0 on success and non-zero on any failure (tests, publish, copy), so it can be started by a scheduled task,

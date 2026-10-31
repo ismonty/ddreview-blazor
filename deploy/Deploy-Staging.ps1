@@ -11,7 +11,7 @@
 param(
     [string]$SiteDir  = 'C:\inetpub\blazor-staging.ddreview.com',
     [string]$BackupDir = 'C:\inetpub\backups\blazor-staging.ddreview.com',
-    [string]$Url      = 'https://blazor.ddreview.com/login',
+    [string]$Url      = 'https://blazor-staging.ddreview.com/login',
     [switch]$SkipPull,
     [switch]$SkipTests
 )
