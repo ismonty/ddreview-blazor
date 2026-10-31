@@ -1,4 +1,4 @@
-using DDReview.Core.Gl;
+﻿using DDReview.Core.Gl;
 using DDReview.Core.Security;
 using DDReview.Core.Support;
 using DDReview.Core.Tenancy;
@@ -220,6 +220,15 @@ public class UpdaterTests
         var s = DDReview.Core.Updater.ClientScripts.All[0];
         Assert.Equal("002", s.Id);
         Assert.Contains("create type dbo.DrillPair", s.ReadSql(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] public void Grant_procedure_script_drops_and_recreates_and_defaults_to_listing_only()
+    {
+        var s = DDReview.Core.Updater.ClientScripts.All.Single(x => x.Id == "004");
+        var sql = s.ReadSql();
+        Assert.Equal(2, DDReview.Core.Updater.SqlBatches.Split(sql).Count);   // drop-if-exists, then create
+        Assert.Contains("@Execute  bit     = 0", sql);
+        Assert.Contains("grant execute on type::dbo.DrillPair", sql);
     }
 
     [Fact] public async Task Only_an_administrator_may_apply()

@@ -100,7 +100,7 @@ select db_name(), user_name(),
         return new UpdateReport(db, user, canCreate, items);
     }
 
-    private static string? Hint(ClientScript s, string user) => s.GrantHint?.Replace("{user}", user.Replace("]", "]]"));
+    private static string? Hint(ClientScript s, string user) => s.GrantHint?.Replace("{user}", user.Replace("'", "''"));
 
     private static async Task<(bool Present, bool Usable)> ProbeAsync(SqlConnection cn, ClientScript s, CancellationToken ct)
     {

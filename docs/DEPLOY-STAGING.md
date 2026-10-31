@@ -68,9 +68,11 @@ Smoke test afterwards: open https://blazor-staging.ddreview.com, sign in, run Sa
 ## Updating client databases (Database updater)
 
 Signed in as a client-database administrator, open your name at the top, then **Database updater** (`/admin/updater`). It checks your client database
-for the objects DD Review adds (today: the `dbo.DrillPair` table type, script `sql/002`) and **Apply missing updates** adds any that are missing.
+for the objects DD Review adds (today: the `dbo.DrillPair` table type, script `sql/002`, and the grant procedure `dbo.usp_DDReviewGrantAccess`, script `sql/004`) and **Apply missing updates** adds any that are missing.
 It only adds; it never changes or drops existing objects, and it never grants itself rights. The web login the reports use needs `db_ddladmin` while
 you press Apply; if it does not have it, the page says so and shows the one line to run (`exec sp_addrolemember N'db_ddladmin', N'<login>';`).
+The permissions the web login needs are all in one procedure the updater adds, so you never paste grants one by one: in each database run
+`exec dbo.usp_DDReviewGrantAccess @UserName = N'<web login user>';` to see what it would grant, then add `, @Execute = 1` to do it.
 Turn the role off again afterwards if you prefer. To add a script: put it in `/sql`, embed it in `src/DDReview.Core/DDReview.Core.csproj`, and list it
 with its check query in `src/DDReview.Core/Updater/ClientScripts.cs`.
 

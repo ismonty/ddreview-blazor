@@ -28,7 +28,10 @@ public static class ClientScripts
             @"select cast(case when type_id('dbo.DrillPair') is null then 0 else 1 end as int) as Present,
                      cast(case when type_id('dbo.DrillPair') is not null
                                and has_perms_by_name('dbo.DrillPair', 'TYPE', 'EXECUTE') = 1 then 1 else 0 end as int) as Usable",
-            "grant execute on type::dbo.DrillPair to [{user}];"),
+            "exec dbo.usp_DDReviewGrantAccess @UserName = N'{user}', @Execute = 1;  "),
+        new("004", "Grant procedure (dbo.usp_DDReviewGrantAccess): every permission the web login needs, in one place", "ClientScripts/004_client_grant_procedure.sql",
+            @"select cast(case when object_id('dbo.usp_DDReviewGrantAccess', 'P') is null then 0 else 1 end as int) as Present,
+                     cast(case when object_id('dbo.usp_DDReviewGrantAccess', 'P') is not null then 1 else 0 end as int) as Usable"),
     ];
 }
 
