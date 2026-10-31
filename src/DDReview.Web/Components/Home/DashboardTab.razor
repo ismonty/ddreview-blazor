@@ -1,4 +1,4 @@
-@using System.Data
+﻿@using System.Data
 @using System.Globalization
 @using DDReview.Core.Gl
 @using DDReview.Core.Home
@@ -52,7 +52,10 @@ else
             smallMax = DashboardTotals.NiceMax(Math.Max(Math.Max(tot.VoidPct, tot.DiscountPct), Math.Max(tot.PurchasesPct, tot.CostPct)));
             laborMax = DashboardTotals.NiceMax(Math.Max(tot.LaborPct, tot.CostPct));
             salesMax = DashboardTotals.NiceMax((double)Math.Max(tot.Sales, Math.Max(tot.PreviousSales, tot.Budget)));
-            groups = t.Rows.Cast<DataRow>().Select((r, i) => new BarChart.Group(Label(r, t, i), Values(r, t))).ToList();
+            // Stores with no sales in the range are left off the chart (day rows for the weekday / calendar-day views are all kept).
+            var byStore = t.Columns.Contains("StoreName");
+            groups = t.Rows.Cast<DataRow>().Where(r => !byStore || D(r, "TotalSales") != 0)
+                .Select((r, i) => new BarChart.Group(Label(r, t, i), Values(r, t))).ToList();
             totalGroup = [new BarChart.Group("Total", new Dictionary<string, double>
             {
                 ["Purchases"] = (double)tot.Purchases, ["Labor"] = (double)tot.Labor, ["Theoretical Product Cost"] = (double)tot.ProductCost,
