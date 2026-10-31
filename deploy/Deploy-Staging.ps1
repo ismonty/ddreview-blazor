@@ -9,8 +9,8 @@
  brings the site back. Re-run it for every update.
 #>
 param(
-    [string]$SiteDir  = 'C:\inetpub\blazor.ddreview.com',
-    [string]$BackupDir = 'C:\inetpub\backups\blazor.ddreview.com',
+    [string]$SiteDir  = 'C:\inetpub\blazor-staging.ddreview.com',
+    [string]$BackupDir = 'C:\inetpub\backups\blazor-staging.ddreview.com',
     [string]$Url      = 'https://blazor.ddreview.com/login',
     [switch]$SkipPull,
     [switch]$SkipTests

@@ -18,17 +18,17 @@ The server builds the site itself from git. One script does a deploy and the sam
    ```
 4. **Site folder and IIS site.**
    ```
-   New-Item -ItemType Directory C:\inetpub\blazor.ddreview.com
+   New-Item -ItemType Directory C:\inetpub\blazor-staging.ddreview.com
    Import-Module WebAdministration
    New-WebAppPool blazor.ddreview.com
    Set-ItemProperty IIS:\AppPools\blazor.ddreview.com managedRuntimeVersion ''      # No Managed Code
-   New-Website -Name blazor.ddreview.com -PhysicalPath C:\inetpub\blazor.ddreview.com -ApplicationPool blazor.ddreview.com -HostHeader blazor.ddreview.com -Port 80
-   icacls C:\inetpub\blazor.ddreview.com /grant "IIS AppPool\blazor.ddreview.com:(OI)(CI)M"
+   New-Website -Name blazor.ddreview.com -PhysicalPath C:\inetpub\blazor-staging.ddreview.com -ApplicationPool blazor.ddreview.com -HostHeader blazor.ddreview.com -Port 80
+   icacls C:\inetpub\blazor-staging.ddreview.com /grant "IIS AppPool\blazor.ddreview.com:(OI)(CI)M"
    ```
    When DNS and your certificate are ready add the HTTPS binding: IIS Manager > Sites > blazor.ddreview.com > Bindings > Add > https,
    host name `blazor.ddreview.com`, tick *Require Server Name Indication*, pick the certificate. **Sign-in only works over HTTPS** (the login cookie is Secure-only).
 5. **Settings file with the secrets** (never in git). Copy `deploy\appsettings.Production.example.json` to
-   `C:\inetpub\blazor.ddreview.com\appsettings.Production.json` and fill in:
+   `C:\inetpub\blazor-staging.ddreview.com\appsettings.Production.json` and fill in:
    - `Tenancy:CentralConnectionString`: the central master database (DDReview-CentralMaster) and its SQL login.
    - `Tenancy:ClientConnectionStringOverride`: leave `null`. If set, every login is sent to that one database.
    - `Tenancy:TrustClientServerCertificate`: `true` if client SQL servers use self-signed certificates, `false` once they have real ones.
@@ -49,7 +49,7 @@ The server builds the site itself from git. One script does a deploy and the sam
   side by side. Installing it can restart IIS, so do it at a quiet hour; MOOTT and Bob go down for a moment.
 - **Operating system:** the server is Windows Server 2025 (MOOTT moved there from Server 2012), which supports .NET 10 and a current IIS, so there is nothing special to work around.
 - **Keep the sites apart:** its own app pool (step 3), its own folder, its own `appsettings.Production.json`, its own `keys` folder and its own Google OAuth client. Nothing is shared with MOOTT or Bob, and
-  the deploy script only touches `C:\inetpub\blazor.ddreview.com` (the "updating" page applies to this site only).
+  the deploy script only touches `C:\inetpub\blazor-staging.ddreview.com` (the "updating" page applies to this site only).
 - **One HTTPS address, several sites:** give each site its own host name binding and tick *Require Server Name Indication*, or the certificates will fight over the same IP and port.
 - **Building on the server uses CPU and memory for a minute or two** (the tests run too); run the script outside busy hours, or use `-SkipTests`.
 
@@ -59,17 +59,17 @@ The server builds the site itself from git. One script does a deploy and the sam
 cd C:\src\ddreview-blazor
 .\deploy\Deploy-Staging.ps1
 ```
-It pulls the checked-out branch, runs the tests, publishes, zips the live folder to `C:\inetpub\backups\blazor.ddreview.com`
+It pulls the checked-out branch, runs the tests, publishes, zips the live folder to `C:\inetpub\backups\blazor-staging.ddreview.com`
 (keeps the last 8), puts up `app_offline.htm`, copies the new files, takes the site back online and requests the login page.
 Options: `-SkipTests`, `-SkipPull`, `-SiteDir`, `-BackupDir`, `-Url`.
 
 Smoke test afterwards: open https://blazor.ddreview.com, sign in, run Sales and Receipts for a day you know, compare with turbo.ddreview.com.
 
 ## Rolling back
-Stop the site, unzip the newest good file from the backups folder over `C:\inetpub\blazor.ddreview.com`, start the site:
+Stop the site, unzip the newest good file from the backups folder over `C:\inetpub\blazor-staging.ddreview.com`, start the site:
 ```
 Stop-Website blazor.ddreview.com
-Expand-Archive C:\inetpub\backups\blazor.ddreview.com\site-YYYYMMDD-HHMMSS.zip C:\inetpub\blazor.ddreview.com -Force
+Expand-Archive C:\inetpub\backups\blazor-staging.ddreview.com\site-YYYYMMDD-HHMMSS.zip C:\inetpub\blazor-staging.ddreview.com -Force
 Start-Website blazor.ddreview.com
 ```
 
