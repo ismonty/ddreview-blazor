@@ -1,4 +1,4 @@
-@page "/gl"
+﻿@page "/gl"
 @attribute [Authorize]
 @using DDReview.Core.Gl
 @using DDReview.Core.Tenancy
@@ -19,9 +19,11 @@ else
         <label>From <input type="date" @bind="start" /></label>
         <label>To <input type="date" @bind="end" /></label>
         <label>Mode
-            <select @bind="detail">
-                <option value="@false">Summary (as the old web report)</option>
-                <option value="@true">Detail with balance check</option>
+            <select @bind="mode">
+                <option value="summary">Summary (as the old web report)</option>
+                <option value="detail">Detail with balance check</option>
+                <option value="totals">Totals by account and reference</option>
+                <option value="both">Totals at the top, detail below</option>
             </select>
         </label>
         <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
@@ -44,6 +46,15 @@ else
             <table><thead><tr><th>Batch</th><th>Date</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Difference</th></tr></thead>
             <tbody>@foreach (var b in report.OutOfBalance) {<tr><td>@b.BatchId</td><td>@b.PostingDate.ToString("d")</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td class="n">@b.Difference.ToString("N2")</td></tr>}</tbody></table>
         }
+    }
+    @if (totalLines is not null)
+    {
+        var td = totalLines.Sum(l => l.Debit); var tc = totalLines.Sum(l => l.Credit);
+        <h2>Totals, @start.ToString("d") – @end.ToString("d")</h2>
+        <p class="muted">Date and batch ignored: lines with the same account, A/R account and reference are added together.</p>
+        <table><thead><tr><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
+        <tbody>@foreach (var l in totalLines) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.Account</td><td>@l.ARAccount</td><td>@l.Reference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
+        <tbody class="gl-grand"><tr class="total"><td colspan="3">Total @start.ToString("d") – @end.ToString("d") @BalanceNote(td, tc)</td><td class="n">@td.ToString("N2")</td><td class="n">@tc.ToString("N2")</td></tr></tbody></table>
     }
     @if (detailLines is not null)
     {
@@ -85,7 +96,9 @@ else
     private IReadOnlyList<StoreInfo> stores = [];
     private readonly HashSet<int> selected = [];
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
-    private bool detail = true, busy;
+    private string mode = "detail";
+    private bool busy;
+    private IReadOnlyList<GlTotalLine>? totalLines;
     private int arFlag = 3;
     private string? error;
     private GlBalanceReport? report;
@@ -107,7 +120,7 @@ else
     private async Task RunAsync()
     {
         if (ctx is null || busy) return;
-        error = null; report = null; detailLines = null; summaryLines = null;
+        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null;
         if (selected.Count == 0) { error = "Pick at least one store."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
         busy = true;
@@ -116,10 +129,17 @@ else
             // Only stores this user is authorized for can be sent to SQL: selected ids are re-checked against the access list.
             var ids = selected.Where(stores.Select(s => s.StoreId).ToHashSet().Contains).OrderBy(x => x);
             var req = new GlRequest(string.Join(",", ids), DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), arFlag);
-            if (detail)
+            if (mode == "totals")
+            {
+                var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
+                totalLines = GlTotals.Group(lines);
+                report = new GlBalanceReport(totalLines.Sum(l => l.Debit), totalLines.Sum(l => l.Credit), []);
+            }
+            else if (mode is "detail" or "both")
             {
                 detailLines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
                 report = GlBalance.Compute(detailLines);
+                if (mode == "both") totalLines = GlTotals.Group(detailLines);
             }
             else
             {

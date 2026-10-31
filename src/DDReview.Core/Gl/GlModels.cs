@@ -1,4 +1,4 @@
-namespace DDReview.Core.Gl;
+﻿namespace DDReview.Core.Gl;
 
 /// <summary>One row of dbo.fn_CashAndSalesGLandARMultiStoreSelect (detail view). Debit/Credit are already netted per line by the function.</summary>
 public sealed record GlLine(
@@ -39,4 +39,26 @@ public static class GlBalance
             .ToList();
         return new GlBalanceReport(batches.Sum(b => b.Debit), batches.Sum(b => b.Credit), batches);
     }
+}
+
+/// <summary>One line of the "Totals" mode: everything with the same account, A/R account and reference, over the whole date range.</summary>
+public sealed record GlTotalLine(string Account, string ARAccount, string Reference, decimal Debit, decimal Credit, bool Suspense);
+
+public static class GlTotals
+{
+    /// <summary>
+    /// Adds the lines up ignoring date and batch. Lines that differ in account, A/R account or reference stay on separate lines
+    /// (names compared ignoring case and surrounding spaces); everything else is tallied together. Lines with no amounts are dropped.
+    /// </summary>
+    public static IReadOnlyList<GlTotalLine> Group(IEnumerable<GlLine> lines) =>
+        lines.Where(l => l.Debit != 0 || l.Credit != 0)
+            .GroupBy(l => (Norm(l.Account), Norm(l.ARAccount), Norm(l.DistReference)))
+            .Select(g => (Min: g.Min(l => l.Sorter ?? int.MaxValue), Line: new GlTotalLine(
+                g.First().Account?.Trim() ?? "", g.First().ARAccount?.Trim() ?? "", g.First().DistReference?.Trim() ?? "",
+                g.Sum(l => l.Debit), g.Sum(l => l.Credit), g.Any(l => l.Suspense))))
+            .OrderBy(x => x.Min).ThenBy(x => x.Line.Account, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Line.ARAccount, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Line.Reference, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.Line).ToList();
+
+    private static string Norm(string? s) => (s ?? "").Trim().ToUpperInvariant();
 }

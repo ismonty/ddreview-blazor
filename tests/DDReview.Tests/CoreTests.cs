@@ -243,3 +243,28 @@ public class UpdaterTests
         Assert.Equal("exec sp_addrolemember N'db_ddladmin', N'o''brien';", r.DdlAdminHint);
     }
 }
+
+
+public class GlTotalsTests
+{
+    private static GlLine L(int batch, string day, string? acct, string? ar, string? reference, decimal d, decimal c) =>
+        new(batch, DateTime.Parse(day), acct, ar, null, null, d, c, reference, null, false, null, null, null, 1, false, null, false, 1, "S", null, null, null, null);
+
+    [Fact] public void Same_account_and_reference_add_up_across_dates_and_batches_others_stay_apart()
+    {
+        var t = GlTotals.Group([
+            L(1, "2026-10-01", "Cash", "", "Deposit", 100, 0), L(2, "2026-10-02", " cash ", "", "deposit", 50, 0),
+            L(1, "2026-10-01", "Sales", "", "Food", 0, 120), L(2, "2026-10-02", "Sales", "", "Bar", 0, 30),
+            L(3, "2026-10-03", "Tips", "", "x", 0, 0)]);
+        Assert.Equal(3, t.Count);                                  // Cash/Deposit, Sales/Food, Sales/Bar; the empty Tips line is dropped
+        Assert.Equal(150m, t.Single(x => x.Account == "Cash").Debit);
+        Assert.Equal(150m, t.Sum(x => x.Credit));
+        Assert.Equal(t.Sum(x => x.Debit), t.Sum(x => x.Credit));
+    }
+
+    [Fact] public void A_different_a_r_account_is_its_own_line()
+    {
+        var t = GlTotals.Group([L(1, "2026-10-01", "A/R", "Smith", "r", 10, 0), L(1, "2026-10-01", "A/R", "Jones", "r", 5, 0)]);
+        Assert.Equal(2, t.Count);
+    }
+}
