@@ -53,6 +53,10 @@ itself rights: if the reports' login lacks db_ddladmin it shows the `sp_addrolem
 - Not tried on staging yet: the Database updater itself, the new GL modes, the all-zero skipping (all pass tests only).
 - Everything is merged into `main` (PR #1 and the dashboard PR #2). `deploy\Deploy-Auto.ps1` + `Register-AutoDeploy.ps1` (staging auto-deploy from `main`, docs/DEPLOY-STAGING.md) and `deploy\Deploy-Production.ps1` (manual, only a commit staging runs; docs/DEPLOY-PRODUCTION.md, https://blazor.ddreview.com) are written but not yet run on the server.
 
+## Next big item: wrap the old site behind the new one
+See `docs/LEGACY-PROXY-PLAN.md` (agreed 2026-10-31, nothing built yet): the old WebForms site is installed on the new server on loopback only and reached through a YARP proxy in this app, behind the new site's login (password/Google), later with a signed handoff so there is one login.
+Same central master, separate least-privilege SQL logins. The owner is checking which copy of the old source is best. Claude cannot compile VS 2008 code, so old-side changes stay tiny and the owner builds them.
+
 ## Resources the owner has (on the owner's computer, reachable when the session is linked to it)
 - Original source: `C:\Users\ismon\source\repos\DDReview` (solution `DDReviewDev.sln`; `DDReview\` and `DDReviewMarauder\` web projects, `DDReviewAppCode\App_Code` shared classes:
   `ReviewPage.cs`, `SalesCostsReviewPage.cs`, `ReceiptsReviewPage.cs`, `LaborReviewPage.cs`, `DataAccess*Review*.cs`, `BasePage.cs`, `LoginPageClass.cs`).
