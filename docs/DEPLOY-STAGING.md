@@ -44,6 +44,16 @@ The server builds the site itself from git. One script does a deploy and the sam
    In each client database the web login needs `grant execute on type::dbo.DrillPair to [<web login user>]` (after running `sql\002_client_drill_pair_type.sql` there).
 8. **DNS**: `blazor.ddreview.com` to the server (you are handling this), plus the certificate.
 
+## If the server already hosts MOOTT and Bob (it does)
+- **IIS and WebSockets are already installed**, so skip that part of step 1. Check only that the ASP.NET Core Hosting Bundle is **.NET 10**: the newest bundle runs the older .NET 8 sites too,
+  side by side. Installing it can restart IIS, so do it at a quiet hour; MOOTT and Bob go down for a moment.
+- **Check the operating system first.** If this is the old Windows Server 2012 / IIS 8.5 machine MOOTT's notes mention, look at Microsoft's supported-OS list for .NET 10 before installing;
+  an unsupported OS is the one thing here that cannot be worked around. This site's `web.config` does not use the IIS 10-only `<security>` block, so IIS 8.5 itself is not a problem.
+- **Keep the sites apart:** its own app pool (step 3), its own folder, its own `appsettings.Production.json`, its own `keys` folder and its own Google OAuth client. Nothing is shared with MOOTT or Bob, and
+  the deploy script only touches `C:\inetpub\blazor.ddreview.com` (the "updating" page applies to this site only).
+- **One HTTPS address, several sites:** give each site its own host name binding and tick *Require Server Name Indication*, or the certificates will fight over the same IP and port.
+- **Building on the server uses CPU and memory for a minute or two** (the tests run too); run the script outside busy hours, or use `-SkipTests`.
+
 ## Deploying (and every later update)
 
 ```
