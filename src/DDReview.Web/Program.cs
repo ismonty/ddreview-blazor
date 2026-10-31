@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using System.Security.Claims;
 using DDReview.Core.Gl;
 using DDReview.Core.Security;
@@ -13,6 +14,10 @@ using Microsoft.Extensions.Options;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+// Keep the login-cookie keys on disk (set DataProtection:KeysPath) so a restart or redeploy does not sign everyone out.
+var keysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(keysPath))
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddMemoryCache();
 builder.Services.Configure<TenantOptions>(builder.Configuration.GetSection(TenantOptions.Section));
