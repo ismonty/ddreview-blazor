@@ -1,0 +1,70 @@
+﻿@page "/account"
+@attribute [Authorize]
+@using System.Security.Claims
+@inject ICentralDirectory Central
+@inject AuthenticationStateProvider Auth
+@inject GoogleSignInStatus GoogleStatus
+@inject UserContextService Users
+@using DDReview.Core.Tenancy
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Your account</h1>
+
+@if (!string.IsNullOrEmpty(Notice)) { <p class="banner ok" role="status">@Notice</p> }
+<p>Signed in as <b>@name</b>.</p>
+
+@if (isAdmin)
+{
+    <h2>Administration</h2>
+    <p><a href="/admin/updater">Database updater</a>: check your database for the objects DD Review adds, and add any that are missing.</p>
+}
+
+<h2>Google sign-in</h2>
+@if (!GoogleStatus.Enabled)
+{
+    <p class="muted">Google sign-in is not turned on for this site.</p>
+}
+else if (loaded && googleEmail is null)
+{
+    <p>Link a Google account and you can sign in with the Google button instead of your password.</p>
+    <form method="post" action="/account/google/start">
+        <AntiforgeryToken />
+        <input type="hidden" name="mode" value="link" />
+        <button type="submit">Link Google account</button>
+    </form>
+}
+else if (loaded)
+{
+    <p>Linked to <b>@googleEmail</b>.</p>
+    <form method="post" action="/account/google/unlink">
+        <AntiforgeryToken />
+        <button type="submit" class="secondary">Unlink</button>
+    </form>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "g")] public string? G { get; set; }
+    private string name = "";
+    private string? googleEmail;
+    private bool loaded;
+    private bool isAdmin;
+    private string? Notice => G switch
+    {
+        "linked" => "Google account linked.",
+        "unlinked" => "Google account unlinked.",
+        "taken" => "That Google account is already linked to a different login.",
+        _ => null,
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await Auth.GetAuthenticationStateAsync()).User;
+        name = user.Identity?.Name ?? "";
+        if (GoogleStatus.Enabled && int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id))
+        {
+            try { googleEmail = await Central.GetGoogleEmailAsync(id); } catch (Microsoft.Data.SqlClient.SqlException) { googleEmail = null; }
+        }
+        try { isAdmin = (await Users.GetAsync())?.Access.Administrator == true; } catch (Microsoft.Data.SqlClient.SqlException) { }
+        loaded = true;
+    }
+}

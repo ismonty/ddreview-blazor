@@ -1,0 +1,110 @@
+# Deploying DD Review (Blazor) to staging: blazor-staging.ddreview.com on IIS
+
+The server builds the site itself from git. One script does a deploy and the same script does every update.
+
+## One-time setup on the server (Administrator PowerShell unless noted)
+
+1. **Windows features.** Server Manager > Add Roles and Features > Web Server (IIS), and under Application Development tick
+   **WebSocket Protocol** (Blazor Server needs it). Or:
+   `Install-WindowsFeature Web-Server, Web-WebSockets, Web-Mgmt-Console`
+2. **.NET 10.** Install, from https://dotnet.microsoft.com/download/dotnet/10.0, the **SDK** (it builds the site) and the
+   **ASP.NET Core Hosting Bundle** (it lets IIS run it). Install the Hosting Bundle after IIS, then run `iisreset`.
+   Check: `dotnet --version` starts with `10.` (Windows Server 2016 or newer is the safe choice; look at Microsoft's .NET 10 supported-OS list for anything older).
+3. **Git** (https://git-scm.com) and a clone of the private repo. Use a personal access token or a deploy key for ismonty/ddreview-blazor:
+   ```
+   git clone https://github.com/ismonty/ddreview-blazor.git C:\src\ddreview-blazor
+   cd C:\src\ddreview-blazor
+   git checkout slice-2-sales-review     # or main, once pull request #1 is merged
+   ```
+4. **Site folder and IIS site.**
+   ```
+   New-Item -ItemType Directory C:\inetpub\blazor-staging.ddreview.com
+   Import-Module WebAdministration
+   New-WebAppPool blazor-staging.ddreview.com
+   Set-ItemProperty IIS:\AppPools\blazor-staging.ddreview.com managedRuntimeVersion ''      # No Managed Code
+   New-Website -Name blazor-staging.ddreview.com -PhysicalPath C:\inetpub\blazor-staging.ddreview.com -ApplicationPool blazor-staging.ddreview.com -HostHeader blazor-staging.ddreview.com -Port 80
+   icacls C:\inetpub\blazor-staging.ddreview.com /grant "IIS AppPool\blazor-staging.ddreview.com:(OI)(CI)M"
+   ```
+   When DNS and your certificate are ready add the HTTPS binding: IIS Manager > Sites > blazor-staging.ddreview.com > Bindings > Add > https,
+   host name `blazor-staging.ddreview.com`, tick *Require Server Name Indication*, pick the certificate. **Sign-in only works over HTTPS** (the login cookie is Secure-only).
+5. **Settings file with the secrets** (never in git). Copy `deploy\appsettings.Production.example.json` to
+   `C:\inetpub\blazor-staging.ddreview.com\appsettings.Production.json` and fill in:
+   - `Tenancy:CentralConnectionString`: the central master database (DDReview-CentralMaster) and its SQL login.
+   - `Tenancy:ClientConnectionStringOverride`: leave `null`. If set, every login is sent to that one database.
+   - `Tenancy:TrustClientServerCertificate`: `true` if client SQL servers use self-signed certificates, `false` once they have real ones.
+   - `DataProtection:KeysPath`: keeps sign-ins valid across restarts; the folder is created for you, and the app pool needs write access (step 4 gave it).
+   The deploy script never overwrites this file, the `keys` folder, or `logs`.
+6. **Google sign-in (optional, off until both values are set).** Create a Google Cloud project just for DD Review and an OAuth client of type
+   *Web application* with authorized redirect URIs `https://blazor-staging.ddreview.com/signin-google` (and `https://localhost:7004/signin-google` for development).
+   Put the Client ID and Client Secret in `appsettings.Production.json` under `Authentication:Google` (locally:
+   `dotnet user-secrets set "Authentication:Google:ClientId" "..."` and `...:ClientSecret`). Run `sql\003_central_google_link.sql` on the central master and give the
+   central web login `SELECT, INSERT, UPDATE, DELETE` on `dbo.tblWebUserGoogle`. Then each person signs in with their password once, opens their name at the top right (Account)
+   and chooses *Link Google account*; after that the *Sign in with Google* button on the login page works for them. Logins are matched by Google's account id, never by email address.
+7. **SQL Server.** From this server the central master and every client database that staging will reach must be reachable (firewall, SQL login).
+   In each client database the web login needs `grant execute on type::dbo.DrillPair to [<web login user>]` (after running `sql\002_client_drill_pair_type.sql` there).
+8. **DNS**: `blazor-staging.ddreview.com` to the server (you are handling this), plus the certificate.
+
+## If the server already hosts MOOTT and Bob (it does)
+- **IIS and WebSockets are already installed**, so skip that part of step 1. Check only that the ASP.NET Core Hosting Bundle is **.NET 10**: the newest bundle runs the older .NET 8 sites too,
+  side by side. Installing it can restart IIS, so do it at a quiet hour; MOOTT and Bob go down for a moment.
+- **Operating system:** the server is Windows Server 2025 (MOOTT moved there from Server 2012), which supports .NET 10 and a current IIS, so there is nothing special to work around.
+- **Keep the sites apart:** its own app pool (step 3), its own folder, its own `appsettings.Production.json`, its own `keys` folder and its own Google OAuth client. Nothing is shared with MOOTT or Bob, and
+  the deploy script only touches `C:\inetpub\blazor-staging.ddreview.com` (the "updating" page applies to this site only).
+- **One HTTPS address, several sites:** give each site its own host name binding and tick *Require Server Name Indication*, or the certificates will fight over the same IP and port.
+- **Building on the server uses CPU and memory for a minute or two** (the tests run too); run the script outside busy hours, or use `-SkipTests`.
+
+## Deploying (and every later update)
+
+```
+cd C:\src\ddreview-blazor
+.\deploy\Deploy-Staging.ps1
+```
+It pulls the checked-out branch, runs the tests, publishes, zips the live folder to `C:\inetpub\backups\blazor-staging.ddreview.com`
+(keeps the last 8), puts up `app_offline.htm`, copies the new files, takes the site back online and requests the login page.
+Options: `-SkipTests`, `-SkipPull`, `-SiteDir`, `-BackupDir`, `-Url`.
+
+Smoke test afterwards: open https://blazor-staging.ddreview.com, sign in, run Sales and Receipts for a day you know, compare with turbo.ddreview.com.
+
+## Updating client databases (Database updater)
+
+Signed in as a client-database administrator, open your name at the top, then **Database updater** (`/admin/updater`). It checks your client database
+for the objects DD Review adds (today: the `dbo.DrillPair` table type, script `sql/002`, and the grant procedure `dbo.usp_DDReviewGrantAccess`, script `sql/004`) and **Apply missing updates** adds any that are missing.
+It only adds; it never changes or drops existing objects, and it never grants itself rights. The web login the reports use needs `db_ddladmin` while
+you press Apply; if it does not have it, the page says so and shows the one line to run (`exec sp_addrolemember N'db_ddladmin', N'<login>';`).
+The permissions the web login needs are all in one procedure the updater adds, so you never paste grants one by one: in each database run
+`exec dbo.usp_DDReviewGrantAccess @UserName = N'<web login user>';` to see what it would grant, then add `, @Execute = 1` to do it.
+Turn the role off again afterwards if you prefer. To add a script: put it in `/sql`, embed it in `src/DDReview.Core/DDReview.Core.csproj`, and list it
+with its check query in `src/DDReview.Core/Updater/ClientScripts.cs`.
+
+## Things that went wrong on the first deploy (and the fixes)
+
+- `500.19` on `<webSocket>`: IIS locks that section; the element is gone from `web.config`. Installing the WebSocket Protocol feature is enough.
+- `Access to ...\keys is denied`: grant the app pool identity modify rights on the `keys` folder:
+  `icacls <site>\keys /grant "IIS AppPool\<your app pool name>:(OI)(CI)M" /T` (the pool's name is not necessarily the site's name).
+- `appsettings.Production.json` is JSON: write `\` as `\\` (`Server=HOST\\INSTANCE`), no square brackets around the SQL login name.
+- The login also needs a user in `DDReviewCentralMaster` with `SELECT` on `tblWebUserSecurity` and `SELECT, INSERT, UPDATE, DELETE` on `tblWebUserGoogle`.
+
+## Running it automatically
+`Deploy-Staging.ps1` asks no questions and exits with code 0 on success and non-zero on any failure (tests, publish, copy), so it can be started by a scheduled task,
+a GitHub self-hosted runner, or a webhook listener, for example:
+```
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\src\ddreview-blazor\deploy\Deploy-Staging.ps1
+```
+Things the automatic account needs: Administrator rights (it writes to the site folder and IIS), read access to the GitHub repo without a prompt (a deploy key or a stored token for `git pull`),
+the .NET 10 SDK on its PATH, and the checkout sitting on the branch you want deployed (the script pulls whatever branch is checked out; it does not switch branches).
+If tests fail, nothing is deployed and the old site keeps running; the backup zips make a bad deploy easy to undo.
+
+## Rolling back
+Stop the site, unzip the newest good file from the backups folder over `C:\inetpub\blazor-staging.ddreview.com`, start the site:
+```
+Stop-Website blazor-staging.ddreview.com
+Expand-Archive C:\inetpub\backups\blazor-staging.ddreview.com\site-YYYYMMDD-HHMMSS.zip C:\inetpub\blazor-staging.ddreview.com -Force
+Start-Website blazor-staging.ddreview.com
+```
+
+## Troubleshooting
+- **HTTP 500.30 / 500.31 / 502.5:** the Hosting Bundle is missing or was installed before IIS (reinstall it, `iisreset`), or the app threw at start-up. Set `stdoutLogEnabled="true"` in the site's `web.config`, create the `logs` folder, recycle the pool, read `logs\stdout*`, then set it back to false.
+- **Sign-in page loads but the page then says it is reconnecting / is blank:** the WebSocket Protocol feature is not installed.
+- **Login loops or says unknown database:** check `CentralConnectionString`, that `ClientConnectionStringOverride` is `null`, and that this server can reach the client's SQL server.
+- **A page shows "Conversion failed" or a missing-object error from SQL:** the client database is missing a script; compare with `sql\` in the repo.
+- Windows Event Viewer > Application shows the ASP.NET Core Module's start-up errors.

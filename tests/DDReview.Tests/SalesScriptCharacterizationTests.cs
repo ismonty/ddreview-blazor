@@ -1,0 +1,161 @@
+using System.Data;
+using System.Globalization;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using DDReview.Core.Sales.Legacy;
+
+namespace DDReview.Tests;
+
+/// <summary>
+/// Characterization tests: the ported generator must reproduce the scripts the legacy app actually logged.
+/// Set DDREVIEW_SALES_SCRIPTS to the folder of exported .sql files (skipped when unset).
+/// </summary>
+public class SalesScriptCharacterizationTests
+{
+    sealed class StubLookups(bool discountsCalculated) : ISalesLookups
+    {
+        public DataTable GetTable(string name, string sql)
+        {
+            var t = new DataTable(name);
+            if (name == "DayPartTable")
+            {
+                t.Columns.Add("StartTime", typeof(short));
+                t.Columns.Add("EndTime", typeof(short));
+                t.Columns.Add("DayPartID", typeof(short));
+                t.Columns.Add("DayPart", typeof(string));
+                t.Rows.Add((short)360, (short)600, (short)1, "Breakfast");
+                t.Rows.Add((short)600, (short)960, (short)2, "Lunch");
+                t.Rows.Add((short)960, (short)1440, (short)3, "Dinner");
+                t.Rows.Add((short)0, (short)360, (short)3, "Dinner");
+            }
+            else if (name == "tblCashAndSalesBatches")
+            {
+                t.Columns.Add("BatchID", typeof(int));
+                if (discountsCalculated) t.Columns.Add("DiscountsCalculated", typeof(bool));
+            }
+            else
+            {
+                t.Columns.Add("SourceStoreID", typeof(int));
+                t.Columns.Add("SourceProfitCenterID", typeof(int));
+                t.Columns.Add("DestinationStoreID", typeof(int));
+                t.Columns.Add("DestinationProfitCenterItemID", typeof(int));
+            }
+            return t;
+        }
+    }
+
+    static readonly Regex SetLine = new(@"^\s*set @(\w+)=(.*)$", RegexOptions.Multiline);
+
+    public static DataAccessSalesReview ParseRequest(string script, bool discountsCalculated)
+    {
+        var r = new DataAccessSalesReview("") { Lookups = new StubLookups(discountsCalculated) };
+        int cs = 0, ce = 0;
+        foreach (Match m in SetLine.Matches(script))
+        {
+            string name = m.Groups[1].Value, val = m.Groups[2].Value.TrimEnd('\r', ' ');
+            switch (name)
+            {
+                case "IncludeVoids": break; // derived by the generator
+                case "CompareStartDayNumber": cs = int.Parse(val, CultureInfo.InvariantCulture); break;
+                case "CompareEndDayNumber": ce = int.Parse(val, CultureInfo.InvariantCulture); break;
+                default:
+                    var f = typeof(DataAccessSalesReview).GetField(name);
+                    if (f == null) break;
+                    if (f.FieldType == typeof(string)) f.SetValue(r, val.Trim('\'').Replace("''", "'"));
+                    else f.SetValue(r, int.Parse(val, CultureInfo.InvariantCulture));
+                    break;
+            }
+        }
+        r.OffsetDays = unchecked(cs - r.StartDayNumber);
+        return r;
+    }
+
+    public static string Norm(string s) => Regex.Replace(s, @"\s+", " ").Trim();
+
+    [Fact]
+    public void Generator_reproduces_logged_scripts()
+    {
+        var dir = Environment.GetEnvironmentVariable("DDREVIEW_SALES_SCRIPTS");
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+        var outDir = Environment.GetEnvironmentVariable("DDREVIEW_SALES_DIFFOUT");
+        var failures = new List<string>();
+        foreach (var file in Directory.GetFiles(dir, "*.sql").OrderBy(x => x))
+        {
+            var logged = File.ReadAllText(file);
+            string? best = null; int bestLen = int.MaxValue;
+            foreach (var dc in new[] { true })
+            {
+                var req = ParseRequest(logged, dc);
+                var gen = req.BuildDataScript(true);
+                if (Norm(gen) == Norm(logged)) { best = null; bestLen = 0; break; }
+                if (best == null || Math.Abs(gen.Length - logged.Length) < bestLen) { best = gen; bestLen = Math.Abs(gen.Length - logged.Length); }
+            }
+            if (bestLen != 0)
+            {
+                failures.Add(Path.GetFileName(file) + " (len diff " + bestLen + ")");
+                if (outDir != null) { Directory.CreateDirectory(outDir); File.WriteAllText(Path.Combine(outDir, Path.GetFileName(file) + ".gen"), best!); }
+            }
+        }
+        Assert.True(failures.Count == 0, failures.Count + " mismatches:\n" + string.Join("\n", failures));
+    }
+}
+
+public class SalesParameterizationTests
+{
+    [Fact]
+    public void Header_values_become_parameters_and_unsafe_lists_are_rejected()
+    {
+        var script = "declare @StoreFlag bit\nset @StoreFlag=1\nset @StoreListCSV='1,2,3'\nset @StartDayNumber=8000\nset @CompareStartDayNumber=-2147475306\nset @IncludeVoids=0\nset @Other=5\n";
+        var (sql, p) = DDReview.Core.Sales.SalesService.Parameterize(script);
+        Assert.Contains("set @StoreListCSV = @p_StoreListCSV", sql);
+        Assert.Contains("set @Other=5", sql);
+        Assert.Equal(5, p.Count);
+        Assert.DoesNotContain("1,2,3", sql);
+        Assert.Throws<InvalidOperationException>(() =>
+            DDReview.Core.Sales.SalesService.Parameterize("set @StoreListCSV='1); drop table x;--'\n"));
+    }
+
+    [Fact]
+    public void Service_script_for_store_report_has_expected_header()
+    {
+        var svc = new DDReview.Core.Sales.SalesService();
+        var req = new DDReview.Core.Sales.SalesRequest(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 7),
+            DDReview.Core.Sales.SalesDimensions.Store, [1]);
+        var lookups = new SalesScriptCharacterizationTests_Lookups();
+        var s = svc.BuildScript("", req, lookups);
+        Assert.Contains("set @StoreFlag=1", s);
+        Assert.Contains("set @StoreListCSV='1'", s);
+        Assert.Contains("set @StartDayNumber=" + DDReview.Core.Support.DayNumber.FromDate(new DateOnly(2026, 10, 1)), s);
+    }
+}
+
+sealed class SalesScriptCharacterizationTests_Lookups : DDReview.Core.Sales.Legacy.ISalesLookups
+{
+    public System.Data.DataTable GetTable(string name, string sql)
+    {
+        var t = new System.Data.DataTable(name);
+        if (name == "DayPartTable")
+        {
+            t.Columns.Add("StartTime", typeof(short)); t.Columns.Add("EndTime", typeof(short));
+            t.Columns.Add("DayPartID", typeof(short)); t.Columns.Add("DayPart", typeof(string));
+        }
+        else t.Columns.Add("BatchID", typeof(int));
+        return t;
+    }
+}
+
+public class UserAccessTests
+{
+    [Fact]
+    public void Unrestricted_user_can_see_every_report_and_restricted_user_only_theirs()
+    {
+        var open = new DDReview.Core.Tenancy.UserAccess();
+        foreach (var k in Enum.GetValues<DDReview.Core.Tenancy.ReportKind>()) open.AllStores.Add(k);
+        Assert.True(open.CanSee(DDReview.Core.Tenancy.ReportKind.Receipts));
+
+        var some = new DDReview.Core.Tenancy.UserAccess();
+        some.Stores[DDReview.Core.Tenancy.ReportKind.Sales].Add(1);
+        Assert.True(some.CanSee(DDReview.Core.Tenancy.ReportKind.Sales));
+        Assert.False(some.CanSee(DDReview.Core.Tenancy.ReportKind.Receipts));
+    }
+}

@@ -1,0 +1,220 @@
+@page "/labor"
+@attribute [Authorize]
+@using System.Data
+@using DDReview.Core.Drill
+@using DDReview.Core.Gl
+@using DDReview.Core.Labor
+@using DDReview.Core.Sales
+@using DDReview.Core.Tenancy
+@inject UserContextService Users
+@inject LaborService LaborSvc
+@inject IJSRuntime JS
+@using DDReview.Web.Components.Home
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Labor review</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <EditForm Model="this" OnSubmit="RunAsync" FormName="labor" class="filters">
+        <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
+        <MultiSelect Caption="Group by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<LaborDimensions>(t.Key), t.On)" />
+        <label>From <input type="date" @bind="start" /></label>
+        <label>To <input type="date" @bind="end" /></label>
+        <label>Show
+            <select @bind="mode">
+                <option value="@LaborDisplay.Hours">Hours</option>
+                <option value="@LaborDisplay.Dollars">Dollars</option>
+                <option value="@LaborDisplay.Both">Hours and dollars</option>
+                <option value="@LaborDisplay.Verbose">Sales and labor %</option>
+            </select>
+        </label>
+        <label class="inline"><input type="checkbox" @bind="weekdays" /> Weekdays</label>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+    </EditForm>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (result is not null)
+    {
+        <p class="range">@($"{rangeStart:dddd, MMMM d, yyyy} - {rangeEnd:dddd, MMMM d, yyyy}")</p>
+        @if (result.Rows.Count == 0) { <p>No labor records for these stores, dates and filters.</p> }
+        @if (state.Filters.Count > 0)
+        {
+            <p class="filters-on">Filtered on:
+                @foreach (var k in state.Filters.Keys.ToList()) {<button type="button" class="hlink" title="Show All" @onclick="() => Act(s => s.ShowAll(k))">@FilterLabel(k) ✕</button>}
+            </p>
+        }
+        <table class="sales">
+            <thead><tr>
+                <th></th>
+                @for (int i = 0; i < cols.Count; i++)
+                {
+                    var c = cols[i]; var dc = colDrill[i];
+                    if (dc is not null)
+                    {
+                        <DrillHeader Title="@c.Header" Dimension="true" Buttons="@(c.Column == dc.Display[^1])" Filtered="@state.Filters.ContainsKey(dc.Key)"
+                                     NextTitle="@dc.NextKey" Mark="@Mark(c)" OnTitle="() => Act(s => s.ShowOnly(dc.Key))" OnUp="() => Act(s => s.DrillUp(dc.Key))"
+                                     OnRight="() => Act(s => s.DrillRight(Cat, dc.Key))" OnShowAll="() => Act(s => s.ShowAll(dc.Key))" OnSort="() => Sort(c)" />
+                    }
+                    else { <DrillHeader Title="@c.Header" Css="@Cls(c)" Sortable="true" Mark="@Mark(c)" OnSort="() => Sort(c)" /> }
+                }
+            </tr></thead>
+            <tbody>
+                @foreach (DataRow row in Ordered())
+                {
+                    <tr><td class="sel"><input type="checkbox" title="Select this row" checked="@checkedRows.Contains(row)" @onchange="e => Check(row, (bool)e.Value!)" /></td>@for (int i = 0; i < cols.Count; i++)
+                    {
+                        var c = cols[i]; var dc = colDrill[i];
+                        <td class="@Cls(c)">
+                            @if (dc is not null && CanClick(row, dc)) { <button type="button" class="cell" @onclick="() => RowClick(dc, row)">@LaborLayout.Format(row, c)</button> }
+                            else { @LaborLayout.Format(row, c) }
+                        </td>
+                    }</tr>
+                }
+            </tbody>
+            @if (!punch && result.Rows.Count > 0 && totals.Count > 0)
+            {
+                <tfoot>
+                    <tr class="total"><td>Total</td>
+                        @for (int i = 0; i < cols.Count; i++)
+                        {
+                            var c = cols[i];
+                            if (c.Kind is SalesCellKind.Number or SalesCellKind.Percent)
+                            {
+                                <td class="n">@(c.Kind == SalesCellKind.Percent ? SalesLayout.FormatPercent(totals[c.Column], totals[c.Denominator!]) : SalesLayout.FormatNumber(totals[c.Column]))</td>
+                            }
+                            else { <td></td> }
+                        }
+                    </tr>
+                </tfoot>
+            }
+        </table>
+        <p class="rowcount">Showing @result.Rows.Count Rows</p>
+        <ReportButtons Busy="busy" ShowWeekdaysToggle="true" Weekdays="weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnToggleWeekdays="ToggleWeekdays" OnExcel="ExcelAsync" />
+    }
+}
+
+@code {
+    private string FilterLabel(string k) { var n = FilterText.Names(result, Cat, k); return n.Length == 0 ? k : k + ": " + n; }
+
+    private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
+    private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
+
+    private record Choice(LaborDimensions Value, string Label);
+    private static readonly Choice[] Choices =
+    [
+        new(LaborDimensions.Store, "Store"), new(LaborDimensions.StoreGroup, "Store group"), new(LaborDimensions.LaborType, "Labor type"),
+        new(LaborDimensions.LaborGroup, "Labor group"), new(LaborDimensions.LaborDepartment, "Labor dept."), new(LaborDimensions.Employee, "Employee"),
+        new(LaborDimensions.OriginalPayrollID, "Original payroll ID"), new(LaborDimensions.DayHourSlot, "Day hour"),
+        new(LaborDimensions.DayTimeSlot, "Quarter hour"), new(LaborDimensions.PunchDetail, "Punch detail"),
+    ];
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy, weekdays = true, punch;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private readonly HashSet<int> selected = [];
+    private static readonly IReadOnlyList<DrillColumn> Cat = DrillCatalogs.Labor;
+    private readonly DrillState state = NewState();
+    private static DrillState NewState() { var s = new DrillState(); s.Flags.Add("Store"); return s; }
+    private List<DrillColumn?> colDrill = [];
+    private readonly DrillKeyResolver resolver = new();
+    private LaborDisplay mode = LaborDisplay.Hours;
+    private LaborDimensions ranDims; private LaborDisplay ranMode;
+    private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1), rangeStart, rangeEnd;
+    private string? error;
+    private DataTable? result;
+    private List<SalesColumn> cols = [];
+    private Dictionary<string, decimal> totals = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+        foreach (var s in stores) selected.Add(s.StoreId);
+    }
+
+    private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+    private void ToggleDim(LaborDimensions d, bool on) { if (on) state.Flags.Add(d.ToString()); else state.Flags.Remove(d.ToString()); }
+
+    private async Task Act(Action<DrillState> change) { change(state); await ExecuteAsync(); }
+    private async Task RowClick(DrillColumn dc, DataRow row)
+    {
+        if (ctx is null || busy) return;
+        var v = await resolver.ResolveAsync(ctx.ClientConnectionString, dc, row, checkedRows);
+        if (v.Length == 0) return;
+        state.RowClick(Cat, dc.Key, v);
+        await ExecuteAsync();
+    }
+    private readonly HashSet<DataRow> checkedRows = [];
+    private static bool CanClick(DataRow row, DrillColumn dc) => DrillKeyResolver.CanClick(row, dc);
+    private void Check(DataRow row, bool on) { if (on) checkedRows.Add(row); else checkedRows.Remove(row); }
+    private void Sort(SalesColumn c) => state.Sort(c.Header, c.Kind != SalesCellKind.Text);
+    private string Mark(SalesColumn c) => state.SortHeader == c.Header ? (state.SortDescending ? " ▼" : " ▲") : "";
+    private IEnumerable<DataRow> Ordered()
+    {
+        var c = state.SortHeader is null ? null : cols.FirstOrDefault(x => x.Header == state.SortHeader);
+        if (c is null || result is null) return result!.Rows.Cast<DataRow>();
+        var dc = DrillState.ForDisplay(Cat, c.Column);
+        var key = dc?.SortColumn is not null && result.Columns.Contains(dc.SortColumn) ? GridSort.Column(result, dc.SortColumn) : GridSort.Column(result, c.Column, c.Denominator);
+        return GridSort.Rows(result, key, state.SortDescending);
+    }
+    private void SetDrill() => colDrill = cols.Select(c => c.Kind == SalesCellKind.Text ? DrillState.ForDisplay(Cat, c.Column) : null).ToList();
+    private static string? Cls(SalesColumn c) => c.Kind is SalesCellKind.Number or SalesCellKind.Percent ? "n" : null;
+
+    /// <summary>The Run button: a fresh report, so filters and sort start over.</summary>
+    private async Task RunAsync() { state.Filters.Clear(); state.SortHeader = null; await ExecuteAsync(); }
+
+    private async Task ExecuteAsync()
+    {
+        if (ctx is null || busy) return;
+        error = null; result = null; checkedRows.Clear();
+        var dims = state.Dimensions<LaborDimensions>();
+        var allowedIds = stores.Select(s => s.StoreId).ToHashSet();                         // re-check against the access list
+        var (ids, lists) = DrillFilters.Split(state, Cat, selected.Where(allowedIds.Contains));
+        if (ids.Count == 0) { error = "Pick at least one store."; return; }
+        if (dims == LaborDimensions.None) { error = "Pick at least one thing to group by."; return; }
+        if (end < start) { error = "The end date is before the start date."; return; }
+        busy = true;
+        try
+        {
+            var req = new LaborRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids, lists.Count == 0 ? null : lists);
+            result = await LaborSvc.RunAsync(ctx.ClientConnectionString, req);
+            ranDims = dims; ranMode = mode;
+            cols = LaborLayout.Build(ranDims, ranMode, result, weekdays); SetDrill();
+            punch = dims.HasFlag(LaborDimensions.PunchDetail);
+            totals = SalesLayout.Totals(result, cols).FirstOrDefault().Sums ?? [];
+            rangeStart = start; rangeEnd = end;
+        }
+        catch (Exception ex) { error = "The query failed: " + ex.Message; }
+        finally { busy = false; }
+    }
+
+    private void ToggleWeekdays()
+    {
+        weekdays = !weekdays;
+        if (result is null) return;
+        cols = LaborLayout.Build(ranDims, ranMode, result, weekdays); SetDrill();
+        totals = SalesLayout.Totals(result, cols).FirstOrDefault().Sums ?? [];
+    }
+    private async Task Shift(int dir)
+    {
+        var days = (int)(end - start).TotalDays + 1;
+        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        await ExecuteAsync();
+    }
+    private async Task ExcelAsync()
+    {
+        if (result is null) return;
+        var (h, rows, tot) = SalesLayout.Export(result, cols, LaborLayout.Format);
+        var title = $"Labor review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}";
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Labor", title, h, rows, punch ? null : tot);
+        await JS.InvokeVoidAsync("ddDownload", $"LaborReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    }
+}

@@ -1,0 +1,155 @@
+﻿@page "/gl"
+@attribute [Authorize]
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@inject UserContextService Users
+@inject GlService GlSvc
+
+@using DDReview.Web.Components.Home
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>General ledger review</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <EditForm Model="this" OnSubmit="RunAsync" FormName="gl" class="filters">
+        <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
+        <label>From <input type="date" @bind="start" /></label>
+        <label>To <input type="date" @bind="end" /></label>
+        <label>Mode
+            <select @bind="mode">
+                <option value="summary">Summary (as the old web report)</option>
+                <option value="detail">Detail with balance check</option>
+                <option value="totals">Totals by account and reference</option>
+                <option value="both">Totals at the top, detail below</option>
+            </select>
+        </label>
+        <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+    </EditForm>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (report is not null)
+    {
+        @if (!report.Balanced)
+        {
+            <div class="banner bad" role="status">
+                OUT OF BALANCE — debits @report.TotalDebit.ToString("N2"), credits @report.TotalCredit.ToString("N2") (difference @report.Difference.ToString("N2"))
+            </div>
+        }
+        @if (report.OutOfBalance.Any())
+        {
+            <h2>Batches out of balance</h2>
+            <table><thead><tr><th>Batch</th><th>Date</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Difference</th></tr></thead>
+            <tbody>@foreach (var b in report.OutOfBalance) {<tr><td>@b.BatchId</td><td>@b.PostingDate.ToString("d")</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td class="n">@b.Difference.ToString("N2")</td></tr>}</tbody></table>
+        }
+    }
+    @if (totalLines is not null)
+    {
+        var td = totalLines.Sum(l => l.Debit); var tc = totalLines.Sum(l => l.Credit);
+        <h2>Totals, @start.ToString("d") – @end.ToString("d")</h2>
+        <p class="muted">Date and batch ignored: lines with the same account, A/R account and reference are added together.</p>
+        <table><thead><tr><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
+        <tbody>@foreach (var l in totalLines) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.Account</td><td>@l.ARAccount</td><td>@l.Reference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
+        <tbody class="gl-grand"><tr class="total"><td colspan="3">Total @start.ToString("d") – @end.ToString("d") @BalanceNote(td, tc)</td><td class="n">@td.ToString("N2")</td><td class="n">@tc.ToString("N2")</td></tr></tbody></table>
+    }
+    @if (detailLines is not null)
+    {
+        <h2>@detailLines.Count(l => l.Debit != 0 || l.Credit != 0) lines</h2>
+        <table><thead><tr><th>Batch</th><th>Date</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
+        @{ var shown = detailLines.Where(l => l.Debit != 0 || l.Credit != 0).ToList(); }
+        @foreach (var day in shown.GroupBy(l => l.PostingDate.Date).OrderBy(g => g.Key))
+        {
+            var dd = day.Sum(l => l.Debit); var dc = day.Sum(l => l.Credit);
+            <tbody class="gl-day">
+                @foreach (var l in day) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}
+                <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc)</td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
+                <tr class="gl-gap"><td colspan="7"></td></tr>
+            </tbody>
+        }
+        @{ var gd = shown.Sum(l => l.Debit); var gc = shown.Sum(l => l.Credit); }
+        <tbody class="gl-grand">
+            <tr class="total"><td colspan="5">Grand total @BalanceNote(gd, gc)</td><td class="n">@gd.ToString("N2")</td><td class="n">@gc.ToString("N2")</td></tr>
+        </tbody></table>
+    }
+    @if (summaryLines is not null)
+    {
+        <h2>@summaryLines.Count(l => l.Debit != 0 || l.Credit != 0) rows</h2>
+        <table><thead><tr><th>Store</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
+        <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@l.StoreName</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
+        @{ var sr = summaryLines.Where(l => l.TotalLine == 0).ToList(); var sd = sr.Sum(l => l.Debit); var sc = sr.Sum(l => l.Credit); }
+        <tbody class="gl-grand"><tr class="total"><td colspan="4">Grand total @BalanceNote(sd, sc)</td><td class="n">@sd.ToString("N2")</td><td class="n">@sc.ToString("N2")</td></tr></tbody></table>
+    }
+}
+
+@code {
+    private static string BalanceNote(decimal debit, decimal credit) =>
+        debit == credit ? "(balanced)" : "(OUT OF BALANCE by " + (debit - credit).ToString("N2") + ")";
+
+    private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private readonly HashSet<int> selected = [];
+    private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
+    private string mode = "detail";
+    private bool busy;
+    private IReadOnlyList<GlTotalLine>? totalLines;
+    private int arFlag = 3;
+    private string? error;
+    private GlBalanceReport? report;
+    private IReadOnlyList<GlLine>? detailLines;
+    private IReadOnlyList<GlSummaryLine>? summaryLines;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.DebitCredit);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.DebitCredit);
+        foreach (var s in stores) selected.Add(s.StoreId);
+    }
+
+    private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+
+    private async Task RunAsync()
+    {
+        if (ctx is null || busy) return;
+        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null;
+        if (selected.Count == 0) { error = "Pick at least one store."; return; }
+        if (end < start) { error = "The end date is before the start date."; return; }
+        busy = true;
+        try
+        {
+            // Only stores this user is authorized for can be sent to SQL: selected ids are re-checked against the access list.
+            var ids = selected.Where(stores.Select(s => s.StoreId).ToHashSet().Contains).OrderBy(x => x);
+            var req = new GlRequest(string.Join(",", ids), DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), arFlag);
+            if (mode == "totals")
+            {
+                var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
+                totalLines = GlTotals.Group(lines);
+                report = new GlBalanceReport(totalLines.Sum(l => l.Debit), totalLines.Sum(l => l.Credit), []);
+            }
+            else if (mode is "detail" or "both")
+            {
+                detailLines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
+                report = GlBalance.Compute(detailLines);
+                if (mode == "both") totalLines = GlTotals.Group(detailLines);
+            }
+            else
+            {
+                summaryLines = await GlSvc.GetSummaryAsync(ctx.ClientConnectionString, req);
+                var rows = summaryLines.Where(l => l.TotalLine == 0).ToList();
+                var d = rows.Sum(l => l.Debit); var c = rows.Sum(l => l.Credit);
+                report = new GlBalanceReport(d, c, []);
+            }
+        }
+        catch (Exception ex) { error = "The query failed: " + ex.Message; }
+        finally { busy = false; }
+    }
+}

@@ -492,3 +492,11 @@ $RECYCLE.BIN/
 appsettings.Local.json
 appsettings.*.local.json
 secrets.json
+
+# Deployment secrets live only on the server
+appsettings.Production.json
+appsettings.Staging.json
+appsettings.Local.json
+
+# QuickBooks test fixtures must be committed
+!tests/DDReview.Tests/QuickBooks/Data/*.csv

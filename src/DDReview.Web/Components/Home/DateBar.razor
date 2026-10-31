@@ -1,0 +1,52 @@
+@* The gold-bordered date bar on the home tabs: dates, optional compare date / scope / store, and Submit / Previous / Next. *@
+@using DDReview.Core.Gl
+@using DDReview.Core.Home
+<div class="datebar">
+    <label>Starting Date <input type="date" @bind="start" /></label>
+    <label>Ending Date <input type="date" @bind="end" /></label>
+    @if (ShowCompare) { <label>Compare Date <input type="date" @bind="compare" /></label> }
+    @if (ShowScope)
+    {
+        <select @bind="scope">
+            <option value="@DashboardScope.DateRange">Date Range</option>
+            <option value="@DashboardScope.WeekDay">Week Day</option>
+            <option value="@DashboardScope.CalendarDay">Calendar Day</option>
+        </select>
+    }
+    @if (Stores is not null)
+    {
+        <select @bind="storeId">
+            <option value="0">All Stores</option>
+            @foreach (var s in Stores) { <option value="@s.StoreId">@s.StoreName</option> }
+        </select>
+    }
+    <button type="button" class="gold" @onclick="Submit">Submit</button>
+    <button type="button" class="gold" @onclick="() => Shift(-1)">Previous</button>
+    <button type="button" class="gold" @onclick="() => Shift(1)">Next</button>
+</div>
+@code {
+    public sealed record Value(DateOnly Start, DateOnly End, DateOnly Compare, DashboardScope Scope, int StoreId);
+    [Parameter] public DateOnly Start { get; set; }
+    [Parameter] public DateOnly End { get; set; }
+    [Parameter] public DateOnly Compare { get; set; }
+    [Parameter] public DashboardScope Scope { get; set; } = DashboardScope.DateRange;
+    [Parameter] public int StoreId { get; set; }
+    [Parameter] public bool ShowCompare { get; set; } = true;
+    [Parameter] public bool ShowScope { get; set; }
+    [Parameter] public IReadOnlyList<StoreInfo>? Stores { get; set; }
+    [Parameter] public EventCallback<Value> OnChange { get; set; }
+
+    private DateTime start, end, compare; private DashboardScope scope; private int storeId;
+    protected override void OnParametersSet()
+    {
+        start = Start.ToDateTime(TimeOnly.MinValue); end = End.ToDateTime(TimeOnly.MinValue); compare = Compare.ToDateTime(TimeOnly.MinValue);
+        scope = Scope; storeId = StoreId;
+    }
+    private Task Submit() => OnChange.InvokeAsync(new Value(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), DateOnly.FromDateTime(compare), scope, storeId));
+    private Task Shift(int dir)
+    {
+        var days = (int)(end - start).TotalDays + 1;
+        start = start.AddDays(dir * days); end = end.AddDays(dir * days); compare = compare.AddDays(dir * days);
+        return Submit();
+    }
+}

@@ -1,0 +1,40 @@
+@* A dropdown-style multi-select: a closed box showing a summary that opens a panel of checkboxes. Open/close is native <details>; wwwroot/app.js closes it on an outside click. *@
+<details class="ms">
+    <summary class="ms-btn"><span class="ms-cap">@Caption</span> <span class="ms-sum">@Summary</span></summary>
+    <div class="ms-panel">
+        <div class="ms-tools">
+            <button type="button" class="hlink" @onclick="() => SetAll(true)">All</button>
+            <button type="button" class="hlink" @onclick="() => SetAll(false)">None</button>
+        </div>
+        @foreach (var o in Options)
+        {
+            <label class="inline"><input type="checkbox" checked="@o.On" @onchange="e => OnToggle.InvokeAsync((o.Key, (bool)e.Value!))" /> @o.Label</label>
+        }
+    </div>
+</details>
+
+@code {
+    public record Option(string Key, string Label, bool On);
+
+    [Parameter] public string Caption { get; set; } = "";
+    [Parameter] public IReadOnlyList<Option> Options { get; set; } = [];
+    [Parameter] public string NoneText { get; set; } = "None";
+    [Parameter] public EventCallback<(string Key, bool On)> OnToggle { get; set; }
+
+    private string Summary
+    {
+        get
+        {
+            var chosen = Options.Where(o => o.On).ToList();
+            if (chosen.Count == 0) return NoneText;
+            if (chosen.Count == Options.Count && Options.Count > 1) return "All (" + chosen.Count + ")";
+            if (chosen.Count <= 2) return string.Join(", ", chosen.Select(o => o.Label));
+            return chosen.Count + " selected";
+        }
+    }
+
+    private async Task SetAll(bool on)
+    {
+        foreach (var o in Options.Where(o => o.On != on)) await OnToggle.InvokeAsync((o.Key, on));
+    }
+}

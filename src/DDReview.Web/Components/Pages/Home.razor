@@ -1,0 +1,57 @@
+@page "/"
+@attribute [Authorize]
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@using DDReview.Web.Components.Home
+@inject UserContextService Users
+@inject NavigationManager Nav
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+@if (ctx is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <h1 class="client">@ctx.Account.UserName</h1>
+    <nav class="tabs" aria-label="Home">
+        @foreach (var (key, text) in Tabs)
+        {
+            <a href="@(key == "dashboard" ? "/" : "/?tab=" + key)" class="@(Current == key ? "on" : null)">@text</a>
+        }
+        <form method="post" action="/account/logout" class="tab-logout"><AntiforgeryToken /><button type="submit">Logout</button></form>
+    </nav>
+    <section class="tabpanel">
+        @if (Current == "reports") { <ReportsTab Access="ctx.Access" /> }
+        else if (holder is null) { <p class="error">No stores are available to you for this view.</p> }
+        else switch (Current)
+        {
+            case "daily": <DailySummaryTab Ctx="holder" /> break;
+            case "thisweek": <NumbersTab Ctx="holder" WeeksBack="0" /> break;
+            case "lastweek": <NumbersTab Ctx="holder" WeeksBack="-1" /> break;
+            case "alerts": <AlertsTab Ctx="holder" /> break;
+            default: <DashboardTab Ctx="holder" /> break;
+        }
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+    private DDReview.Web.UserContext? ctx;
+    private UserContextHolder? holder;
+    private static readonly (string, string)[] Tabs =
+    [
+        ("dashboard", "Dashboard"), ("daily", "Daily Summary"), ("thisweek", "This Week"), ("lastweek", "Last Week"),
+        ("alerts", "Alerts"), ("reports", "Reports"),
+    ];
+    private string Current => Tabs.Any(t => t.Item1 == Tab) ? Tab! : "dashboard";
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        if (Current == "reports") return;                                 // the Reports tab needs no store list
+        var stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Sales);
+        if (stores.Count > 0) holder = new UserContextHolder(ctx.ClientConnectionString, stores);
+    }
+}

@@ -1,0 +1,22 @@
+@inherits LayoutComponentBase
+
+<header class="top">
+    <a href="/" class="brand">DD Review</a>
+    <AuthorizeView>
+        <Authorized>
+            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a> <a href="/gl">General ledger</a></nav>
+            <form method="post" action="/account/logout" class="logout">
+                <AntiforgeryToken />
+                <a href="/account" title="Your account">@context.User.Identity?.Name</a>
+                <button type="submit">Sign out</button>
+            </form>
+        </Authorized>
+    </AuthorizeView>
+</header>
+<main>@Body</main>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
