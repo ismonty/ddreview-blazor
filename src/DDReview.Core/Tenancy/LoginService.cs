@@ -34,6 +34,19 @@ public sealed class LoginService(ICentralDirectory central, LoginThrottle thrott
         if (match is null) { throttle.RecordFailure(key); return new LoginResult(LoginOutcome.InvalidCredentials); }
         throttle.Reset(key);
 
+        return await CompleteAsync(match, ip, userAgent, hostName, ct);
+    }
+
+    /// <summary>Google sign-in: the Google account id must already be linked to a login (see CentralDirectory.LinkGoogleAsync).</summary>
+    public async Task<LoginResult> SignInWithGoogleAsync(string googleSubject, string? ip, string? userAgent, string? hostName, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(googleSubject) || googleSubject.Length > 100) return new LoginResult(LoginOutcome.InvalidCredentials);
+        var match = await central.FindByGoogleAsync(googleSubject, ct);
+        return match is null ? new LoginResult(LoginOutcome.InvalidCredentials) : await CompleteAsync(match, ip, userAgent, hostName, ct);
+    }
+
+    private async Task<LoginResult> CompleteAsync(CentralAccount match, string? ip, string? userAgent, string? hostName, CancellationToken ct)
+    {
         if (!string.IsNullOrWhiteSpace(match.RedirectUrl))
             return new LoginResult(LoginOutcome.Redirect, match, RedirectUrl: match.RedirectUrl);
         if (string.IsNullOrWhiteSpace(match.ClientDsn))

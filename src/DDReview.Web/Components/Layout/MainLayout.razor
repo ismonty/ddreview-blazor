@@ -7,7 +7,7 @@
             <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a> <a href="/gl">General ledger</a></nav>
             <form method="post" action="/account/logout" class="logout">
                 <AntiforgeryToken />
-                <span>@context.User.Identity?.Name</span>
+                <a href="/account" title="Your account">@context.User.Identity?.Name</a>
                 <button type="submit">Sign out</button>
             </form>
         </Authorized>

@@ -54,9 +54,38 @@ public class LoginServiceTests
         public Task<CentralAccount?> GetByIdAsync(int id, CancellationToken ct = default) => Task.FromResult(accounts.FirstOrDefault(a => a.WebUserId == id));
         public Task StoreHashAsync(int id, string h, CancellationToken ct = default) { Stored.Add((id, h)); return Task.CompletedTask; }
         public Task<int> LogLoginAsync(int id, string? ua, string? ip, string? host, CancellationToken ct = default) { Logged++; return Task.FromResult(77); }
+        public Dictionary<string, int> Google = new();
+        public Task<CentralAccount?> FindByGoogleAsync(string sub, CancellationToken ct = default) =>
+            Task.FromResult(Google.TryGetValue(sub, out var id) ? accounts.FirstOrDefault(a => a.WebUserId == id) : null);
+        public Task<bool> LinkGoogleAsync(int id, string sub, string? email, CancellationToken ct = default)
+        { if (Google.TryGetValue(sub, out var other) && other != id) return Task.FromResult(false); Google[sub] = id; return Task.FromResult(true); }
+        public Task<string?> GetGoogleEmailAsync(int id, CancellationToken ct = default) => Task.FromResult<string?>(Google.ContainsValue(id) ? "me@example.com" : null);
+        public Task UnlinkGoogleAsync(int id, CancellationToken ct = default) { foreach (var k in Google.Where(kv => kv.Value == id).Select(kv => kv.Key).ToList()) Google.Remove(k); return Task.CompletedTask; }
     }
     private static CentralAccount Acct(string pw, string? dsn = "Server=x;Database=y", string? redirect = null, string? hash = null) =>
         new(1, "Valentinis", pw, hash, dsn, "u", "p", 3, null, null, false, true, false, false, redirect);
+
+    [Fact] public async Task Linked_google_account_signs_in_without_a_password()
+    {
+        var c = new FakeCentral(Acct("Pass1")); c.Google["g-123"] = 1;
+        var r = await new LoginService(c, new LoginThrottle(), false).SignInWithGoogleAsync("g-123", "1.2.3.4", "ua", "host");
+        Assert.Equal(LoginOutcome.Success, r.Outcome); Assert.Equal(77, r.WebLoginId); Assert.Equal(1, c.Logged);
+    }
+
+    [Fact] public async Task Unlinked_google_account_is_refused()
+    {
+        var c = new FakeCentral(Acct("Pass1"));
+        var r = await new LoginService(c, new LoginThrottle(), false).SignInWithGoogleAsync("someone-else", "1.2.3.4", "ua", "host");
+        Assert.Equal(LoginOutcome.InvalidCredentials, r.Outcome); Assert.Equal(0, c.Logged);
+    }
+
+    [Fact] public async Task Google_sign_in_still_honours_missing_client_database_and_redirects()
+    {
+        var c = new FakeCentral(Acct("p", dsn: null)); c.Google["g"] = 1;
+        Assert.Equal(LoginOutcome.NoClientDatabase, (await new LoginService(c, new LoginThrottle(), false).SignInWithGoogleAsync("g", null, null, null)).Outcome);
+        var c2 = new FakeCentral(Acct("p", redirect: "https://other.example/")); c2.Google["g"] = 1;
+        Assert.Equal(LoginOutcome.Redirect, (await new LoginService(c2, new LoginThrottle(), false).SignInWithGoogleAsync("g", null, null, null)).Outcome);
+    }
 
     [Fact] public async Task Legacy_password_signs_in_and_is_upgraded()
     {

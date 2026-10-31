@@ -10,6 +10,13 @@ public interface ICentralDirectory
     Task<CentralAccount?> GetByIdAsync(int webUserId, CancellationToken ct = default);
     Task StoreHashAsync(int webUserId, string hash, CancellationToken ct = default);
     Task<int> LogLoginAsync(int webUserId, string? userAgent, string? hostAddress, string? hostName, CancellationToken ct = default);
+    /// <summary>The login linked to this Google account id (the "sub" claim), or null.</summary>
+    Task<CentralAccount?> FindByGoogleAsync(string googleSubject, CancellationToken ct = default);
+    /// <summary>Links a Google account to a login. False when that Google account is already linked to a different login.</summary>
+    Task<bool> LinkGoogleAsync(int webUserId, string googleSubject, string? email, CancellationToken ct = default);
+    /// <summary>The email of the Google account linked to this login, or null when none.</summary>
+    Task<string?> GetGoogleEmailAsync(int webUserId, CancellationToken ct = default);
+    Task UnlinkGoogleAsync(int webUserId, CancellationToken ct = default);
 }
 
 public sealed class CentralDirectory(IOptions<TenantOptions> options) : ICentralDirectory
@@ -87,6 +94,53 @@ when not matched then insert (WebUserID, PasswordHash, UpdatedUtc) values (@id, 
         var p = cmd.Parameters.Add("@WebLoginID", System.Data.SqlDbType.Int); p.Direction = System.Data.ParameterDirection.Output;
         await cmd.ExecuteNonQueryAsync(ct);
         return p.Value is int i ? i : 0;
+    }
+
+    public async Task<CentralAccount?> FindByGoogleAsync(string googleSubject, CancellationToken ct = default)
+    {
+        await using var cn = new SqlConnection(_o.CentralConnectionString);
+        await cn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(Select + " inner join dbo.tblWebUserGoogle g on g.WebUserID = wus.WebUserID where g.GoogleSubject = @s", cn) { CommandTimeout = 60 };
+        cmd.Parameters.Add("@s", System.Data.SqlDbType.VarChar, 100).Value = googleSubject;
+        return (await ReadAsync(cmd, ct)).FirstOrDefault();
+    }
+
+    public async Task<bool> LinkGoogleAsync(int webUserId, string googleSubject, string? email, CancellationToken ct = default)
+    {
+        await using var cn = new SqlConnection(_o.CentralConnectionString);
+        await cn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(@"
+if exists (select 1 from dbo.tblWebUserGoogle where GoogleSubject = @s and WebUserID <> @id) select 0
+else begin
+    delete dbo.tblWebUserGoogle where WebUserID = @id and GoogleSubject <> @s;
+    if not exists (select 1 from dbo.tblWebUserGoogle where GoogleSubject = @s)
+        insert dbo.tblWebUserGoogle (GoogleSubject, WebUserID, GoogleEmail) values (@s, @id, @e)
+    else update dbo.tblWebUserGoogle set GoogleEmail = @e where GoogleSubject = @s;
+    select 1
+end", cn);
+        cmd.Parameters.Add("@id", System.Data.SqlDbType.Int).Value = webUserId;
+        cmd.Parameters.Add("@s", System.Data.SqlDbType.VarChar, 100).Value = googleSubject;
+        cmd.Parameters.Add("@e", System.Data.SqlDbType.VarChar, 320).Value = (object?)Trunc(email, 320) ?? DBNull.Value;
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) == 1;
+    }
+
+    public async Task<string?> GetGoogleEmailAsync(int webUserId, CancellationToken ct = default)
+    {
+        await using var cn = new SqlConnection(_o.CentralConnectionString);
+        await cn.OpenAsync(ct);
+        await using var cmd = new SqlCommand("select GoogleEmail from dbo.tblWebUserGoogle where WebUserID = @id", cn);
+        cmd.Parameters.Add("@id", System.Data.SqlDbType.Int).Value = webUserId;
+        var o = await cmd.ExecuteScalarAsync(ct);
+        return o is null ? null : o is DBNull ? "(linked)" : (string)o;
+    }
+
+    public async Task UnlinkGoogleAsync(int webUserId, CancellationToken ct = default)
+    {
+        await using var cn = new SqlConnection(_o.CentralConnectionString);
+        await cn.OpenAsync(ct);
+        await using var cmd = new SqlCommand("delete dbo.tblWebUserGoogle where WebUserID = @id", cn);
+        cmd.Parameters.Add("@id", System.Data.SqlDbType.Int).Value = webUserId;
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static string? Trunc(string? s, int n) => s is null ? null : s.Length <= n ? s : s[..n];

@@ -174,3 +174,7 @@ details.ms .ms-tools { display: flex; gap: .8rem; padding-bottom: .3rem; margin-
 tr.gl-gap td { height: 1.1rem; padding: 0; border: 0; }
 tbody.gl-day tr.total td, tbody.gl-grand tr.total td { border-top: 1px solid currentColor; }
 tbody.gl-grand tr.total td { border-top: 2px solid currentColor; }
+
+button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--edge); }
+.login-card form.google { text-align: center; }
+.login-card form.google p { margin: .6rem 0 .4rem; }

@@ -34,9 +34,15 @@ The server builds the site itself from git. One script does a deploy and the sam
    - `Tenancy:TrustClientServerCertificate`: `true` if client SQL servers use self-signed certificates, `false` once they have real ones.
    - `DataProtection:KeysPath`: keeps sign-ins valid across restarts; the folder is created for you, and the app pool needs write access (step 4 gave it).
    The deploy script never overwrites this file, the `keys` folder, or `logs`.
-6. **SQL Server.** From this server the central master and every client database that staging will reach must be reachable (firewall, SQL login).
+6. **Google sign-in (optional, off until both values are set).** Create a Google Cloud project just for DD Review and an OAuth client of type
+   *Web application* with authorized redirect URIs `https://blazor.ddreview.com/signin-google` (and `https://localhost:7004/signin-google` for development).
+   Put the Client ID and Client Secret in `appsettings.Production.json` under `Authentication:Google` (locally:
+   `dotnet user-secrets set "Authentication:Google:ClientId" "..."` and `...:ClientSecret`). Run `sql\003_central_google_link.sql` on the central master and give the
+   central web login `SELECT, INSERT, DELETE` on `dbo.tblWebUserGoogle`. Then each person signs in with their password once, opens their name at the top right (Account)
+   and chooses *Link Google account*; after that the *Sign in with Google* button on the login page works for them. Logins are matched by Google's account id, never by email address.
+7. **SQL Server.** From this server the central master and every client database that staging will reach must be reachable (firewall, SQL login).
    In each client database the web login needs `grant execute on type::dbo.DrillPair to [<web login user>]` (after running `sql\002_client_drill_pair_type.sql` there).
-7. **DNS**: `blazor.ddreview.com` to the server (you are handling this), plus the certificate.
+8. **DNS**: `blazor.ddreview.com` to the server (you are handling this), plus the certificate.
 
 ## Deploying (and every later update)
 

@@ -27,3 +27,6 @@ public sealed class UserContextService(
         });
     }
 }
+
+/// <summary>Whether Google sign-in is configured (Authentication:Google:ClientId and ClientSecret are both set).</summary>
+public sealed record GoogleSignInStatus(bool Enabled);

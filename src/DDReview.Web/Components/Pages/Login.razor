@@ -1,6 +1,7 @@
 @page "/login"
 @attribute [ExcludeFromInteractiveRouting]
 @using Microsoft.AspNetCore.Components.Forms
+@inject DDReview.Web.GoogleSignInStatus GoogleStatus
 
 <PageTitle>MontySoft DD Review™</PageTitle>
 <div class="login-card">
@@ -16,6 +17,15 @@
         <label>Password<input name="password" type="password" autocomplete="current-password" maxlength="200" required /></label>
         <button type="submit">Sign in</button>
     </form>
+    @if (GoogleStatus.Enabled)
+    {
+        <form method="post" action="/account/google/start" class="google">
+            <AntiforgeryToken />
+            <input type="hidden" name="mode" value="signin" />
+            <p class="muted">or</p>
+            <button type="submit" class="secondary">Sign in with Google</button>
+        </form>
+    }
 </div>
 
 @code {
@@ -24,6 +34,8 @@
     {
         "locked" => "Too many failed attempts. Try again in 15 minutes.",
         "nodb" => "Your account has no database assigned. Please contact support.",
+        "google" => "Google sign-in did not complete. Please try again.",
+        "nogoogle" => "That Google account is not linked to a DD Review login. Sign in with your password, then open your name at the top and choose Link Google account.",
         _ => "Invalid login.",
     };
 }
