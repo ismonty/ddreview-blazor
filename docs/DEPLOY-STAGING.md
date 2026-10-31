@@ -47,8 +47,7 @@ The server builds the site itself from git. One script does a deploy and the sam
 ## If the server already hosts MOOTT and Bob (it does)
 - **IIS and WebSockets are already installed**, so skip that part of step 1. Check only that the ASP.NET Core Hosting Bundle is **.NET 10**: the newest bundle runs the older .NET 8 sites too,
   side by side. Installing it can restart IIS, so do it at a quiet hour; MOOTT and Bob go down for a moment.
-- **Check the operating system first.** If this is the old Windows Server 2012 / IIS 8.5 machine MOOTT's notes mention, look at Microsoft's supported-OS list for .NET 10 before installing;
-  an unsupported OS is the one thing here that cannot be worked around. This site's `web.config` does not use the IIS 10-only `<security>` block, so IIS 8.5 itself is not a problem.
+- **Operating system:** the server is Windows Server 2025 (MOOTT moved there from Server 2012), which supports .NET 10 and a current IIS, so there is nothing special to work around.
 - **Keep the sites apart:** its own app pool (step 3), its own folder, its own `appsettings.Production.json`, its own `keys` folder and its own Google OAuth client. Nothing is shared with MOOTT or Bob, and
   the deploy script only touches `C:\inetpub\blazor.ddreview.com` (the "updating" page applies to this site only).
 - **One HTTPS address, several sites:** give each site its own host name binding and tick *Require Server Name Indication*, or the certificates will fight over the same IP and port.

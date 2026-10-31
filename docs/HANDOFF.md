@@ -49,7 +49,7 @@ QuickBooks poster; drill filters as a table-valued parameter.
   schema scripts (`ValentinisSchema`, `DDReview-CentralMaster`: schema-only dumps), `DDAdminCS-ExportedCode.zip` (the Access presentation layer source, which contains the QBXML posting logic),
   captured generated-SQL corpus CSVs and `scripts\` (for characterisation tests; set `DDREVIEW_SALES_SCRIPTS` / `DDREVIEW_RECEIPTS_SCRIPTS` / labor equivalents to run them),
   `QBExportPackage.csv` and `QBPostResults*` (QuickBooks plan/results).
-- Machines: the owner's dev PC (SQL Express, Visual Studio, QuickBooks Desktop 2019) and the monty.social IIS server (also hosts MOOTT and Bob, other apps of the owner; keep separate app pools, settings and keys).
+- Machines: the owner's dev PC (SQL Express, Visual Studio, QuickBooks Desktop 2019) and the monty.social IIS server (Windows Server 2025; also hosts MOOTT and Bob, other apps of the owner; keep separate app pools, settings and keys).
 - A new session starts with an empty cloud workspace: clone the repo (`add_repo`), link the session to the owner's computer, and ask to stage files from the folders above.
 
 ## Conventions worth keeping
