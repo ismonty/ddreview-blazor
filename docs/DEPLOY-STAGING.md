@@ -20,12 +20,12 @@ The server builds the site itself from git. One script does a deploy and the sam
    ```
    New-Item -ItemType Directory C:\inetpub\blazor-staging.ddreview.com
    Import-Module WebAdministration
-   New-WebAppPool blazor.ddreview.com
-   Set-ItemProperty IIS:\AppPools\blazor.ddreview.com managedRuntimeVersion ''      # No Managed Code
-   New-Website -Name blazor.ddreview.com -PhysicalPath C:\inetpub\blazor-staging.ddreview.com -ApplicationPool blazor.ddreview.com -HostHeader blazor.ddreview.com -Port 80
-   icacls C:\inetpub\blazor-staging.ddreview.com /grant "IIS AppPool\blazor.ddreview.com:(OI)(CI)M"
+   New-WebAppPool blazor-staging.ddreview.com
+   Set-ItemProperty IIS:\AppPools\blazor-staging.ddreview.com managedRuntimeVersion ''      # No Managed Code
+   New-Website -Name blazor-staging.ddreview.com -PhysicalPath C:\inetpub\blazor-staging.ddreview.com -ApplicationPool blazor-staging.ddreview.com -HostHeader blazor.ddreview.com -Port 80
+   icacls C:\inetpub\blazor-staging.ddreview.com /grant "IIS AppPool\blazor-staging.ddreview.com:(OI)(CI)M"
    ```
-   When DNS and your certificate are ready add the HTTPS binding: IIS Manager > Sites > blazor.ddreview.com > Bindings > Add > https,
+   When DNS and your certificate are ready add the HTTPS binding: IIS Manager > Sites > blazor-staging.ddreview.com > Bindings > Add > https,
    host name `blazor.ddreview.com`, tick *Require Server Name Indication*, pick the certificate. **Sign-in only works over HTTPS** (the login cookie is Secure-only).
 5. **Settings file with the secrets** (never in git). Copy `deploy\appsettings.Production.example.json` to
    `C:\inetpub\blazor-staging.ddreview.com\appsettings.Production.json` and fill in:
@@ -65,12 +65,22 @@ Options: `-SkipTests`, `-SkipPull`, `-SiteDir`, `-BackupDir`, `-Url`.
 
 Smoke test afterwards: open https://blazor.ddreview.com, sign in, run Sales and Receipts for a day you know, compare with turbo.ddreview.com.
 
+## Running it automatically
+`Deploy-Staging.ps1` asks no questions and exits with code 0 on success and non-zero on any failure (tests, publish, copy), so it can be started by a scheduled task,
+a GitHub self-hosted runner, or a webhook listener, for example:
+```
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\src\ddreview-blazor\deploy\Deploy-Staging.ps1
+```
+Things the automatic account needs: Administrator rights (it writes to the site folder and IIS), read access to the GitHub repo without a prompt (a deploy key or a stored token for `git pull`),
+the .NET 10 SDK on its PATH, and the checkout sitting on the branch you want deployed (the script pulls whatever branch is checked out; it does not switch branches).
+If tests fail, nothing is deployed and the old site keeps running; the backup zips make a bad deploy easy to undo.
+
 ## Rolling back
 Stop the site, unzip the newest good file from the backups folder over `C:\inetpub\blazor-staging.ddreview.com`, start the site:
 ```
-Stop-Website blazor.ddreview.com
+Stop-Website blazor-staging.ddreview.com
 Expand-Archive C:\inetpub\backups\blazor-staging.ddreview.com\site-YYYYMMDD-HHMMSS.zip C:\inetpub\blazor-staging.ddreview.com -Force
-Start-Website blazor.ddreview.com
+Start-Website blazor-staging.ddreview.com
 ```
 
 ## Troubleshooting
