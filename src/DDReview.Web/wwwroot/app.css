@@ -178,3 +178,17 @@ tbody.gl-grand tr.total td { border-top: 2px solid currentColor; }
 button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--edge); }
 .login-card form.google { text-align: center; }
 .login-card form.google p { margin: .6rem 0 .4rem; }
+
+/* Submission reports (General Ledger): button, thumbnail overlay and full page view */
+.sub-actions { margin: 1rem 0 2rem; }
+button.sub-link { font-weight: 400; font-size: .85rem; margin-left: .6rem; text-decoration: underline; color: var(--link); }
+.sub-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.75); overflow: auto; padding: .6rem; }
+.sub-panel { max-width: 1000px; margin: 0 auto; background: var(--card); border: 1px solid var(--edge); border-radius: 10px; padding: .8rem; }
+.sub-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; margin-bottom: .6rem; }
+.sub-bar-buttons { display: flex; flex-wrap: wrap; gap: .4rem; }
+.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .7rem; }
+button.sub-thumb { display: flex; flex-direction: column; align-items: stretch; gap: .25rem; padding: .3rem; border-radius: 6px; background: var(--tile); border: 1px solid var(--edge); color: var(--ink); font-weight: 400; text-align: left; }
+button.sub-thumb img { width: 100%; aspect-ratio: 816 / 1056; background: #fff; border: 1px solid #888; }
+button.sub-thumb small { font-size: .7rem; line-height: 1.25; color: var(--muted); }
+.sub-cap { font-size: .85rem; color: var(--muted); margin: .2rem 0 .5rem; }
+img.sub-page { display: block; width: 100%; max-width: 816px; margin: 0 auto; background: #fff; border: 1px solid #888; }

@@ -4,6 +4,7 @@
 @using DDReview.Core.Tenancy
 @inject UserContextService Users
 @inject GlService GlSvc
+@inject SubmissionReportService SubmissionSvc
 
 @using DDReview.Web.Components.Home
 
@@ -66,7 +67,7 @@ else
             var dd = day.Sum(l => l.Debit); var dc = day.Sum(l => l.Credit);
             <tbody class="gl-day">
                 @foreach (var l in day) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}
-                <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc)</td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
+                <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc) <button type="button" class="cell sub-link" @onclick="() => ShowDayAsync(day.Key)">Submission report</button></td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
                 <tr class="gl-gap"><td colspan="7"></td></tr>
             </tbody>
         }
@@ -82,6 +83,52 @@ else
         <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@l.StoreName</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
         @{ var sr = summaryLines.Where(l => l.TotalLine == 0).ToList(); var sd = sr.Sum(l => l.Debit); var sc = sr.Sum(l => l.Credit); }
         <tbody class="gl-grand"><tr class="total"><td colspan="4">Grand total @BalanceNote(sd, sc)</td><td class="n">@sd.ToString("N2")</td><td class="n">@sc.ToString("N2")</td></tr></tbody></table>
+    }
+    @if (lastRun is not null)
+    {
+        <p class="sub-actions"><button type="button" @onclick="ShowAllAsync" disabled="@subsBusy">@(subsBusy ? "Loading…" : "View Submission Reports")</button></p>
+    }
+    @if (subsOpen)
+    {
+        <div class="sub-overlay" role="dialog" aria-label="Submission reports">
+            <div class="sub-panel">
+                <div class="sub-bar">
+                    <strong>@subsTitle</strong>
+                    <span class="sub-bar-buttons">
+                        @if (subsViewing is not null && subs is not null && subs.Count > 1)
+                        {
+                            <button type="button" @onclick="() => Step(-1)" disabled="@(subsViewing == 0)">Previous</button>
+                            <button type="button" @onclick="() => Step(1)" disabled="@(subsViewing == subs.Count - 1)">Next</button>
+                        }
+                        @if (subsViewing is not null && subs is not null && subs.Count > 1) { <button type="button" @onclick="BackToThumbnails">Thumbnails</button> }
+                        <button type="button" @onclick="CloseSubs">Close</button>
+                    </span>
+                </div>
+                @if (subsError is not null) { <p class="error" role="alert">@subsError</p> }
+                else if (subs is null) { <p>Loading…</p> }
+                else if (subs.Count == 0) { <p class="muted">No submission reports for these stores and dates.</p> }
+                else if (subsViewing is int vi && vi >= 0 && vi < subs.Count)
+                {
+                    var b = subs[vi];
+                    <p class="sub-cap">@SubCaption(b) · <a href="@ImageUrl(b)" target="_blank" rel="noopener">open image in a new tab</a></p>
+                    <img class="sub-page" src="@ImageUrl(b)" alt="@("Submission report, " + SubCaption(b))" />
+                }
+                else
+                {
+                    <div class="sub-grid">
+                        @foreach (var (b, i) in subs.Take(subsShown).Select((b, i) => (b, i)))
+                        {
+                            <button type="button" class="sub-thumb" @onclick="() => subsViewing = i">
+                                <img src="@ImageUrl(b)" loading="lazy" alt="" />
+                                <small>@(b.StoreNumber is int n ? n + " – " : "")@b.StoreName<br />@b.PostingDate.ToString("d")</small>
+                            </button>
+                        }
+                    </div>
+                    @if (subs.Count > subsShown) { <p><button type="button" @onclick="() => subsShown += 48">Show more (@(subs.Count - subsShown) left)</button></p> }
+                    @if (subs.Count >= SubmissionReportService.MaxListed) { <p class="muted">Showing the first @SubmissionReportService.MaxListed reports; narrow the stores or dates to see the rest.</p> }
+                }
+            </div>
+        </div>
     }
 }
 
@@ -105,6 +152,16 @@ else
     private IReadOnlyList<GlLine>? detailLines;
     private IReadOnlyList<GlSummaryLine>? summaryLines;
 
+    // Submission reports: the stores and dates of the last successful run, and the viewer opened over the page.
+    private sealed record RunInfo(string Stores, DateOnly Start, DateOnly End);
+    private RunInfo? lastRun;
+    private bool subsOpen, subsBusy;
+    private string subsTitle = "";
+    private string? subsError;
+    private IReadOnlyList<SubmissionBatch>? subs;
+    private int? subsViewing;
+    private int subsShown = 48;
+
     protected override async Task OnInitializedAsync()
     {
         ctx = await Users.GetAsync();
@@ -120,7 +177,7 @@ else
     private async Task RunAsync()
     {
         if (ctx is null || busy) return;
-        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null;
+        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false;
         if (selected.Count == 0) { error = "Pick at least one store."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
         busy = true;
@@ -148,8 +205,35 @@ else
                 var d = rows.Sum(l => l.Debit); var c = rows.Sum(l => l.Credit);
                 report = new GlBalanceReport(d, c, []);
             }
+            lastRun = new RunInfo(req.StoreListCsv, req.Start, req.End);
         }
         catch (Exception ex) { error = "The query failed: " + ex.Message; }
         finally { busy = false; }
     }
+
+    private static string ImageUrl(SubmissionBatch b) => "/gl/submission-image/" + b.BatchId;
+    private static string SubCaption(SubmissionBatch b) => (b.StoreNumber is int n ? n + " – " : "") + b.StoreName + ", " + b.PostingDate.ToString("ddd MMM d, yyyy");
+
+    private Task ShowAllAsync() => lastRun is null ? Task.CompletedTask : OpenSubsAsync(lastRun.Start, lastRun.End, "Submission reports, " + lastRun.Start.ToString("d") + " – " + lastRun.End.ToString("d"));
+
+    private Task ShowDayAsync(DateTime day) =>
+        OpenSubsAsync(DateOnly.FromDateTime(day), DateOnly.FromDateTime(day), "Submission reports, " + day.ToString("dddd, MMMM d, yyyy"));
+
+    private async Task OpenSubsAsync(DateOnly from, DateOnly to, string title)
+    {
+        if (ctx is null || lastRun is null || subsBusy) return;
+        subsBusy = true; subsError = null; subs = null; subsViewing = null; subsShown = 48; subsTitle = title; subsOpen = true;
+        try
+        {
+            subs = await SubmissionSvc.ListAsync(ctx.ClientConnectionString, lastRun.Stores, SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit), from, to);
+            if (subs.Count == 1) subsViewing = 0;   // one report for that day: open it straight away
+        }
+        catch (Microsoft.Data.SqlClient.SqlException) { subsError = "Submission reports are not available in this database."; }
+        catch (Exception ex) { subsError = "The submission reports could not be loaded: " + ex.Message; }
+        finally { subsBusy = false; }
+    }
+
+    private void Step(int by) { if (subsViewing is int i && subs is not null) subsViewing = Math.Clamp(i + by, 0, subs.Count - 1); }
+    private void BackToThumbnails() => subsViewing = null;
+    private void CloseSubs() { subsOpen = false; subsViewing = null; }
 }
