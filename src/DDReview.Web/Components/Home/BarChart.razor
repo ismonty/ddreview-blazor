@@ -1,12 +1,15 @@
-@* Sales-by-store bars (replaces the Dundas chart): last year and budget as wide pale backdrops, net sales in front, costs as thin bars. *@
+﻿@* Sales-by-store bars (replaces the Dundas chart): last year and budget as wide pale backdrops, net sales in front, costs as thin bars. *@
 @using System.Globalization
 @{
     double max = Math.Max(1, Groups.SelectMany(g => g.Values.Values).DefaultIfEmpty(1).Max());
     double top = DDReview.Core.Home.DashboardTotals.NiceMax(max / 1.05);
-    int w = 600, h = 300, left = 56, bottom = 30, topPad = 14;
-    double pw = w - left - 10, ph = h - bottom - topPad;
-    double Y(double v) => topPad + ph - ph * v / top;
+    int w = 600, left = 56, topPad = 14;
+    double pw = w - left - 10, ph = 256;
     double slot = Groups.Count == 0 ? pw : pw / Groups.Count;
+    // Store labels that would run into each other are stepped onto extra lines (every Nth label shares a line), so each one stays readable.
+    int levels = Math.Clamp((int)Math.Ceiling(Groups.Select(g => g.Label.Length).DefaultIfEmpty(0).Max() * 5.8 / Math.Max(slot, 1)), 1, 6);
+    int h = 300 + 12 * (levels - 1);
+    double Y(double v) => topPad + ph - ph * v / top;
 }
 <svg viewBox="0 0 @w @h" class="chart" role="img" aria-label="@Title" width="100%">
     <g><text x="@(w / 2)" y="12" text-anchor="middle" font-size="12" fill="var(--ink)">@Title</text></g>
@@ -30,7 +33,9 @@
             var sw = bw / 8;
             @Bar(cx - bw / 2 + si * sw * 1.2, sw, g.Values.GetValueOrDefault(small[si]), Colors[small[si]], small[si])
         }
-        <g><text x="@F(cx)" y="@(h - 12)" text-anchor="middle" font-size="10" fill="var(--ink)">@g.Label</text></g>
+        var lvl = gi % levels;
+        @if (lvl > 0) { <line x1="@F(cx)" x2="@F(cx)" y1="@(topPad + ph)" y2="@(288 + 12 * lvl - 10)" stroke="#2c4b63" stroke-dasharray="2 2" /> }
+        <g><text x="@F(cx)" y="@(288 + 12 * lvl)" text-anchor="middle" font-size="10" fill="var(--ink)">@g.Label</text></g>
     }
 </svg>
 @if (ShowLegend)
