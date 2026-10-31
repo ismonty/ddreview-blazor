@@ -497,3 +497,6 @@ secrets.json
 appsettings.Production.json
 appsettings.Staging.json
 appsettings.Local.json
+
+# QuickBooks test fixtures must be committed
+!tests/DDReview.Tests/QuickBooks/Data/*.csv
