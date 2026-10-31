@@ -158,4 +158,24 @@ public class DrillTests
         Assert.Equal("3,1", await r.ResolveAsync("", main, t.Rows[2], [t.Rows[0], t.Rows[2]]));   // clicked row first, no duplicate
         Assert.Equal("2", await r.ResolveAsync("", main, t.Rows[1]));
     }
+
+    [Fact]
+    public async Task Receipt_class_cells_fall_back_to_the_fixed_class_id_when_the_id_column_is_empty_or_missing()
+    {
+        var rc = DrillState.Find(DrillCatalogs.Receipts, "ReceiptClass")!;
+        var t = new DataTable();
+        t.Columns.Add("ReceiptClass", typeof(string)); t.Columns.Add("ReceiptClassID", typeof(int));
+        t.Rows.Add("Cash", DBNull.Value); t.Rows.Add("Credit Card", DBNull.Value); t.Rows.Add("Other", 3); t.Rows.Add("Mystery", DBNull.Value);
+        Assert.True(DrillKeyResolver.CanClick(t.Rows[0], rc));
+        Assert.False(DrillKeyResolver.CanClick(t.Rows[3], rc));          // unknown name: not clickable, never a wrong filter
+        var r = new DrillKeyResolver();
+        Assert.Equal("1", await r.ResolveAsync("", rc, t.Rows[0]));
+        Assert.Equal("2,1,3", await r.ResolveAsync("", rc, t.Rows[1], [t.Rows[0], t.Rows[2]]));
+
+        var noIdColumn = new DataTable();
+        noIdColumn.Columns.Add("ReceiptClass", typeof(string));
+        noIdColumn.Rows.Add("Credit Card");
+        Assert.True(DrillKeyResolver.CanClick(noIdColumn.Rows[0], rc));
+        Assert.Equal("2", await r.ResolveAsync("", rc, noIdColumn.Rows[0]));
+    }
 }
