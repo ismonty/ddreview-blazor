@@ -51,7 +51,7 @@ itself rights: if the reports' login lacks db_ddladmin it shows the `sp_addrolem
   `Authentication:Google:ClientId/ClientSecret` in `appsettings.Production.json`, sql 003 on the central master with grants); sql 002 and 004 in each client DB (use the Database updater, then
   `exec dbo.usp_DDReviewGrantAccess @UserName = N'<web login user>', @Execute = 1;`). The deploy script's final self-check cannot reach the public name from the server (only a warning).
 - Not tried on staging yet: the Database updater itself, the new GL modes, the all-zero skipping (all pass tests only).
-- Auto-deploy is the owner's to set up. Pull request #1 is still open and unmerged.
+- Everything is merged into `main` (PR #1 and the dashboard PR #2). `deploy\Deploy-Auto.ps1` + `Register-AutoDeploy.ps1` (staging auto-deploy from `main`, docs/DEPLOY-STAGING.md) and `deploy\Deploy-Production.ps1` (manual, only a commit staging runs; docs/DEPLOY-PRODUCTION.md, https://blazor.ddreview.com) are written but not yet run on the server.
 
 ## Resources the owner has (on the owner's computer, reachable when the session is linked to it)
 - Original source: `C:\Users\ismon\source\repos\DDReview` (solution `DDReviewDev.sln`; `DDReview\` and `DDReviewMarauder\` web projects, `DDReviewAppCode\App_Code` shared classes:
