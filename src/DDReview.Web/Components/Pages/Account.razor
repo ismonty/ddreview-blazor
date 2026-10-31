@@ -1,9 +1,10 @@
-@page "/account"
+﻿@page "/account"
 @attribute [Authorize]
 @using System.Security.Claims
 @inject ICentralDirectory Central
 @inject AuthenticationStateProvider Auth
 @inject GoogleSignInStatus GoogleStatus
+@inject UserContextService Users
 @using DDReview.Core.Tenancy
 
 <PageTitle>MontySoft DD Review™</PageTitle>
@@ -11,6 +12,12 @@
 
 @if (!string.IsNullOrEmpty(Notice)) { <p class="banner ok" role="status">@Notice</p> }
 <p>Signed in as <b>@name</b>.</p>
+
+@if (isAdmin)
+{
+    <h2>Administration</h2>
+    <p><a href="/admin/updater">Database updater</a>: check your database for the objects DD Review adds, and add any that are missing.</p>
+}
 
 <h2>Google sign-in</h2>
 @if (!GoogleStatus.Enabled)
@@ -40,6 +47,7 @@ else if (loaded)
     private string name = "";
     private string? googleEmail;
     private bool loaded;
+    private bool isAdmin;
     private string? Notice => G switch
     {
         "linked" => "Google account linked.",
@@ -56,6 +64,7 @@ else if (loaded)
         {
             try { googleEmail = await Central.GetGoogleEmailAsync(id); } catch (Microsoft.Data.SqlClient.SqlException) { googleEmail = null; }
         }
+        try { isAdmin = (await Users.GetAsync())?.Access.Administrator == true; } catch (Microsoft.Data.SqlClient.SqlException) { }
         loaded = true;
     }
 }

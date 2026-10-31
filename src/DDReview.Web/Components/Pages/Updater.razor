@@ -1,0 +1,87 @@
+@page "/admin/updater"
+@attribute [Authorize]
+@using DDReview.Core.Updater
+@inject UserContextService Users
+@inject ClientUpdater Service
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Database updater</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!ctx.Access.Administrator) { <p class="error">Only an administrator may use this page.</p> }
+else
+{
+    <p class="muted">Checks your client database for the objects DD Review adds, and adds any that are missing. Nothing existing is changed or removed.</p>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (report is not null)
+    {
+        <p>Database <b>@report.Database</b>, connected as <b>@report.DbUser</b>.
+            @if (report.CanCreateObjects) { <span>This login may create objects.</span> }
+            else { <span>This login may <b>not</b> create objects.</span> }</p>
+
+        <table>
+            <thead><tr><th>Script</th><th>What</th><th>Status</th></tr></thead>
+            <tbody>
+            @foreach (var i in report.Items)
+            {
+                <tr>
+                    <td>@i.Id</td>
+                    <td>@i.Title</td>
+                    <td>@Describe(i.Status)
+                        @if (i.Detail is not null) { <div class="muted"><code>@i.Detail</code></div> }</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+
+        @if (report.Items.Any(i => i.Status == UpdateStatus.NeedsPermission))
+        {
+            <p>Ask whoever manages SQL Server to run this once in the client database, then press Apply again:</p>
+            <pre>@report.DdlAdminHint</pre>
+        }
+        @if (report.AllOk) { <p class="banner ok" role="status">Everything is up to date.</p> }
+    }
+
+    <p>
+        <button @onclick="CheckAsync" disabled="@busy">Check again</button>
+        @if (report?.NeedsWork == true) { <button @onclick="ApplyAsync" disabled="@busy">@(busy ? "Working…" : "Apply missing updates")</button> }
+    </p>
+}
+
+@code {
+    private UserContext? ctx;
+    private UpdateReport? report;
+    private string? error;
+    private bool busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx?.Access.Administrator == true) await CheckAsync();
+    }
+
+    private static string Describe(UpdateStatus s) => s switch
+    {
+        UpdateStatus.Ok => "Up to date",
+        UpdateStatus.Missing => "Missing",
+        UpdateStatus.NotUsable => "There, but this login may not use it (needs a grant)",
+        UpdateStatus.Applied => "Added just now",
+        UpdateStatus.NeedsPermission => "Not added: this login may not create objects",
+        UpdateStatus.NeedsGrant => "Added, but this login still may not use it. Run this once as an administrator:",
+        _ => "Failed",
+    };
+
+    private Task CheckAsync() => Run(() => Service.CheckAsync(ctx!.ClientConnectionString));
+    private Task ApplyAsync() => Run(() => Service.ApplyAsync(ctx!.ClientConnectionString, ctx.Access));
+
+    private async Task Run(Func<Task<UpdateReport>> work)
+    {
+        busy = true; error = null;
+        try { report = await work(); }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = "The database answered: " + ex.Message; }
+        catch (UnauthorizedAccessException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+}

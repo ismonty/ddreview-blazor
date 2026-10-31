@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.DataProtection;
+﻿using Microsoft.AspNetCore.DataProtection;
 using System.Security.Claims;
 using DDReview.Core.Gl;
 using DDReview.Core.Security;
@@ -25,6 +25,7 @@ builder.Services.AddSingleton<ICentralDirectory, CentralDirectory>();
 builder.Services.AddSingleton<ITenantConnectionFactory, TenantConnectionFactory>();
 builder.Services.AddSingleton<ClientAccessService>();
 builder.Services.AddSingleton<GlService>();
+builder.Services.AddSingleton<DDReview.Core.Updater.ClientUpdater>();
 builder.Services.AddSingleton<DDReview.Core.Sales.SalesService>();
 builder.Services.AddSingleton<DDReview.Core.Home.HomeService>();
 builder.Services.AddSingleton<DDReview.Core.Receipts.ReceiptsService>();

@@ -198,3 +198,39 @@ public class SalesLayoutTests
         Assert.Equal("1.00%", DDReview.Core.Sales.SalesLayout.FormatPercent(sums["TotalVoids"], sums["TotalSales"]));
     }
 }
+
+public class UpdaterTests
+{
+    [Fact] public void Go_lines_split_batches_and_comment_only_batches_are_dropped()
+    {
+        var b = DDReview.Core.Updater.SqlBatches.Split("-- note\r\ncreate table a(i int)\r\ngo\r\n  GO  \r\ninsert a values(1)\r\nGo\r\n-- only a comment\r\n");
+        Assert.Equal(2, b.Count);
+        Assert.StartsWith("-- note", b[0]);
+        Assert.Contains("insert a", b[1]);
+    }
+
+    [Fact] public void Every_registered_script_is_embedded_and_has_a_batch()
+    {
+        foreach (var s in DDReview.Core.Updater.ClientScripts.All)
+            Assert.NotEmpty(DDReview.Core.Updater.SqlBatches.Split(s.ReadSql()));
+    }
+
+    [Fact] public void Drill_pair_script_creates_the_type_and_is_listed_first()
+    {
+        var s = DDReview.Core.Updater.ClientScripts.All[0];
+        Assert.Equal("002", s.Id);
+        Assert.Contains("create type dbo.DrillPair", s.ReadSql(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] public async Task Only_an_administrator_may_apply()
+    {
+        var u = new DDReview.Core.Updater.ClientUpdater();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => u.ApplyAsync("Server=.", new UserAccess { Administrator = false }));
+    }
+
+    [Fact] public void Ddladmin_hint_quotes_the_user_name()
+    {
+        var r = new DDReview.Core.Updater.UpdateReport("db", "o'brien", false, []);
+        Assert.Equal("exec sp_addrolemember N'db_ddladmin', N'o''brien';", r.DdlAdminHint);
+    }
+}

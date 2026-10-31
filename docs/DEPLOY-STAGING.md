@@ -65,6 +65,23 @@ Options: `-SkipTests`, `-SkipPull`, `-SiteDir`, `-BackupDir`, `-Url`.
 
 Smoke test afterwards: open https://blazor-staging.ddreview.com, sign in, run Sales and Receipts for a day you know, compare with turbo.ddreview.com.
 
+## Updating client databases (Database updater)
+
+Signed in as a client-database administrator, open your name at the top, then **Database updater** (`/admin/updater`). It checks your client database
+for the objects DD Review adds (today: the `dbo.DrillPair` table type, script `sql/002`) and **Apply missing updates** adds any that are missing.
+It only adds; it never changes or drops existing objects, and it never grants itself rights. The web login the reports use needs `db_ddladmin` while
+you press Apply; if it does not have it, the page says so and shows the one line to run (`exec sp_addrolemember N'db_ddladmin', N'<login>';`).
+Turn the role off again afterwards if you prefer. To add a script: put it in `/sql`, embed it in `src/DDReview.Core/DDReview.Core.csproj`, and list it
+with its check query in `src/DDReview.Core/Updater/ClientScripts.cs`.
+
+## Things that went wrong on the first deploy (and the fixes)
+
+- `500.19` on `<webSocket>`: IIS locks that section; the element is gone from `web.config`. Installing the WebSocket Protocol feature is enough.
+- `Access to ...\keys is denied`: grant the app pool identity modify rights on the `keys` folder:
+  `icacls <site>\keys /grant "IIS AppPool\<your app pool name>:(OI)(CI)M" /T` (the pool's name is not necessarily the site's name).
+- `appsettings.Production.json` is JSON: write `\` as `\\` (`Server=HOST\\INSTANCE`), no square brackets around the SQL login name.
+- The login also needs a user in `DDReviewCentralMaster` with `SELECT` on `tblWebUserSecurity` and `SELECT, INSERT, UPDATE, DELETE` on `tblWebUserGoogle`.
+
 ## Running it automatically
 `Deploy-Staging.ps1` asks no questions and exits with code 0 on success and non-zero on any failure (tests, publish, copy), so it can be started by a scheduled task,
 a GitHub self-hosted runner, or a webhook listener, for example:
