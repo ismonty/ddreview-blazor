@@ -12,4 +12,4 @@ BEGIN
     );
     CREATE UNIQUE INDEX UX_tblWebUserGoogle_User ON dbo.tblWebUserGoogle (WebUserID);   -- one Google account per login
 END
-/* The web app's SQL login needs: GRANT SELECT, INSERT, DELETE ON dbo.tblWebUserGoogle TO [<central web login user>]; */
+/* The web app's SQL login needs: GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tblWebUserGoogle TO [<central web login user>]; */
