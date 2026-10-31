@@ -1,0 +1,87 @@
+@using System.Data
+@using System.Globalization
+@using DDReview.Core.Home
+@inject HomeService Home
+<DateBar Start="start" End="end" Compare="compare" OnChange="Apply" />
+@if (error is not null) { <p class="error" role="alert">@error</p> }
+else if (lines is null) { <p>Loading…</p> }
+else
+{
+    <table class="daily">
+        <thead>
+            <tr>
+                <th>#</th><th>Store Name</th><th></th><th class="n">Net vs.<br />Previous</th><th class="n">Net vs.<br />Budget</th>
+                <th class="bars"><span>Discounts</span><span>Voids</span><span>Labor<br />Cost</span><span>Theoretical<br />Cost</span><span>Check<br />Count</span><span>Actual<br />Purchases</span></th>
+                <th></th><th class="n">Sales</th><th class="n">%<br />Increase</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var l in lines) { @Row(l, false) }
+            @Row(total!, true)
+        </tbody>
+    </table>
+}
+@code {
+    [Parameter, EditorRequired] public UserContextHolder Ctx { get; set; } = null!;
+    private DateOnly start, end, compare;
+    private List<DailySummaryLine>? lines; private DailySummaryLine? total; private double scale = 1000; private string? error;
+    private static readonly string[] Labels = ["Net Sales", "", "+/-", "+/- %", "Amount", "% Sales"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        end = start = DateOnly.FromDateTime(DateTime.Today.AddDays(-1));
+        compare = start.AddDays(-364);
+        await Load();
+    }
+    private Task Apply(DateBar.Value v) { start = v.Start; end = v.End; compare = v.Compare; return Load(); }
+    private async Task Load()
+    {
+        try
+        {
+            var (t, _) = await Home.DailySummaryAsync(Ctx.ConnectionString, Ctx.StoreIds, start, end, compare);
+            lines = t.Rows.Cast<DataRow>().Select(DailySummaryLine.From).ToList();
+            total = DailySummaryLine.Total(lines);
+            scale = 1000;
+            foreach (var l in lines)
+                scale = (double)new[] { (decimal)scale, l.Sales, l.Labor + l.ProductCost, l.Purchases, l.Budget, l.PreviousSales }.Max();
+            error = null;
+        }
+        catch (Exception ex) { error = "The summary could not be loaded: " + ex.Message; }
+    }
+
+    static string M(decimal v) => DailySummaryLine.Money(v);
+    static string P(decimal v) => DailySummaryLine.Pct(v);
+
+    private RenderFragment Row(DailySummaryLine l, bool isTotal) => @<tr class="@(isTotal ? "total" : null)">
+        <td class="num">@(isTotal ? "" : l.StoreNumber.ToString(CultureInfo.InvariantCulture))</td>
+        <td class="store @(!isTotal && Late(l) ? "late" : null)">
+            @if (!isTotal)
+            {
+                <b>@l.StoreName</b>
+                @if (l.MaxDateProcessed is { } d) { <small>Processed Through<br />@d.ToString("d", CultureInfo.InvariantCulture)</small> }
+            }
+        </td>
+        <td class="lbl">@foreach (var s in Labels) { <div>@s</div> }</td>
+        <td class="n">
+            <div>@M(l.Sales)</div><div>@M(l.PreviousSales)</div><div>@M(l.VsPrevious)</div><div>@P(l.VsPreviousPct)</div>
+        </td>
+        <td class="n">
+            <div>@M(l.Sales)</div><div>@M(l.Budget)</div><div>@M(l.VsBudget)</div><div>@P(l.VsBudgetPct)</div>
+            <div></div><div>@M(l.Gross)</div>
+        </td>
+        <td class="graph">
+            <BulletBar Sales="l.Sales" PreviousSales="l.PreviousSales" Budget="l.Budget" Labor="l.Labor" ProductCost="l.ProductCost" Purchases="l.Purchases" Scale="scale" />
+            <div class="amounts">
+                <span>@M(l.Discounts)</span><span>@M(l.Voids)</span><span>@M(l.Labor)</span><span>@M(l.ProductCost)</span><span>@l.Checks.ToString("N0", CultureInfo.InvariantCulture)</span><span>@M(l.Purchases)</span>
+            </div>
+            <div class="amounts">
+                <span>@P(l.OfGross(l.Discounts))</span><span>@P(l.OfGross(l.Voids))</span><span>@P(l.OfGross(l.Labor))</span><span>@P(l.OfGross(l.ProductCost))</span><span>@P(l.ChecksPct)</span><span>@P(l.OfGross(l.Purchases))</span>
+            </div>
+        </td>
+        <td class="lbl small">@foreach (var n in DailySummaryLine.DayPartNames) { <div>@n</div> }</td>
+        <td class="n">@for (int i = 0; i < 6; i++) { <div>@M(l.DayPart[i])</div> }</td>
+        <td class="n">@for (int i = 0; i < 6; i++) { <div>@P(l.DayPartPct(i))</div> }</td>
+    </tr>;
+
+    private static bool Late(DailySummaryLine l) => l.MaxDateProcessed is { } d && d.Date < DateTime.Today.AddDays(-1);
+}

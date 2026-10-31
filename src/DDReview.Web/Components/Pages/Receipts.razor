@@ -1,0 +1,223 @@
+@page "/receipts"
+@attribute [Authorize]
+@using System.Data
+@using DDReview.Core.Drill
+@using DDReview.Core.Gl
+@using DDReview.Core.Receipts
+@using DDReview.Core.Tenancy
+@inject UserContextService Users
+@inject ReceiptsService ReceiptsSvc
+@inject IJSRuntime JS
+@using DDReview.Web.Components.Home
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Receipts review</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <EditForm Model="this" OnSubmit="RunAsync" FormName="receipts" class="filters">
+        <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
+        <MultiSelect Caption="View by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<ReceiptsDimensions>(t.Key), t.On)" />
+        <label>Starting date <input type="date" @bind="start" /></label>
+        <label>Ending date <input type="date" @bind="end" /></label>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Submit")</button>
+    </EditForm>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (result is not null)
+    {
+        <p>@result.Rows.Count record(s)</p>
+        @if (state.Filters.Count > 0)
+        {
+            <p class="filters-on">Filtered on:
+                @foreach (var k in state.Filters.Keys.ToList()) {<button type="button" class="hlink" title="Show All" @onclick="() => Act(s => s.ShowAll(k))">@FilterLabel(k) ✕</button>}
+            </p>
+        }
+        <table class="receipts">
+            <thead>
+                <tr>
+                    <th></th>
+                    @foreach (var l in Leading)
+                    {
+                        var dc = DrillState.ForDisplay(Cat, l.Column);
+                        if (dc is not null)
+                        {
+                            <DrillHeader Title="@l.Label" Dimension="true" Buttons="@(l.Column == dc.Display[^1])" Filtered="@state.Filters.ContainsKey(dc.Key)"
+                                         NextTitle="@dc.NextKey" Mark="@Mark(l.Label)" OnTitle="() => Act(s => s.ShowOnly(dc.Key))" OnUp="() => Act(s => s.DrillUp(dc.Key))"
+                                         OnRight="() => Act(s => s.DrillRight(Cat, dc.Key))" OnShowAll="() => Act(s => s.ShowAll(dc.Key))" OnSort="() => state.Sort(l.Label, false)" />
+                        }
+                        else { <DrillHeader Title="@l.Label" Sortable="true" Mark="@Mark(l.Label)" OnSort="() => state.Sort(l.Label, false)" /> }
+                    }
+                    @foreach (var c in ReceiptsLayout.Columns)
+                    {
+                        <th class="n stack">@foreach (var line in c.Lines) {<div><button type="button" class="hlink" title="Sort by this" @onclick="() => state.Sort(LineKey(c, line), true)">@line.Label@Mark(LineKey(c, line))</button></div>}</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (DataRow row in Ordered())
+                {
+                    <tr>
+                        <td class="sel"><input type="checkbox" title="Select this row" checked="@checkedRows.Contains(row)" @onchange="e => Check(row, (bool)e.Value!)" /></td>
+                        @foreach (var l in Leading)
+                        {
+                            var dc = DrillState.ForDisplay(Cat, l.Column);
+                            <td>@if (dc is not null && CanClick(row, dc)) { <button type="button" class="cell" @onclick="() => RowClick(dc, row)">@Text(row, l.Column)</button> } else { @Text(row, l.Column) }</td>
+                        }
+                        @foreach (var c in ReceiptsLayout.Columns)
+                        {
+                            <td class="n stack">@foreach (var line in c.Lines) {<div class="@(line.Bold ? "b" : null)">@ReceiptsLayout.Format(row, line)</div>}</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                @{ var sums = ReceiptsLayout.Sums(result); }
+                <tr class="total">
+                    <td>Total</td>
+                    @foreach (var l in Leading) { <td></td> }
+                    @foreach (var c in ReceiptsLayout.Columns)
+                    {
+                        <td class="n stack">@foreach (var line in c.Lines) {<div class="@(line.Bold ? "b" : null)">@ReceiptsLayout.FormatTotal(sums, line)</div>}</td>
+                    }
+                </tr>
+            </tfoot>
+        </table>
+        <ReportButtons Busy="busy" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
+    }
+}
+
+@code {
+    private string FilterLabel(string k) { var n = FilterText.Names(result, Cat, k); return n.Length == 0 ? k : k + ": " + n; }
+
+    private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
+    private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
+
+    private record Choice(ReceiptsDimensions Value, string Label);
+    private record Lead(string Label, string Column, ReceiptsDimensions Dim);
+    private static readonly Choice[] Choices =
+    [
+        new(ReceiptsDimensions.Store, "Store"), new(ReceiptsDimensions.StoreGroup, "Store group"), new(ReceiptsDimensions.ProfitCenter, "Profit center"),
+        new(ReceiptsDimensions.ReceiptClass, "Receipt class"), new(ReceiptsDimensions.ReceiptType, "Receipt type"),
+        new(ReceiptsDimensions.Cashier, "Cashier"), new(ReceiptsDimensions.CashierStaffDepartment, "Cashier department"),
+        new(ReceiptsDimensions.Server, "Server"), new(ReceiptsDimensions.ServerStaffDepartment, "Server department"),
+        new(ReceiptsDimensions.CheckNumber, "Check"), new(ReceiptsDimensions.CreditCardBatchNumber, "Card batch"),
+        new(ReceiptsDimensions.CashierSessionNumber, "Cashier session"), new(ReceiptsDimensions.DayName, "Day"),
+        new(ReceiptsDimensions.WeekName, "Week"), new(ReceiptsDimensions.DayHourNumber, "Hour"),
+    ];
+    private IEnumerable<Lead> Leading => AllLeading.Where(l => ranDims.HasFlag(l.Dim));
+    private static readonly Lead[] AllLeading =
+    [
+        new("Store group", "StoreGroupName", ReceiptsDimensions.StoreGroup), new("Store #", "StoreNumber", ReceiptsDimensions.Store),
+        new("Store name", "StoreName", ReceiptsDimensions.Store), new("Profit center", "ProfitCenter", ReceiptsDimensions.ProfitCenter),
+        new("Receipt class", "ReceiptClass", ReceiptsDimensions.ReceiptClass), new("Receipt type", "ReceiptType", ReceiptsDimensions.ReceiptType),
+        new("Card batch", "CreditCardBatchNumber", ReceiptsDimensions.CreditCardBatchNumber),
+        new("Cashier dept", "CashierStaffDepartmentName", ReceiptsDimensions.CashierStaffDepartment), new("Cashier", "CashierName", ReceiptsDimensions.Cashier),
+        new("Server dept", "ServerStaffDepartmentName", ReceiptsDimensions.ServerStaffDepartment), new("Server", "ServerName", ReceiptsDimensions.Server),
+        new("Check", "CheckNumber", ReceiptsDimensions.CheckNumber), new("Day", "DayName", ReceiptsDimensions.DayName),
+        new("Week", "WeekName", ReceiptsDimensions.WeekName), new("Session", "CashierSessionNumber", ReceiptsDimensions.CashierSessionNumber),
+        new("Hour", "DayHourName", ReceiptsDimensions.DayHourNumber),
+    ];
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private readonly HashSet<int> selected = [];
+    private static readonly IReadOnlyList<DrillColumn> Cat = DrillCatalogs.Receipts;
+    private readonly DrillState state = NewState();
+    private static DrillState NewState() { var s = new DrillState(); s.Flags.Add("Store"); return s; }
+    private readonly DrillKeyResolver resolver = new();
+    private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
+    private string? error;
+    private DataTable? result;
+    private ReceiptsDimensions ranDims; private DateTime rangeStart, rangeEnd;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Receipts);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Receipts);
+        foreach (var s in stores) selected.Add(s.StoreId);
+    }
+
+    private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+    private void ToggleDim(ReceiptsDimensions d, bool on) { if (on) state.Flags.Add(d.ToString()); else state.Flags.Remove(d.ToString()); }
+
+    private async Task Act(Action<DrillState> change) { change(state); await ExecuteAsync(); }
+    private async Task RowClick(DrillColumn dc, DataRow row)
+    {
+        if (ctx is null || busy) return;
+        var v = await resolver.ResolveAsync(ctx.ClientConnectionString, dc, row, checkedRows);
+        if (v.Length == 0) return;
+        state.RowClick(Cat, dc.Key, v);
+        await ExecuteAsync();
+    }
+    private readonly HashSet<DataRow> checkedRows = [];
+    private static bool CanClick(DataRow row, DrillColumn dc) => DrillKeyResolver.CanClick(row, dc);
+    private void Check(DataRow row, bool on) { if (on) checkedRows.Add(row); else checkedRows.Remove(row); }
+    private static string LineKey(StackColumn c, StackLine line) => c.Title + "/" + line.Label;
+    private string Mark(string key) => state.SortHeader == key ? (state.SortDescending ? " ▼" : " ▲") : "";
+    private IEnumerable<DataRow> Ordered()
+    {
+        if (result is null) return [];
+        var h = state.SortHeader;
+        if (h is null) return result.Rows.Cast<DataRow>();
+        var lead = Leading.FirstOrDefault(l => l.Label == h);
+        if (lead is not null)
+        {
+            var dc = DrillState.ForDisplay(Cat, lead.Column);
+            return GridSort.Rows(result, GridSort.Column(result, dc?.SortColumn is not null && result.Columns.Contains(dc.SortColumn) ? dc.SortColumn : lead.Column), state.SortDescending);
+        }
+        foreach (var c in ReceiptsLayout.Columns)
+            foreach (var line in c.Lines)
+                if (LineKey(c, line) == h)
+                    return GridSort.Rows(result, line.Format == CellFormat.Percent ? GridSort.Column(result, line.NumeratorColumn!, line.DenominatorColumn) : GridSort.Column(result, line.Column), state.SortDescending);
+        return result.Rows.Cast<DataRow>();
+    }
+    private static string Text(DataRow row, string col) => row.Table.Columns.Contains(col) && row[col] is not DBNull ? row[col].ToString() ?? "" : "";
+
+    /// <summary>The Submit button: a fresh report, so filters and sort start over.</summary>
+    private async Task RunAsync() { state.Filters.Clear(); state.SortHeader = null; await ExecuteAsync(); }
+
+    private async Task ExecuteAsync()
+    {
+        if (ctx is null || busy) return;
+        error = null; result = null; checkedRows.Clear();
+        var dims = state.Dimensions<ReceiptsDimensions>();
+        var allowedIds = stores.Select(s => s.StoreId).ToHashSet();                         // re-check against the access list
+        var (ids, lists) = DrillFilters.Split(state, Cat, selected.Where(allowedIds.Contains));
+        if (ids.Count == 0) { error = "Pick at least one store."; return; }
+        if (end < start) { error = "The end date is before the start date."; return; }
+        busy = true;
+        try
+        {
+            var req = new ReceiptsRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids,
+                lists.Count == 0 ? null : lists.ToDictionary(kv => Enum.Parse<ReceiptsDimensions>(kv.Key), kv => kv.Value));
+            result = await ReceiptsSvc.RunAsync(ctx.ClientConnectionString, req);
+            ranDims = dims; rangeStart = start; rangeEnd = end;
+        }
+        catch (Exception ex) { error = "The query failed: " + ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task Shift(int dir)
+    {
+        var days = (int)(end - start).TotalDays + 1;
+        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        await ExecuteAsync();
+    }
+    private async Task ExcelAsync()
+    {
+        if (result is null) return;
+        var lead = AllLeading.Where(l => ranDims.HasFlag(l.Dim)).Select(l => (l.Label, l.Column)).ToList();
+        var (h, rows) = ReceiptsExport.Build(result, lead);
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Receipts", $"Receipts review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}", h, rows);
+        await JS.InvokeVoidAsync("ddDownload", $"ReceiptsReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    }
+}

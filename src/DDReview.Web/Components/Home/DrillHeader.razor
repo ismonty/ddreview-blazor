@@ -1,0 +1,35 @@
+@* A grid header cell. Plain, sortable (click sorts), or a dimension (click shows that dimension alone; small buttons under it
+   are the old Drill Up / Drill Right / Show All footer buttons, plus a sort toggle). *@
+<th class="@Css">
+    @if (Dimension)
+    {
+        <button type="button" class="hlink" title="Show only this" @onclick="OnTitle">@Title</button>
+        @if (Buttons)
+        {
+            <div class="hbtns">
+                <button type="button" title="Drill Up: also group by this" @onclick="OnUp">Up</button>
+                <button type="button" title="@("Drill Right: also group by " + NextTitle)" @onclick="OnRight">Right</button>
+                @if (Filtered) { <button type="button" title="Show All: forget the filter on this" @onclick="OnShowAll">All</button> }
+                <button type="button" title="Sort by this" @onclick="OnSort">@(Mark.Length == 0 ? "Sort" : Mark)</button>
+            </div>
+        }
+    }
+    else if (Sortable) { <button type="button" class="hlink" title="Sort by this" @onclick="OnSort">@Title@Mark</button> }
+    else { @Title }
+</th>
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Css { get; set; }
+    [Parameter] public bool Dimension { get; set; }
+    [Parameter] public bool Sortable { get; set; }
+    [Parameter] public bool Buttons { get; set; }
+    [Parameter] public bool Filtered { get; set; }
+    [Parameter] public string NextTitle { get; set; } = "";
+    /// <summary>" ▲" / " ▼" when this is the sorted column.</summary>
+    [Parameter] public string Mark { get; set; } = "";
+    [Parameter] public EventCallback OnTitle { get; set; }
+    [Parameter] public EventCallback OnUp { get; set; }
+    [Parameter] public EventCallback OnRight { get; set; }
+    [Parameter] public EventCallback OnShowAll { get; set; }
+    [Parameter] public EventCallback OnSort { get; set; }
+}

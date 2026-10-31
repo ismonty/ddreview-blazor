@@ -1,0 +1,8 @@
+@using DDReview.Core.Tenancy
+<ul class="menu">
+    @if (Access.CanSee(ReportKind.Sales)) { <li><a href="/sales">Sales review</a></li> }
+    @if (Access.CanSee(ReportKind.Receipts)) { <li><a href="/receipts">Receipts review</a></li> }
+    @if (Access.CanSee(ReportKind.Payroll)) { <li><a href="/labor">Labor review</a></li> }
+    @if (Access.CanSee(ReportKind.DebitCredit)) { <li><a href="/gl">General ledger review</a></li> }
+</ul>
+@code { [Parameter, EditorRequired] public UserAccess Access { get; set; } = null!; }

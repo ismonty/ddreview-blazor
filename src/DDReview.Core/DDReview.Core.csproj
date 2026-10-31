@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.14" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The client-database scripts are embedded straight from /sql so the Updater page and the files cannot drift apart. -->
+    <EmbeddedResource Include="..\..\sql\002_client_drill_pair_type.sql" LogicalName="ClientScripts/002_client_drill_pair_type.sql" />
+  </ItemGroup>
+
+</Project>

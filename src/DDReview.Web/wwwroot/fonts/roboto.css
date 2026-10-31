@@ -1,0 +1,3 @@
+/* Self-hosted Roboto, same files as the MOOTT / BOB apps. */
+@font-face { font-family: "Roboto"; font-style: normal; font-weight: 400; font-display: swap; src: url("roboto-400.woff2") format("woff2"); }
+@font-face { font-family: "Roboto"; font-style: normal; font-weight: 700; font-display: swap; src: url("roboto-700.woff2") format("woff2"); }
