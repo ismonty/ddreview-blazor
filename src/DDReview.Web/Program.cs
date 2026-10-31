@@ -117,12 +117,16 @@ if (googleOn)
         return Results.Challenge(props, ["Google"]);
     });
 
-    app.MapGet("/account/google/done", async (HttpContext ctx, LoginService login, ICentralDirectory central) =>
+    app.MapGet("/account/google/done", async (HttpContext ctx, LoginService login, ICentralDirectory central, ILogger<Program> log) =>
     {
         var ext = await ctx.AuthenticateAsync(ExternalScheme);
         await ctx.SignOutAsync(ExternalScheme);
         var sub = ext.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!ext.Succeeded || string.IsNullOrEmpty(sub)) return Results.Redirect("/login?e=google");
+        if (!ext.Succeeded || string.IsNullOrEmpty(sub))
+        {
+            log.LogWarning("Google sign-in did not complete: {Reason}", ext.Failure?.Message ?? "no Google account id came back (external cookie missing or expired)");
+            return Results.Redirect("/login?e=google");
+        }
         try
         {
             if (ext.Properties?.Items.TryGetValue("linkUser", out var linkUser) == true)
@@ -136,7 +140,11 @@ if (googleOn)
                 ctx.Request.Headers.UserAgent.ToString(), ctx.Request.Host.Host, ctx.RequestAborted);
             return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r);
         }
-        catch (Microsoft.Data.SqlClient.SqlException) { return Results.Redirect("/login?e=google"); }   // e.g. sql/003 not run on the central master yet
+        catch (Microsoft.Data.SqlClient.SqlException ex)   // e.g. sql/003 not run on the central master yet
+        {
+            log.LogError(ex, "Google sign-in could not read dbo.tblWebUserGoogle on the central master (has sql/003_central_google_link.sql been run?)");
+            return Results.Redirect("/login?e=google");
+        }
     });
 
     app.MapPost("/account/google/unlink", async (HttpContext ctx, ICentralDirectory central, [FromForm] string? confirm) =>
@@ -157,3 +165,5 @@ app.MapPost("/account/logout", async (HttpContext ctx, Microsoft.AspNetCore.Anti
 
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.Run();
+
+public partial class Program { }
