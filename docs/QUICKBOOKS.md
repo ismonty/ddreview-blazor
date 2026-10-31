@@ -8,7 +8,7 @@ Port of the DDAdminCS (Access) feature that posts the multistore general ledger 
 - `tests/DDReview.Tests/QuickBooks` - tests, including a fake QuickBooks that answers QBXML the way QuickBooks does.
 
 ## How a run goes
-1. **Read** the export package: `select * from dbo.fn_CashAndSalesGLandARMultiStoreSelectExportPackage2(stores, start, end, scope)` (`SqlPackageSource`).
+1. **Read** the export package: `select * from dbo.fn_CashAndSalesGLandARMultiStoreSelectExportPackage2(stores, start, end, scope, 0, 0)` (the last two are the sales-tax flag and account class, which the old app also passed as 0) (`SqlPackageSource`).
    Scope bits as in Access: 1 general ledger, 2 accounts receivable, 16 A/R adjustments (4 labor and 8 COGS are not ported yet).
 2. **Plan** (`PlanBuilder`): the package rows become list objects (vendors, accounts, classes, service items, customers, customer types)
    and transactions (journal entries, invoices, receive payments, credit memos). This is a port of
