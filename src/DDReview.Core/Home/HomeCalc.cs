@@ -81,6 +81,17 @@ public sealed class DashboardTotals
         return d;
     }
 
+    static readonly string[] ActivityColumns =
+        ["TotalSales", "PreviousTotalSales", "TotalSalesBudget", "TotalGrossSales", "TotalDiscounts", "TotalVoids", "TotalLabor", "TotalProductCost", "TotalPurchases"];
+
+    /// <summary>
+    /// True when the row has any number in the current range or the comparison range. A store with no sales today but sales (or labor,
+    /// purchases, ...) in the range it is compared with still shows; only a store with nothing in either is left off. Same idea as
+    /// <see cref="DailySummaryLine.IsAllZero"/>.
+    /// </summary>
+    public static bool HasActivity(DataRow r) =>
+        ActivityColumns.Any(c => r.Table.Columns.Contains(c) && r[c] is not DBNull && Convert.ToDecimal(r[c], CultureInfo.InvariantCulture) != 0m);
+
     /// <summary>A round gauge maximum above <paramref name="value"/> (1, 2, 2.5, 5 or 10 times a power of ten); 100 when there is nothing.</summary>
     public static double NiceMax(double value)
     {
