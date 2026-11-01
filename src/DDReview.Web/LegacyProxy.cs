@@ -89,6 +89,15 @@ public static class LegacyProxy
             string rawPath = raw.Split('?', 2)[0];
             string rawQuery = raw.Contains('?') ? raw[(raw.IndexOf('?') + 1)..] : "";
             string method = ctx.Request.Method;
+            if (LegacyPathPolicy.IsSignedOutLanding(rawPath, method, rawQuery, o) && LegacyPathPolicy.IsSignedOutLanding(path, method, rawQuery, o))
+            {
+                // The old site's Sign out ends on its login page, which this app never shows. Say what happened instead of "Not Found".
+                ctx.Response.StatusCode = StatusCodes.Status200OK;
+                ctx.Response.ContentType = "text/html; charset=utf-8";
+                ctx.Response.Headers.CacheControl = "no-store";
+                await ctx.Response.WriteAsync(SignedOutPage);
+                return;
+            }
             if (!path!.Equals(o.PathPrefix, StringComparison.OrdinalIgnoreCase)
                 && (!LegacyPathPolicy.IsAllowedRequest(rawPath, method, rawQuery, o) || !LegacyPathPolicy.IsAllowedRequest(path, method, rawQuery, o)))
             {
@@ -107,6 +116,18 @@ public static class LegacyProxy
             }
         });
     }
+
+    const string SignedOutPage = """
+        <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Signed out of Classic</title>
+        <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#000;color:#f5efe0;font:16px/1.5 Roboto,system-ui,sans-serif}
+        main{max-width:26rem;padding:2rem}h1{font-size:1.25rem}a,button{font:inherit;color:#10206a;background:#d9a916;border:0;border-radius:4px;padding:.5rem 1rem;margin:.25rem .5rem .25rem 0;cursor:pointer;text-decoration:none;display:inline-block}</style></head>
+        <body><main><h1>You've signed out of Classic.</h1>
+        <p>You're still signed in to DD Review.</p>
+        <button type="button" onclick="window.close();document.getElementById('m').hidden=false">Close this tab</button>
+        <a href="/">Back to DD Review</a>
+        <p id="m" hidden>Your browser kept this tab open. You can close it yourself.</p></main></body></html>
+        """;
 
     public static void MapLegacyProxy(this WebApplication app)
     {
