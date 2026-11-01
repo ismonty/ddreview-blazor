@@ -117,5 +117,6 @@ and limited to the stores the user's General Ledger access covers (the check is 
 UI (`Gl.razor`): a "Submission report" link on each daily total line of the detail modes opens that day's reports (straight to the page when there is only one);
 a "View Submission Reports" button under the results opens all reports of the run as thumbnails (store and date in small text), tap one for the full page with Previous/Next.
 The viewer opens over the page so the report you ran stays put. Thumbnails load lazily, 48 at a time. At most 1000 reports are listed per request.
+Quiet days (no sales line with an amount or quantity and no receipt line with an amount) are left out of the list; an older schema missing one of those columns gets the list without that test.
 Unverified against a live database: whether the text sits exactly where the old JPEG put it (the baseline offset is an estimate), and the SQL on a database without `tblCashAndSalesReport` (shows a "not available" message).
 
