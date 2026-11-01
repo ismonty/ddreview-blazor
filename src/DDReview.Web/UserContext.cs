@@ -12,9 +12,12 @@ public sealed class UserContextService(
     AuthenticationStateProvider auth, ICentralDirectory central, ITenantConnectionFactory tenants,
     ClientAccessService clientAccess, IMemoryCache cache)
 {
-    public async Task<UserContext?> GetAsync(CancellationToken ct = default)
+    public async Task<UserContext?> GetAsync(CancellationToken ct = default) =>
+        await GetAsync((await auth.GetAuthenticationStateAsync()).User, ct);
+
+    /// <summary>For plain endpoints (no Blazor circuit): the same context from the request's signed-in user.</summary>
+    public async Task<UserContext?> GetAsync(ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var user = (await auth.GetAuthenticationStateAsync()).User;
         if (!int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id)) return null;
         return await cache.GetOrCreateAsync($"ctx:{id}", async e =>
         {

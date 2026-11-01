@@ -25,6 +25,7 @@ builder.Services.AddSingleton<ICentralDirectory, CentralDirectory>();
 builder.Services.AddSingleton<ITenantConnectionFactory, TenantConnectionFactory>();
 builder.Services.AddSingleton<ClientAccessService>();
 builder.Services.AddSingleton<GlService>();
+builder.Services.AddSingleton<DDReview.Core.Gl.SubmissionReportService>();
 builder.Services.AddSingleton<DDReview.Core.Updater.ClientUpdater>();
 builder.Services.AddSingleton<DDReview.Core.Sales.SalesService>();
 builder.Services.AddSingleton<DDReview.Core.Home.HomeService>();
@@ -97,6 +98,20 @@ static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r)
         default: return Results.Redirect("/login?e=bad");
     }
 }
+
+// The stored submission report of a batch, drawn as SVG (thumbnails and the full page both use it). Signed-in users only, and only for
+// stores their General Ledger access covers.
+app.MapGet("/gl/submission-image/{batchId:int}", async (int batchId, HttpContext http, UserContextService users, DDReview.Core.Gl.SubmissionReportService reports) =>
+{
+    var ctx = await users.GetAsync(http.User, http.RequestAborted);
+    if (ctx is null || !(ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.DebitCredit))) return Results.NotFound();
+    DDReview.Core.Gl.SubmissionReport? report;
+    try { report = await reports.GetAsync(ctx.ClientConnectionString, batchId, DDReview.Core.Gl.SubmissionReportService.AllowedStores(ctx.Access, ReportKind.DebitCredit), http.RequestAborted); }
+    catch (Microsoft.Data.SqlClient.SqlException) { return Results.NotFound(); }
+    if (report is null || report.Commands.Count == 0) return Results.NotFound();
+    http.Response.Headers.CacheControl = "private, max-age=600";
+    return Results.Text(DDReview.Core.Gl.SubmissionSvg.Render(report.Commands), "image/svg+xml");
+}).RequireAuthorization();
 
 app.MapPost("/account/login", async (HttpContext ctx, [FromForm] string? userName, [FromForm] string? password, LoginService login) =>
 {

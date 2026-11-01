@@ -39,6 +39,7 @@ database for the objects DD Review adds (scripts 002 and 004, embedded from `/sq
 itself rights: if the reports' login lacks db_ddladmin it shows the `sp_addrolemember` line to run, and the grant procedure covers the grants.
 
 ## Not ported / open
+- Submission reports are ported (slice 10 in PORTING-NOTES) but not yet seen on staging.
 - Downloads/Payments tab (owner said hold), Options tab, Link/Print, Specials/Daily Discounts, L0-L3/LY buttons, Costs review, saved per-column sort strings, Back/Forward click history.
 - Receipts "Credit Card/Cash" conversion error on an older-schema client DB was fixed (ReceiptClass key column name); the class/type cell not being a link there needs re-checking after the fix.
 - Labor: crash on empty result fixed; employee click now opens punch detail; a client DB where Labor returned no rows at first still needs a look (send the generated script and run in SSMS to find out why).

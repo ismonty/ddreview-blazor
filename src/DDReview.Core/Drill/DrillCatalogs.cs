@@ -25,12 +25,18 @@ public static class DrillCatalogs
         new("DayHour", ["DayHourName"], "DayHourNumber", "DayHour", SortColumn: "DayHourNumber"),
     ];
 
+    /// <summary>The fixed receipt classes and their ids, as the report's own SQL defines them (@tblReceiptClasses); "Other" is 3.</summary>
+    static readonly IReadOnlyDictionary<string, string> ReceiptClassIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Cash"] = "1", ["Credit Card"] = "2", ["Other"] = "3", ["GC Redeem"] = "4", ["Bad Payment"] = "1000",
+    };
+
     public static readonly IReadOnlyList<DrillColumn> Receipts =
     [
         new("StoreGroup", ["StoreGroupName"], "StoreGroupID", "Store"),
         new("Store", ["StoreNumber", "StoreName"], "StoreID", "ProfitCenter"),
         new("ProfitCenter", ["ProfitCenter"], "ProfitCenterID", "Cashier"),
-        new("ReceiptClass", ["ReceiptClass"], "ReceiptClassID", "Cashier"),
+        new("ReceiptClass", ["ReceiptClass"], "ReceiptClassID", "Cashier", IdByName: ReceiptClassIds),
         new("ReceiptType", ["ReceiptType"], "ReceiptTypeID", "Cashier"),
         new("CreditCardBatchNumber", ["CreditCardBatchNumber"], "CreditCardBatchNumber", "ReceiptType"),
         new("CashierStaffDepartment", ["CashierStaffDepartmentName"], "CashierStaffDepartmentName", "Cashier", Fn + "StaffDepartmentName"),
