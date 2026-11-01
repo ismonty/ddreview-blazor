@@ -73,6 +73,25 @@ public class HomeTests
     }
 
     [Fact]
+    public void A_store_with_no_sales_now_but_numbers_in_the_comparison_range_still_shows()
+    {
+        var t = new DataTable();
+        foreach (var c in new[] { "StoreName", "TotalSales", "PreviousTotalSales", "TotalSalesBudget", "TotalLabor" }) t.Columns.Add(c, c == "StoreName" ? typeof(string) : typeof(decimal));
+        t.Rows.Add("Busy", 500m, 400m, 0m, 0m);
+        t.Rows.Add("Closed today", 0m, 350m, 0m, 0m);          // prior history only
+        t.Rows.Add("Labor only", 0m, 0m, 0m, 80m);             // current numbers but no sales
+        t.Rows.Add("Dormant", 0m, 0m, 0m, 0m);
+        t.Rows.Add("Nulls", DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+        var shown = t.Rows.Cast<DataRow>().Where(DashboardTotals.HasActivity).Select(r => (string)r["StoreName"]).ToList();
+        Assert.Equal(["Busy", "Closed today", "Labor only"], shown);
+
+        // the Daily Summary rule already behaves the same way
+        var ds = Summary();
+        ds.Rows.Add(3m, 0m, 350m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, "Closed today");
+        Assert.False(DailySummaryLine.From(ds.Rows[ds.Rows.Count - 1]).IsAllZero);
+    }
+
+    [Fact]
     public void Sections_with_only_zero_or_empty_numbers_are_flagged_all_zero()
     {
         var t = new DataTable();
