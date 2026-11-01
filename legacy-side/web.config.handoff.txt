@@ -1,0 +1,11 @@
+Changes to the old site's web.config (this server's copy only; the secret never goes in git):
+
+1. In <appSettings> add:
+     <add key="HandoffSecret" value="PASTE-THE-SAME-32+-CHARACTER-SECRET-AS-THE-NEW-SITE"/>
+
+2. Keep the sign-in cookie inside the application:
+     <forms loginUrl="LoginPage.aspx" name=".ASPXFORMSAUTH" path="/classic"></forms>
+
+3. Replace the "DSN" connection string with the old site's own least-privilege login (sql/005_legacy_site_logins.sql).
+
+4. Production: <compilation debug="false"> and <add key="SQLDebug" value="false"/>.

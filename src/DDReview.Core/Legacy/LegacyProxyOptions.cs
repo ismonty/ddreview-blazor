@@ -14,10 +14,10 @@ public sealed class LegacyProxyOptions
     public int TicketSeconds { get; set; } = 60;
     /// <summary>Largest request body passed to the old site, in megabytes.</summary>
     public int MaxRequestMegabytes { get; set; } = 10;
-    /// <summary>The old site's login page. Reachable only while handoff is off.</summary>
+    /// <summary>The old site's login page. With handoff on it is reachable only as the ticket entry point (GET, query starts with <c>t=</c>).</summary>
     public string LegacyLoginPath { get; set; } = "/classic/LoginPage.aspx";
-    /// <summary>Where the old site accepts a ticket (the small file the owner adds in VS 2008).</summary>
-    public string HandoffPath { get; set; } = "/classic/Handoff.aspx";
+    /// <summary>Where the old site accepts a ticket: its own login page, which gets a few lines in VS 2008 (see docs/LEGACY-OLDSIDE.md).</summary>
+    public string HandoffPath { get; set; } = "/classic/LoginPage.aspx";
     /// <summary>Installer downloads (/classic/download/...) stay blocked unless the owner turns them on.</summary>
     public bool AllowDownloads { get; set; }
 

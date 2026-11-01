@@ -55,12 +55,20 @@ public class LegacyPathPolicyTests
     public void Blocks_everything_else(string? path) => Assert.False(LegacyPathPolicy.IsAllowed(path, Opt()));
 
     [Fact]
-    public void Old_login_page_is_blocked_once_handoff_is_on()
-    {
-        Assert.True(LegacyPathPolicy.IsAllowed("/classic/LoginPage.aspx", Opt(handoff: false)));
-        Assert.False(LegacyPathPolicy.IsAllowed("/classic/LoginPage.aspx", Opt(handoff: true)));
-        Assert.True(LegacyPathPolicy.IsAllowed("/classic/Handoff.aspx", Opt(handoff: true)));
-    }
+    public void Old_login_page_is_open_while_handoff_is_off()
+        => Assert.True(LegacyPathPolicy.IsAllowedRequest("/classic/LoginPage.aspx", "POST", "", Opt(handoff: false)));
+
+    [Theory]
+    [InlineData("GET", "t=abc&ReturnUrl=%2Fclassic%2FDefault.aspx", true)]
+    [InlineData("GET", "", false)]
+    [InlineData("GET", "ReturnUrl=%2Fclassic%2F&t=abc", false)]
+    [InlineData("POST", "t=abc", false)]
+    public void With_handoff_on_the_old_login_page_is_only_a_ticket_entry_point(string method, string query, bool expected)
+        => Assert.Equal(expected, LegacyPathPolicy.IsAllowedRequest("/classic/LoginPage.aspx", method, query, Opt(handoff: true)));
+
+    [Fact]
+    public void Other_pages_are_unaffected_by_the_login_rule()
+        => Assert.True(LegacyPathPolicy.IsAllowedRequest("/classic/Default.aspx", "POST", "", Opt(handoff: true)));
 
     [Fact]
     public void Downloads_only_when_switched_on()

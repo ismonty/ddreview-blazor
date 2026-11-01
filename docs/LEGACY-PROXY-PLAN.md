@@ -42,3 +42,5 @@ and expect the owner to build and test in VS 2008. Never commit secrets, connect
 - `DDReview.Core/Legacy`: `LegacyTicket` (format `v1.{webUserId}.{expiry}.{nonce}.{hmac}`, shared test vectors in `LegacyTicketTests`), `LegacyPathPolicy` (allow-list), `LegacyCookies`, `LegacyProxyOptions`.
 - `DDReview.Web/LegacyProxy.cs`: YARP route `/classic/{**catch-all}` (signed-in users only), path gate, request log, size limit, cookie stripping, `/classic-enter` (mints a ticket). All off unless `LegacyProxy:Enabled` is true; the upstream must be a loopback address.
 - Settings: `deploy/appsettings.Production.example.json` (`LegacyProxy`). The handoff secret goes only in the server's `appsettings.Production.json`.
+- Old-side draft (not built or compiled): `legacy-side/` and `docs/LEGACY-OLDSIDE.md`. Handoff goes through the old login page itself (ticket in the query string), not a new page.
+- Least-privilege SQL for the old site's own login: `sql/005_legacy_central_access.sql`, `sql/006_legacy_client_access.sql`.

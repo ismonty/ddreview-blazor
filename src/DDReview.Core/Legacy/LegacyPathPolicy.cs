@@ -37,12 +37,22 @@ public static class LegacyPathPolicy
         if (last.Length == 0) return true;                    // "/classic/" : the old site's default document
         if (IsBlocked(last, o)) return false;
 
-        if (o.HandoffOn && string.Equals(path, o.LegacyLoginPath, StringComparison.OrdinalIgnoreCase))
-            return false;                                     // handoff on: nobody uses the old login page any more
 
         string ext = Path.GetExtension(last);
         if (!AllowedExtensions.Contains(ext)) return false;
         if (ext.Equals(".axd", StringComparison.OrdinalIgnoreCase) && !AllowedHandlers.Contains(last)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Path rules plus the request-specific one: once handoff is on, the old login page is reachable only as the ticket entry point
+    /// (a GET whose query starts with <c>t=</c>), so nobody types a password into the old site.
+    /// </summary>
+    public static bool IsAllowedRequest(string? path, string method, string? query, LegacyProxyOptions o)
+    {
+        if (!IsAllowed(path, o)) return false;
+        if (o.HandoffOn && string.Equals(path, o.LegacyLoginPath, StringComparison.OrdinalIgnoreCase))
+            return string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(query) && query.StartsWith("t=", StringComparison.Ordinal);
         return true;
     }
 

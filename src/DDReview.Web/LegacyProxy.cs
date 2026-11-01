@@ -87,7 +87,10 @@ public static class LegacyProxy
             // Judge the raw (still percent-encoded) target, so tricks like %2e%2e are refused rather than decoded.
             string raw = ctx.Features.Get<IHttpRequestFeature>()?.RawTarget ?? path!;
             string rawPath = raw.Split('?', 2)[0];
-            if (!path!.Equals(o.PathPrefix, StringComparison.OrdinalIgnoreCase) && (!LegacyPathPolicy.IsAllowed(rawPath, o) || !LegacyPathPolicy.IsAllowed(path, o)))
+            string rawQuery = raw.Contains('?') ? raw[(raw.IndexOf('?') + 1)..] : "";
+            string method = ctx.Request.Method;
+            if (!path!.Equals(o.PathPrefix, StringComparison.OrdinalIgnoreCase)
+                && (!LegacyPathPolicy.IsAllowedRequest(rawPath, method, rawQuery, o) || !LegacyPathPolicy.IsAllowedRequest(path, method, rawQuery, o)))
             {
                 log.LogWarning("Blocked {Method} {Path} for user {User} from {Ip}", ctx.Request.Method, rawPath, ctx.User.Identity?.Name ?? "-", ctx.Connection.RemoteIpAddress);
                 ctx.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -110,7 +113,7 @@ public static class LegacyProxy
         var o = Read(app.Configuration);
         if (!o.Enabled) return;
         app.MapReverseProxy();
-        // /classic-enter?to=/classic/DDSalesReview.aspx : mints a ticket and sends the browser to the old site's Handoff page (only when handoff is on).
+        // /classic-enter?to=/classic/DDSalesReview.aspx : mints a ticket and sends the browser to the old site's login page with it (only when handoff is on).
         app.MapGet("/classic-enter", (HttpContext ctx, IOptions<LegacyProxyOptions> opt) =>
         {
             var lo = opt.Value;
@@ -119,7 +122,8 @@ public static class LegacyProxy
             string to = ctx.Request.Query["to"].ToString();
             if (!LegacyPathPolicy.IsAllowed(to, lo)) to = lo.PathPrefix + "/Default.aspx";
             string ticket = LegacyTicket.Mint(lo.HandoffSecret, uid, DateTimeOffset.UtcNow, TimeSpan.FromSeconds(lo.TicketSeconds));
-            return Results.Redirect($"{lo.HandoffPath}?t={Uri.EscapeDataString(ticket)}&to={Uri.EscapeDataString(to)}");
+            // The old login page signs the person in and then sends them to ReturnUrl (standard Forms authentication behaviour).
+            return Results.Redirect($"{lo.HandoffPath}?t={Uri.EscapeDataString(ticket)}&ReturnUrl={Uri.EscapeDataString(to)}");
         }).RequireAuthorization();
     }
 }
