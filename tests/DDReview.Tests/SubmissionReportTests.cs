@@ -53,4 +53,19 @@ public class SubmissionReportTests
         Assert.Null(SubmissionReportService.AllowedStores(open, ReportKind.DebitCredit));
         Assert.Null(SubmissionReportService.AllowedStores(new UserAccess { Administrator = true }, ReportKind.DebitCredit));
     }
+
+    [Fact]
+    public void The_list_query_leaves_out_quiet_days_unless_told_not_to()
+    {
+        var withTest = SubmissionReportService.ListSql(true);
+        Assert.Contains("tblCashAndSalesSales", withTest);
+        Assert.Contains("tblCashAndSalesReceipts", withTest);
+        Assert.Contains("csr.AmountTotal <> 0", withTest);
+        Assert.Contains("tblCashAndSalesReport", withTest);          // still requires a stored report
+        var without = SubmissionReportService.ListSql(false);
+        Assert.DoesNotContain("tblCashAndSalesSales", without);
+        Assert.DoesNotContain("AmountTotal", without);
+        Assert.Contains("fn_CreateKeyTableValueFromCSVString(@allowed)", withTest);   // store restriction is in both
+        Assert.Contains("fn_CreateKeyTableValueFromCSVString(@allowed)", without);
+    }
 }

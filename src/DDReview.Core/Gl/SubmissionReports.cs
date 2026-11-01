@@ -26,21 +26,47 @@ public sealed class SubmissionReportService
     public static string? AllowedStores(Tenancy.UserAccess access, Tenancy.ReportKind kind) =>
         access.Administrator || access.AllStores.Contains(kind) ? null : access.StoreListCsv(kind);
 
-    /// <summary>Batches with a stored report for the stores and dates (inclusive), oldest first. The list is cut at <see cref="MaxListed"/>.</summary>
-    public async Task<IReadOnlyList<SubmissionBatch>> ListAsync(string connectionString, string storeListCsv, string? allowedStoresCsv,
-        DateOnly start, DateOnly end, CancellationToken ct = default)
-    {
-        await using var cn = new SqlConnection(connectionString);
-        await cn.OpenAsync(ct);
-        await using var cmd = new SqlCommand($@"
+    /// <summary>
+    /// A batch counts as a day with business when it has a sales line with an amount or quantity, or a receipt line with any amount
+    /// (the same tables the Sales and Receipts reviews read). Days with nothing in either are quiet days and are left out of the list.
+    /// </summary>
+    const string HasActivity = @"
+  and (exists (select 1 from dbo.tblCashAndSalesSales css with (nolock) where css.BatchID = csb.BatchID and (css.Amount <> 0 or css.Quantity <> 0))
+    or exists (select 1 from dbo.tblCashAndSalesReceipts csr with (nolock) where csr.BatchID = csb.BatchID
+               and (csr.AmountTotal <> 0 or csr.AmountFood <> 0 or csr.AmountBeverage <> 0 or csr.AmountOther <> 0 or csr.AmountCharge <> 0
+                    or csr.AmountDiscount <> 0 or csr.AmountTax <> 0 or csr.AmountTip <> 0)))";
+
+    public static string ListSql(bool skipQuietDays) => $@"
 select top ({MaxListed}) csb.BatchID, csb.StoreID, sto.StoreNumber, isnull(sto.StoreName, sto.StoreGCode) as StoreName, csb.PostingDate
 from dbo.tblCashAndSalesBatches csb
 inner join dbo.tblStores sto on sto.StoreID = csb.StoreID
 where csb.StoreID in (select KeyValue from dbo.fn_CreateKeyTableValueFromCSVString(@stores))
   and (@allowed is null or csb.StoreID in (select KeyValue from dbo.fn_CreateKeyTableValueFromCSVString(@allowed)))
   and csb.PostingDate >= @start and csb.PostingDate < dateadd(day, 1, @end)
-  and exists (select 1 from dbo.tblCashAndSalesReport r where r.BatchID = csb.BatchID)
-order by csb.PostingDate, sto.StoreNumber, csb.BatchID", cn) { CommandTimeout = 120 };
+  and exists (select 1 from dbo.tblCashAndSalesReport r where r.BatchID = csb.BatchID){(skipQuietDays ? HasActivity : "")}
+order by csb.PostingDate, sto.StoreNumber, csb.BatchID";
+
+    /// <summary>
+    /// Batches with a stored report for the stores and dates (inclusive), oldest first, leaving out days with no sales and no receipts.
+    /// The list is cut at <see cref="MaxListed"/>. If a database lacks one of the columns the quiet-day test reads, the list is
+    /// returned without that test rather than failing.
+    /// </summary>
+    public async Task<IReadOnlyList<SubmissionBatch>> ListAsync(string connectionString, string storeListCsv, string? allowedStoresCsv,
+        DateOnly start, DateOnly end, CancellationToken ct = default)
+    {
+        await using var cn = new SqlConnection(connectionString);
+        await cn.OpenAsync(ct);
+        try { return await ListCoreAsync(cn, true, storeListCsv, allowedStoresCsv, start, end, ct); }
+        catch (SqlException ex) when (ex.Number is 207 or 208)   // invalid column / object name: an older schema
+        {
+            return await ListCoreAsync(cn, false, storeListCsv, allowedStoresCsv, start, end, ct);
+        }
+    }
+
+    static async Task<IReadOnlyList<SubmissionBatch>> ListCoreAsync(SqlConnection cn, bool skipQuietDays, string storeListCsv, string? allowedStoresCsv,
+        DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(ListSql(skipQuietDays), cn) { CommandTimeout = 120 };
         cmd.Parameters.Add("@stores", SqlDbType.VarChar, 8000).Value = storeListCsv ?? "";
         cmd.Parameters.Add("@allowed", SqlDbType.VarChar, 8000).Value = (object?)allowedStoresCsv ?? DBNull.Value;
         cmd.Parameters.Add("@start", SqlDbType.DateTime).Value = start.ToDateTime(TimeOnly.MinValue);

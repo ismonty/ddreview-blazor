@@ -106,7 +106,7 @@ else
                 </div>
                 @if (subsError is not null) { <p class="error" role="alert">@subsError</p> }
                 else if (subs is null) { <p>Loading…</p> }
-                else if (subs.Count == 0) { <p class="muted">No submission reports for these stores and dates.</p> }
+                else if (subs.Count == 0) { <p class="muted">No submission reports for these stores and dates (days with no sales and no receipts are left out).</p> }
                 else if (subsViewing is int vi && vi >= 0 && vi < subs.Count)
                 {
                     var b = subs[vi];
