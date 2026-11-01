@@ -69,6 +69,17 @@ public class LegacyPathPolicyTests
     public void With_handoff_on_the_old_login_page_is_only_a_ticket_entry_point(string method, string query, bool expected)
         => Assert.Equal(expected, LegacyPathPolicy.IsAllowedRequest("/classic/LoginPage.aspx", method, query, Opt(handoff: true)));
 
+    [Theory]
+    [InlineData("GET", "ReturnUrl=%2fclassic%2fDefault.aspx", true)]   // what the old Sign out lands on
+    [InlineData("GET", "", true)]
+    [InlineData("GET", "t=abc&ReturnUrl=%2Fclassic%2F", false)]   // a ticket still goes through to the old site
+    [InlineData("POST", "", false)]
+    public void Old_sign_out_landing_is_recognised_only_with_handoff_on(string method, string query, bool expected)
+    {
+        Assert.Equal(expected, LegacyPathPolicy.IsSignedOutLanding("/classic/LoginPage.aspx", method, query, Opt(handoff: true)));
+        Assert.False(LegacyPathPolicy.IsSignedOutLanding("/classic/LoginPage.aspx", method, query, Opt(handoff: false)));
+    }
+
     [Fact]
     public void Other_pages_are_unaffected_by_the_login_rule()
         => Assert.True(LegacyPathPolicy.IsAllowedRequest("/classic/Default.aspx", "POST", "", Opt(handoff: true)));

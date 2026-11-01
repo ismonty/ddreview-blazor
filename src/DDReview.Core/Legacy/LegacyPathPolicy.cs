@@ -58,6 +58,15 @@ public static class LegacyPathPolicy
         return true;
     }
 
+    /// <summary>
+    /// True when a request is the old site sending someone to its own login page (what its Sign out does) and the ticket entry point rule above
+    /// would refuse it. The new app answers those with a "signed out of Classic" page instead of a bare Not Found.
+    /// </summary>
+    public static bool IsSignedOutLanding(string? path, string method, string? query, LegacyProxyOptions o)
+        => o.HandoffOn && string.Equals(path, o.LegacyLoginPath, StringComparison.OrdinalIgnoreCase)
+           && string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
+           && !IsAllowedRequest(path, method, query, o);
+
     static bool IsBlocked(string segment, LegacyProxyOptions o)
     {
         foreach (var b in BlockedSegments)
