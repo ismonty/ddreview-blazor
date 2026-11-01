@@ -13,8 +13,10 @@ public static class LegacyPathPolicy
     static readonly HashSet<string> AllowedHandlers = new(StringComparer.OrdinalIgnoreCase)
     { "ChartAxd.axd", "ScriptResource.axd", "WebResource.axd" };
 
+    // TempFiles/ and TempImages/ are allowed (the Dundas gauges keep DundasGauge1.js and their pictures there); the extension rule above still
+    // keeps spreadsheets and anything else the old site writes there out of reach.
     static readonly string[] BlockedSegments =
-    { "bin", "app_code", "app_data", "app_themes", "tempfiles", "temp_files", "aspnet_client", "web.config", "trace.axd", "elmah.axd", "download" };
+    { "bin", "app_code", "app_data", "app_themes", "aspnet_client", "web.config", "trace.axd", "elmah.axd", "download" };
 
     public static bool IsAllowed(string? path, LegacyProxyOptions o)
     {
