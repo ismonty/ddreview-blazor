@@ -20,3 +20,13 @@ The handoff reads the old plain-text `Password` from `tblWebUserSecurity`. If th
 
 ## SQL
 `sql/005_legacy_central_access.sql` (central) and `sql/006_legacy_client_access.sql` (each client database) add grant procedures for the old site's own login, same pattern as `sql/004` (lists first, `@Execute = 1` to run). The old site cannot update client databases under this login; use the Database updater.
+
+## Installing the old site in IIS: what we learned (2026-11-01)
+- Two separate IIS sites: the new app, and the old site bound to `127.0.0.1:8081` only, with an application named `classic` whose folder holds the old files (here `C:\inetpub\DDReviewClassic`). Never put the `classic` application inside the new app's site.
+- Integrated-mode app pool. The old `web.config` needs `<validation validateIntegratedModeConfiguration="false"/>` and, in `<system.webServer><handlers>`, a registration of the chart handler. Without it `ChartAxd.axd` is answered by IIS's StaticFile handler (404) and both dashboard charts are blank:
+  `<remove name="ChartAxd"/>` then `<add name="ChartAxd" verb="*" path="ChartAxd.axd" resourceType="Unspecified" preCondition="integratedMode" type="Dundas.Charting.WebControl.ChartHttpHandler, DundasWebChart"/>`.
+  Keep the original `<system.web><httpHandlers>` block as it was; the two sections use different formats.
+- The server's `web.config` is its own copy (its own SQL login, its own `HandoffSecret`); do not overwrite it with the source copy.
+- The Dundas gauges work with no extra handler; the proxy lets `TempFiles/` and `TempImages/` through for `.js`/`.png` only.
+- The master page writes `url(~/images/...)` in a `style` attribute, which the browser cannot resolve (a harmless 404 for the tiled background; same on the original site).
+- Do not paste real secrets into chats or commit them: the handoff secret exists only in the two servers' config files.
