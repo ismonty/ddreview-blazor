@@ -15,6 +15,8 @@ public sealed class DailySummaryLine
     public decimal VsBudget => Sales - Budget;
     public decimal VsBudgetPct => Ratio(Sales - Budget, Budget);
     public decimal OfGross(decimal x) => Ratio(x, Gross);
+    /// <summary>Where the Daily Summary bar's stack ends: Net sales, then Discounts (stored negative), then Voids, as in the classic bar.</summary>
+    public decimal StackedSalesEnd => Sales + Math.Abs(Discounts) + Math.Abs(Voids);
     public decimal ChecksPct => Ratio(Checks - PreviousChecks, PreviousChecks);
     public decimal DayPartPct(int i) => Ratio(DayPart[i] - PreviousDayPart[i], PreviousDayPart[i]);
 

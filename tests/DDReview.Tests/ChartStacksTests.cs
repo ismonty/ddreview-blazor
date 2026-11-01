@@ -17,3 +17,14 @@ public class ChartStacksTests
         Assert.Equal(5, ChartStacks.Max(new Dictionary<string, double> { ["Net"] = 5, ["Discounts"] = double.NaN }));
     }
 }
+
+public class DailySummaryStackTests
+{
+    [Fact]
+    public void Stack_ends_after_net_discounts_and_voids_whatever_their_sign()
+    {
+        Assert.Equal(1150m, new DailySummaryLine { Sales = 1000, Discounts = -100, Voids = 50 }.StackedSalesEnd);   // discounts are stored negative
+        Assert.Equal(1150m, new DailySummaryLine { Sales = 1000, Discounts = 100, Voids = -50 }.StackedSalesEnd);
+        Assert.Equal(1000m, new DailySummaryLine { Sales = 1000 }.StackedSalesEnd);
+    }
+}
