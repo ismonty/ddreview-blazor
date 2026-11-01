@@ -31,3 +31,16 @@ and expect the owner to build and test in VS 2008. Never commit secrets, connect
 1. Owner confirms which copy of the old source is best, and links the session to the computer.
 2. Read `DDReviewMarauder\web.config`, `LoginPageClass.cs`, `BasePage.cs`, `Default.aspx(.cs)`: target framework, session/login handling, how URLs are built (relative vs root-relative), which handlers the gauges and charts use, which SQL logins it uses.
 3. Decide path prefix vs subdomain; write the proxy route and the handoff token (new side first, with tests); then draft the minimal old-side change for the owner to build in VS 2008.
+
+## Findings from reading the old source (2026-10-31)
+- Target is .NET Framework 3.5 (compiler v3.5, System.Web.Extensions 3.5). Forms authentication, InProc session (20 min) and server-side view state: run it as one worker process, no periodic recycle.
+- URLs are page-relative or `~/`-based, so the old site is published as the IIS application `/classic` on `127.0.0.1:<port>`; paths then pass through the proxy unchanged (no rewriting).
+- Dundas charts use `ChartAxd.axd` (`Storage=memory`); how the gauges deliver images is still to be checked on the running site, as is whether they need a 32-bit pool.
+- The old login looks a user up by user name **and password** in the central master, so a ticket cannot simply replace the password: Phase 3 needs `cmdLoginCore_Click` split into "find the user" and "fill the session". That is the one real change on the old side.
+
+## Built so far (branch `legacy-proxy-ticket`)
+- `DDReview.Core/Legacy`: `LegacyTicket` (format `v1.{webUserId}.{expiry}.{nonce}.{hmac}`, shared test vectors in `LegacyTicketTests`), `LegacyPathPolicy` (allow-list), `LegacyCookies`, `LegacyProxyOptions`.
+- `DDReview.Web/LegacyProxy.cs`: YARP route `/classic/{**catch-all}` (signed-in users only), path gate, request log, size limit, cookie stripping, `/classic-enter` (mints a ticket). All off unless `LegacyProxy:Enabled` is true; the upstream must be a loopback address.
+- Settings: `deploy/appsettings.Production.example.json` (`LegacyProxy`). The handoff secret goes only in the server's `appsettings.Production.json`.
+- Old-side draft (not built or compiled): `legacy-side/` and `docs/LEGACY-OLDSIDE.md`. Handoff goes through the old login page itself (ticket in the query string), not a new page.
+- Least-privilege SQL for the old site's own login: `sql/005_legacy_central_access.sql`, `sql/006_legacy_client_access.sql`.

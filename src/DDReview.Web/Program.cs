@@ -63,6 +63,7 @@ authBuilder.AddCookie(o =>
     o.SlidingExpiration = true;
 });
 builder.Services.AddAuthorization();
+builder.AddLegacyProxy();
 
 var app = builder.Build();
 
@@ -77,6 +78,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+app.UseLegacyGate();
 app.MapStaticAssets();
 
 static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r)
@@ -179,6 +181,7 @@ app.MapPost("/account/logout", async (HttpContext ctx, Microsoft.AspNetCore.Anti
     return Results.Redirect("/login");
 });
 
+app.MapLegacyProxy();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.Run();
 
