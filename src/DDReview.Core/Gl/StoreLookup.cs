@@ -10,8 +10,18 @@ public static class StoreLookup
     /// The store name the old pages show everywhere: the report name when one is set, otherwise the store name
     /// (<c>isnull(StoreReportName, StoreName)</c>), and the store code as a last resort.
     /// </summary>
-    public static string NameSql(bool hasReportName) =>
-        hasReportName ? "isnull(StoreReportName, isnull(StoreName, StoreGCode))" : "isnull(StoreName, StoreGCode)";
+    public static string NameSql(bool hasReportName, string alias = "")
+    {
+        var a = alias.Length == 0 ? "" : alias + ".";
+        return hasReportName ? $"isnull({a}StoreReportName, isnull({a}StoreName, {a}StoreGCode))" : $"isnull({a}StoreName, {a}StoreGCode)";
+    }
+
+    /// <summary>Whether this client database has tblStores.StoreReportName (the old site adds it on first use; very old databases may lack it).</summary>
+    public static async Task<bool> HasReportNameAsync(SqlConnection cn, CancellationToken ct = default)
+    {
+        await using var cmd = new SqlCommand("select count(*) from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = 'tblStores' and COLUMN_NAME = 'StoreReportName'", cn);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
 
     public static string ListSql(bool hasReportName, string where) =>
         $"select StoreID, StoreNumber, {NameSql(hasReportName)} as StoreName from dbo.tblStores where Active > 0{where} order by StoreNumber";
