@@ -61,6 +61,10 @@ public class SubmissionReportTests
         Assert.Contains("tblCashAndSalesSales", withTest);
         Assert.Contains("tblCashAndSalesReceipts", withTest);
         Assert.Contains("csr.AmountTotal <> 0", withTest);
+        Assert.Contains("css.Amount <> 0", withTest);
+        Assert.DoesNotContain("Quantity", withTest);                 // a quantity alone does not make a day
+        Assert.DoesNotContain("AmountTax", withTest);                // nor do the receipt parts
+        Assert.DoesNotContain("AmountTip", withTest);
         Assert.Contains("tblCashAndSalesReport", withTest);          // still requires a stored report
         var without = SubmissionReportService.ListSql(false);
         Assert.DoesNotContain("tblCashAndSalesSales", without);

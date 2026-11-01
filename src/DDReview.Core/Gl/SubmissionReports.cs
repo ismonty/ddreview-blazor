@@ -27,14 +27,13 @@ public sealed class SubmissionReportService
         access.Administrator || access.AllStores.Contains(kind) ? null : access.StoreListCsv(kind);
 
     /// <summary>
-    /// A batch counts as a day with business when it has a sales line with an amount or quantity, or a receipt line with any amount
-    /// (the same tables the Sales and Receipts reviews read). Days with nothing in either are quiet days and are left out of the list.
+    /// A batch counts as a day with business when a sales line has an amount, or a receipt line has a total (the same numbers the Sales and
+    /// Receipts reviews total). A day whose receipts total nothing and whose sales lines are all zero is a quiet day and is left out of the list.
+    /// Quantities and the receipt parts (tax, tip, charge, discount) do not count on their own.
     /// </summary>
     const string HasActivity = @"
-  and (exists (select 1 from dbo.tblCashAndSalesSales css with (nolock) where css.BatchID = csb.BatchID and (css.Amount <> 0 or css.Quantity <> 0))
-    or exists (select 1 from dbo.tblCashAndSalesReceipts csr with (nolock) where csr.BatchID = csb.BatchID
-               and (csr.AmountTotal <> 0 or csr.AmountFood <> 0 or csr.AmountBeverage <> 0 or csr.AmountOther <> 0 or csr.AmountCharge <> 0
-                    or csr.AmountDiscount <> 0 or csr.AmountTax <> 0 or csr.AmountTip <> 0)))";
+  and (exists (select 1 from dbo.tblCashAndSalesSales css with (nolock) where css.BatchID = csb.BatchID and css.Amount <> 0)
+    or exists (select 1 from dbo.tblCashAndSalesReceipts csr with (nolock) where csr.BatchID = csb.BatchID and csr.AmountTotal <> 0))";
 
     public static string ListSql(bool skipQuietDays) => $@"
 select top ({MaxListed}) csb.BatchID, csb.StoreID, sto.StoreNumber, isnull(sto.StoreName, sto.StoreGCode) as StoreName, csb.PostingDate
@@ -47,7 +46,7 @@ where csb.StoreID in (select KeyValue from dbo.fn_CreateKeyTableValueFromCSVStri
 order by csb.PostingDate, sto.StoreNumber, csb.BatchID";
 
     /// <summary>
-    /// Batches with a stored report for the stores and dates (inclusive), oldest first, leaving out days with no sales and no receipts.
+    /// Batches with a stored report for the stores and dates (inclusive), oldest first, leaving out days whose receipts total nothing and whose sales lines are all zero.
     /// The list is cut at <see cref="MaxListed"/>. If a database lacks one of the columns the quiet-day test reads, the list is
     /// returned without that test rather than failing.
     /// </summary>
