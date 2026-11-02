@@ -5,6 +5,9 @@
 @inject UserContextService Users
 @inject GlService GlSvc
 @inject SubmissionReportService SubmissionSvc
+@inject DDReview.QuickBooks.Launch.PosterLinkService PosterLinks
+@inject NavigationManager Nav
+@inject ILogger<Gl> Logger
 
 @using DDReview.Web.Components.Home
 
@@ -29,7 +32,14 @@ else
         </label>
         <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
         <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+        @if (PosterLinks.IsConfigured)
+        {
+            <button type="button" @onclick="PostToQuickBooks" disabled="@busy"
+                    title="Opens the QuickBooks poster on this computer with these stores, dates and choice filled in. Nothing is posted until you Preview and Post there.">Post to QuickBooks…</button>
+        }
     </EditForm>
+
+    @if (posterMsg is not null) { <p class="muted" role="status">@posterMsg</p> }
 
     @if (error is not null) { <p class="error" role="alert">@error</p> }
 
@@ -173,6 +183,26 @@ else
     }
 
     private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+
+    private string? posterMsg;
+
+    /// <summary>
+    /// Makes a signed, short-lived ddposter:// link for the stores, dates and choice on the page and hands it to the browser, which asks the person's own computer to open the poster.
+    /// Only stores this user is authorized for are put in the link (the same check Run makes), and the link never carries a password or connection string.
+    /// </summary>
+    private void PostToQuickBooks()
+    {
+        posterMsg = null;
+        if (ctx is null || !allowed || !PosterLinks.IsConfigured) return;
+        if (selected.Count == 0) { posterMsg = "Pick at least one store."; return; }
+        var authorized = stores.Select(s => s.StoreId).ToHashSet();
+        var ids = selected.Where(authorized.Contains).OrderBy(x => x).ToList();
+        var request = new DDReview.QuickBooks.Sql.PostingRequest(ids, start.Date, end.Date, arFlag);
+        if (!PosterLinks.TryCreate(request, ctx.WebUserId, DateTimeOffset.UtcNow, out var link, out var why)) { posterMsg = why; return; }
+        Logger.LogInformation("QuickBooks poster link made for web user {UserId}: {StoreCount} stores, {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}, scope {Scope}", ctx.WebUserId, ids.Count, start, end, arFlag);
+        posterMsg = "Opening the QuickBooks poster on this computer. Nothing has been posted: use Preview in the poster first. If nothing opens, start DDQuickBooksPoster.exe once and choose “Register DD Review links”.";
+        Nav.NavigateTo(link, forceLoad: true);
+    }
 
     private async Task RunAsync()
     {

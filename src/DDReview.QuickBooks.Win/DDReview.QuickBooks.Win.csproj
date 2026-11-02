@@ -18,4 +18,9 @@
     <ProjectReference Include="..\DDReview.QuickBooks\DDReview.QuickBooks.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The public keys the program trusts to sign "Post to QuickBooks" links (public keys only). Ends up next to the exe as DDQuickBooksPoster.keys.json. -->
+    <None Include="..\..\deploy\poster-trusted-keys.json" Link="DDQuickBooksPoster.keys.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

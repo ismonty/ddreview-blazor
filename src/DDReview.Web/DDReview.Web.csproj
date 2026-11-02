@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DDReview.Core\DDReview.Core.csproj" />
+    <!-- Shared with the poster: the one definition of the "Post to QuickBooks" link, so the site and the poster cannot disagree on it. -->
+    <ProjectReference Include="..\DDReview.QuickBooks\DDReview.QuickBooks.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,6 +5,9 @@
     <Project Path="src/DDReview.QuickBooks/DDReview.QuickBooks.csproj" />
     <Project Path="src/DDReview.Web/DDReview.Web.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/DDReview.PosterKeyTool/DDReview.PosterKeyTool.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DDReview.Tests/DDReview.Tests.csproj" />
   </Folder>
