@@ -196,3 +196,31 @@ public class SetupMiscTests
         Assert.Contains("object_id(N'dbo.tblDDReviewAdminAccess', N'U') is not null", ClientScripts.All.Single(s => s.Id == "004").ReadSql());
     }
 }
+
+public class GoogleChallengeTests
+{
+    private const string Base = "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&response_type=code&scope=openid";
+
+    [Fact] public void A_plain_sign_in_gets_the_account_chooser()
+    {
+        Assert.Equal(Base + "&prompt=select_account", DDReview.Core.Security.GoogleChallenge.WithDefaultPrompt(Base));
+    }
+
+    [Fact] public void An_address_without_a_query_gets_a_question_mark()
+    {
+        Assert.Equal("https://x.example/auth?prompt=select_account", DDReview.Core.Security.GoogleChallenge.WithDefaultPrompt("https://x.example/auth"));
+    }
+
+    [Theory] [InlineData("&prompt=login")] [InlineData("&PROMPT=consent")] [InlineData("&prompt=login&state=1")]
+    public void A_prompt_the_caller_chose_is_left_alone(string extra)
+    {
+        var url = Base + extra;
+        Assert.Equal(url, DDReview.Core.Security.GoogleChallenge.WithDefaultPrompt(url));
+    }
+
+    [Fact] public void A_parameter_that_only_ends_in_prompt_does_not_count()
+    {
+        var url = Base + "&login_prompt=1";
+        Assert.EndsWith("&prompt=select_account", DDReview.Core.Security.GoogleChallenge.WithDefaultPrompt(url));
+    }
+}
