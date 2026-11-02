@@ -56,6 +56,10 @@ header.top a { color: var(--header-ink); text-decoration: none; font-weight: 700
 header.top a.brand { color: var(--brand-ink); background: var(--brand-bg); padding: .15rem .7rem; border-radius: 6px; font-size: 1.15rem; }
 header.top nav { flex: 1; display: flex; gap: 1.1rem; flex-wrap: wrap; }
 header.top nav a:hover { text-decoration: underline; }
+header.top .fs-btn { font-weight: 700; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+header.top .fs-btn:hover { text-decoration: underline; }
+header.top .fs-exit, html.fullscreen header.top .fs-enter { display: none; }
+html.fullscreen header.top .fs-exit { display: inline; }
 .logout { display: flex; gap: .6rem; align-items: center; margin: 0; }
 main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
 
