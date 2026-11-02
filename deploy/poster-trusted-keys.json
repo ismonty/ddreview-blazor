@@ -3,5 +3,7 @@
   // Public keys only: nothing in this file is secret. It is copied next to the program as DDQuickBooksPoster.keys.json.
   // Make a key with tools/DDReview.PosterKeyTool, then add one entry per key id:
   //   { "kid": "prod1", "publicKey": "<the public key the tool prints>" }
-  "keys": []
+  "keys": [
+    { "kid": "staging1", "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEii92xv6o6cdlCW+Qmafbf2zo1BDGfj9TThBxbX16y3RHqC8vqJewAe9qD0ckpFBBdsyxsbkEcix23emwWYVlmw==" }
+  ]
 }
