@@ -88,10 +88,16 @@ Every save goes through one server-side check of all three conditions plus the a
 
 Tests per slice: policy tests (password session denied, Google but not Administrator/not granted denied, granted non-admin allowed only in their area, expired verification denied), SQL-shape tests for each table definition (columns exist in the schema dump), concurrency conflict test, and the circular-parent test against a fake.
 
-## 7. Open points for the owner
+## 7. Decisions (owner, 2026-11-01)
 
-1. Access rule: administrators always in, plus explicit grants for others (proposed above), or grant required for everyone?
-2. Is each central web login one person, or can several people share one client login? Grants are keyed on the client web user, so sharing a client login shares the grant.
-3. Should an administrator be able to edit setup for all active stores, or only stores their login is authorized for? (Access showed every active store.)
-4. Import Beginning Balances: in scope?
-5. The export lacks the layout files for: frmAccountsTaxTypes, frmGLSetupSalesAccounts, frmSetupReceiptTypeAdjustments, frmSetupGiftCardTypes, frmSetupAccountsClasses, frmStores (only frmStoresX is there), frmSetupAccountsReceivableGLDirectPostings, ...ParentAccounts, frmAccountsReceivableCommentCodeSubstitution, frmAccountsReceivableCreditCardAssignment, frmSetupAccountsReceivableImportBeginningBalancesAndInformation. Without them I get columns from the schema but not the old labels, column order, defaults or required flags. Re-exporting those forms as text would fix that; otherwise labels will be generated from column names.
+1. Administrators always have access; an administrator can grant areas to other logins; only administrators change grants. (Section 3 as proposed.)
+2. One person per login. Google linking is one Google account per login, so the Setup rules assume logins are not shared.
+3. Administrators see all active stores in Setup.
+4. Import Beginning Balances is dropped for now (and with it `fn_AccountsReceivableAccountsBeginningBalances`).
+5. The missing form layout files are not needed; labels and order come from the schema and the Access code.
+
+## 8. Progress
+
+* Slice 0 (access foundation): `sql/007`, grant procedure lines, `auth_method` and `admin_verified_utc` claims, `SetupPolicy`, `/admin/verify`, `/admin/setup`, `/admin/setup/access`, audit writer. Done on branch `admin-setup-0-access`.
+  * A Google sign-in counts as Google vouching for the person at that moment. After 30 minutes the Setup pages ask again (`prompt=login`), and a password session can also step up this way.
+  * The grants cache is 30 seconds and is cleared when an administrator changes a grant; anything that saves reads the grants fresh.

@@ -7,6 +7,8 @@ using DDReview.Web;
 using DDReview.Web.Components;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using DDReview.Core.Admin;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -35,6 +37,10 @@ builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton(sp => new LoginService(sp.GetRequiredService<ICentralDirectory>(), sp.GetRequiredService<LoginThrottle>(),
     sp.GetRequiredService<IOptions<TenantOptions>>().Value.UseCredentialTable));
 builder.Services.AddScoped<UserContextService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<SetupAccessStore>();
+builder.Services.AddScoped<SetupAccessService>();
 
 var googleId = builder.Configuration["Authentication:Google:ClientId"];
 var googleSecret = builder.Configuration["Authentication:Google:ClientSecret"];
@@ -81,7 +87,7 @@ app.UseAntiforgery();
 app.UseLegacyGate();
 app.MapStaticAssets();
 
-static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r)
+static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r, bool viaGoogle = false)
 {
     switch (r.Outcome)
     {
@@ -89,6 +95,7 @@ static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r)
             var id = new ClaimsIdentity(
                 [new Claim(ClaimTypes.NameIdentifier, r.Account!.WebUserId.ToString()), new Claim(ClaimTypes.Name, r.Account.UserName),
                  new Claim("webLoginId", r.WebLoginId.ToString())], CookieAuthenticationDefaults.AuthenticationScheme);
+            if (viaGoogle) SetupClaims.StampGoogle(id, DateTimeOffset.UtcNow);   // a Google sign-in is Google vouching for the person right now (the Setup pages look for this)
             await ctx.SignInAsync(new ClaimsPrincipal(id));
             return Results.Redirect("/");
         case LoginOutcome.Redirect when Uri.TryCreate(r.RedirectUrl, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps:
@@ -156,7 +163,7 @@ if (googleOn)
             }
             var r = await login.SignInWithGoogleAsync(sub, ctx.Connection.RemoteIpAddress?.ToString(),
                 ctx.Request.Headers.UserAgent.ToString(), ctx.Request.Host.Host, ctx.RequestAborted);
-            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r);
+            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r, viaGoogle: true);
         }
         catch (Microsoft.Data.SqlClient.SqlException ex)   // e.g. sql/003 not run on the central master yet
         {
@@ -164,6 +171,45 @@ if (googleOn)
             return Results.Redirect("/login?e=google");
         }
     });
+
+    // Setup pages: Google must have vouched for the person in the last 30 minutes. This asks Google again (prompt=login, so a Google session
+    // already open in the browser is not enough) and, if it is the Google account linked to THIS login, stamps the session. A password
+    // session that completes this becomes a Google session too, since it has just proved the linked Google account.
+    app.MapPost("/admin/verify", (HttpContext ctx, [FromForm] string? returnUrl) =>
+    {
+        var me = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (me is null) return Results.Redirect("/login");
+        var back = SetupReturn.SafePath(returnUrl);
+        var props = new GoogleChallengeProperties { RedirectUri = "/admin/verify-done?to=" + Uri.EscapeDataString(back), Prompt = "login" };
+        props.Items["verifyUser"] = me;      // travels inside the protected sign-in state
+        return Results.Challenge(props, ["Google"]);
+    }).RequireAuthorization();
+
+    app.MapGet("/admin/verify-done", async (HttpContext ctx, ICentralDirectory central, ILogger<Program> log, [FromQuery] string? to) =>
+    {
+        var back = SetupReturn.SafePath(to);
+        var ext = await ctx.AuthenticateAsync(ExternalScheme);
+        await ctx.SignOutAsync(ExternalScheme);
+        var me = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var sub = ext.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!ext.Succeeded || string.IsNullOrEmpty(sub) || me is null
+            || ext.Properties?.Items.TryGetValue("verifyUser", out var started) != true || started != me)
+            return Results.Redirect(SetupReturn.WithFlag(back, "failed"));
+        try
+        {
+            var linked = await central.FindByGoogleAsync(sub, ctx.RequestAborted);
+            if (linked is null || linked.WebUserId.ToString() != me) return Results.Redirect(SetupReturn.WithFlag(back, "notlinked"));
+        }
+        catch (Microsoft.Data.SqlClient.SqlException ex)
+        {
+            log.LogError(ex, "Google verification could not read dbo.tblWebUserGoogle on the central master");
+            return Results.Redirect(SetupReturn.WithFlag(back, "failed"));
+        }
+        var id = new ClaimsIdentity(ctx.User.Claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        SetupClaims.StampGoogle(id, DateTimeOffset.UtcNow);
+        await ctx.SignInAsync(new ClaimsPrincipal(id));
+        return Results.Redirect(back);
+    }).RequireAuthorization();
 
     app.MapPost("/account/google/unlink", async (HttpContext ctx, ICentralDirectory central, [FromForm] string? confirm) =>
     {

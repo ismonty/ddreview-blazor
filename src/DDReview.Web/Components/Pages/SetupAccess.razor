@@ -1,0 +1,108 @@
+@page "/admin/setup/access"
+@attribute [Authorize]
+@using DDReview.Core.Admin
+@using DDReview.Web.Components.Setup
+@inject SetupAccessStore Store
+@inject SetupAccessService Access
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Who may use Setup</h1>
+
+<SetupGate RequireManager="true" Context="s">
+    <p>Administrators can always use every part of Setup. For everyone else, choose which parts they may use. They still have to confirm with Google each time, like you.</p>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (rows is null) { <p class="muted">Loading…</p> }
+    else
+    {
+        <table>
+            <thead><tr><th>Login</th>@foreach (var a in SetupAreas.All) { <th>@SetupAreas.Title(a)</th> }</tr></thead>
+            <tbody>
+            @foreach (var u in rows)
+            {
+                <tr>
+                    <td>@u.UserName</td>
+                    @if (u.Administrator)
+                    {
+                        <td colspan="@SetupAreas.All.Count" class="muted">Administrator: every part</td>
+                    }
+                    else
+                    {
+                        @foreach (var a in SetupAreas.All)
+                        {
+                            <td>
+                                @if (u.Areas.Contains(a)) { <button class="secondary" disabled="@busy" @onclick="() => ChangeAsync(s, u, a, false)">Remove</button> }
+                                else { <button disabled="@busy" @onclick="() => ChangeAsync(s, u, a, true)">Allow</button> }
+                            </td>
+                        }
+                    }
+                </tr>
+            }
+            </tbody>
+        </table>
+
+        <h2>Recent changes</h2>
+        @if (audit is null || audit.Count == 0) { <p class="muted">Nothing yet.</p> }
+        else
+        {
+            <table>
+                <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
+                <tbody>
+                @foreach (var r in audit)
+                {
+                    <tr>
+                        <td>@r.AtUtc.ToLocalTime().ToString("g")</td>
+                        <td>@r.UserName@(r.GoogleEmail is null ? "" : " (" + r.GoogleEmail + ")")</td>
+                        <td>@r.Action @r.TableName @r.Key <span class="muted">@(r.NewValues ?? r.OldValues)</span></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    }
+</SetupGate>
+
+@code {
+    private IReadOnlyList<SetupUserRow>? rows;
+    private IReadOnlyList<SetupAuditRow>? audit;
+    private string? error;
+    private bool busy;
+    private bool loadedOnce;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (loadedOnce) return;
+        var s = await Access.GetAsync();
+        if (s is null || !s.Decision.CanManageAccess || s.TablesMissing) return;
+        loadedOnce = true;
+        await LoadAsync(s);
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync(SetupSituation s)
+    {
+        try
+        {
+            rows = await Store.ListUsersAsync(s.ClientConnectionString, s.Actor, Access.Now);
+            audit = await Store.RecentAuditAsync(s.ClientConnectionString, s.Actor, Access.Now);
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or UnauthorizedAccessException) { error = ex.Message; }
+    }
+
+    private async Task ChangeAsync(SetupSituation s, SetupUserRow u, SetupArea a, bool allow)
+    {
+        busy = true; error = null;
+        try
+        {
+            // look at the situation again: Google's confirmation may have run out while this page was open
+            var now = await Access.GetAsync(fresh: true);
+            if (now is null || !now.Decision.CanManageAccess) { error = "Google's confirmation has run out. Reload the page and verify again."; return; }
+            if (allow) await Store.GrantAsync(now.ClientConnectionString, now.Actor, Access.Now, u.WebUserId, a);
+            else await Store.RevokeAsync(now.ClientConnectionString, now.Actor, Access.Now, u.WebUserId, a);
+            Access.Forget(now.ClientConnectionString, u.WebUserId);
+            await LoadAsync(now);
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or UnauthorizedAccessException) { error = ex.Message; }
+        finally { busy = false; }
+    }
+}
