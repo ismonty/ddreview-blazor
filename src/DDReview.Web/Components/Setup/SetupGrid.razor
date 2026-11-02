@@ -43,6 +43,7 @@ else
                     <td class="actions">
                         <button disabled="@busy" @onclick="SaveAsync">Save</button>
                         <button class="secondary" disabled="@busy" @onclick="CancelEdit">Cancel</button>
+                        @if (Table.Fills is { Count: > 0 }) { <button class="secondary" disabled="@busy" @onclick="FillEmpty" title="Propose the empty account fields from the names in this row">Fill empty accounts</button> }
                     </td>
                     @foreach (var c in data.Columns)
                     {
@@ -51,7 +52,7 @@ else
                         @if (c.Def.Lookup is not null)
                         {
                             <select value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()">
-                                <option value="">@(c.Nullable ? "(none)" : "Choose…")</option>
+                                <option value="">@(c.Def.BlankText is { } bt ? "(" + bt + ")" : c.Nullable ? "(none)" : "Choose…")</option>
                                 @foreach (var item in Offered(c)) { <option value="@item.Value">@item.Text</option> }
                             </select>
                         }
@@ -59,7 +60,7 @@ else
                         {
                             @* yes / no / blank: blank means "either" for the mapping flags *@
                             <select value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()">
-                                <option value="">(either)</option>
+                                <option value="">(@(c.Def.BlankText ?? "either"))</option>
                                 <option value="true">Yes</option>
                                 <option value="false">No</option>
                             </select>
@@ -159,7 +160,34 @@ else
     }
 
     private bool IsOn(string name) => edit.GetValueOrDefault(name) == "true";
-    private void SetBool(string name, ChangeEventArgs e) => edit[name] = e.Value is true ? "true" : "false";
+    private void SetBool(string name, ChangeEventArgs e)
+    {
+        var on = e.Value is true;
+        edit[name] = on ? "true" : "false";
+        // "All" and the specific kinds exclude each other: the one just turned on wins
+        if (on && Table.Exclusive is { } x)
+        {
+            if (name == x.Leader) foreach (var o in x.Others) { if (edit.ContainsKey(o)) edit[o] = "false"; }
+            else if (x.Others.Contains(name) && edit.ContainsKey(x.Leader)) edit[x.Leader] = "false";
+        }
+    }
+
+    /// <summary>The old forms' double-click: fill empty fields from the row's own names, never over something already typed.</summary>
+    private void FillEmpty()
+    {
+        foreach (var f in Table.Fills ?? [])
+        {
+            if (!edit.ContainsKey(f.Column) || !string.IsNullOrWhiteSpace(edit[f.Column])) continue;
+            var ok = true;
+            var text = System.Text.RegularExpressions.Regex.Replace(f.Template, @"\{(\w+)\}", m =>
+            {
+                var v = edit.GetValueOrDefault(m.Groups[1].Value);
+                if (string.IsNullOrWhiteSpace(v)) ok = false;
+                return v?.Trim() ?? "";
+            });
+            if (ok) edit[f.Column] = text;
+        }
+    }
 
     private void Say(string? text, bool ok) { msg = text; msgOk = ok; }
 
@@ -186,7 +214,8 @@ else
     private void StartAdd()
     {
         original = null; confirmKey = null; Say(null, true);
-        edit = data!.Columns.ToDictionary(c => c.Def.Name, c => c.Def.Kind == SetupKind.Bool && !c.Nullable ? "false" : (string?)null);
+        // a new row starts with what the database would give it (a few flags default to on); a required yes/no without a default starts off
+        edit = data!.Columns.ToDictionary(c => c.Def.Name, c => SetupValue.FromDefault(c.Def, c.Db) ?? (c.Def.Kind == SetupKind.Bool && !c.Nullable ? "false" : null));
         editKey = 0;
     }
 
@@ -229,6 +258,7 @@ else
     private string Show(SetupColumnInfo c, SetupRow row)
     {
         var v = row.Values.GetValueOrDefault(c.Def.Name);
+        if (v is null && c.Def.BlankText is { } any) return any;
         if (c.Def.Lookup is not null && v is not null)
             return data!.Lookups.GetValueOrDefault(c.Def.Lookup)?.FirstOrDefault(i => i.Value == Convert.ToInt32(v))?.Text ?? "#" + v;
         if (c.Def.Kind == SetupKind.Bool && c.Nullable) return v is true ? "Yes" : v is false ? "No" : "";

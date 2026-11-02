@@ -68,6 +68,8 @@ header.top .fs-exit, html.fullscreen header.top .fs-enter { display: none; }
 html.fullscreen header.top .fs-exit { display: inline; }
 .logout { display: flex; gap: .6rem; align-items: center; margin: 0; }
 main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+/* A report wider than the 1400px column makes the page as wide as the report (so the header spans the data and the browser can zoom out to fit it all). Setup grids scroll inside their own box instead. */
+main:not(:has(.setup-scroll)) { min-width: min-content; }
 
 input, select, textarea { font: inherit; padding: .5rem .6rem; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); color: var(--ink); min-width: 0; }
 select option { background: var(--field); color: var(--ink); }
