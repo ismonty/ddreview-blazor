@@ -60,10 +60,11 @@ if (googleOn)
     authBuilder.AddGoogle(o =>
     {
         o.ClientId = googleId!; o.ClientSecret = googleSecret!; o.SignInScheme = ExternalScheme; o.CallbackPath = "/signin-google";
-        // Always show Google's account chooser, so the browser never signs in silently as whichever Google account it used last.
+        // Always show Google's account chooser, so the browser never signs in silently as whichever Google account it used last,
+        // unless the caller already asked for a different prompt.
         o.Events.OnRedirectToAuthorizationEndpoint = ctx =>
         {
-            ctx.Response.Redirect(ctx.RedirectUri + (ctx.RedirectUri.Contains('?') ? "&" : "?") + "prompt=select_account");
+            ctx.Response.Redirect(GoogleChallenge.WithDefaultPrompt(ctx.RedirectUri));   // leaves a prompt the caller chose (Setup's Verify uses prompt=login) alone
             return Task.CompletedTask;
         };
     });
