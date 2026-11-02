@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace DDReview.QuickBooks.Posting;
 
@@ -19,14 +19,31 @@ public sealed class Qbxmlrp2Processor : IQbRequestProcessor
     const int OpenDoNotCare = 2;         // QBFileMode.qbFileOpenDoNotCare
     const int NoCompanyFileOpen = unchecked((int)0x80040416);
 
+    /// <summary>QuickBooks registers the request processor as QBXMLRP2.RequestProcessor (the class inside is called RequestProcessor2); the other names are fallbacks.</summary>
+    internal static readonly string[] ProgIds =
+        ["QBXMLRP2.RequestProcessor", "QBXMLRP2.RequestProcessor.1", "QBXMLRP2.RequestProcessor2", "QBXMLRP2.RequestProcessor2.1"];
+
+    static Type? FindType()
+    {
+        foreach (var id in ProgIds)
+        {
+            var t = Type.GetTypeFromProgID(id);
+            if (t != null) return t;
+        }
+        return null;
+    }
+
     object? _rp;
     string _ticket = "";
 
     public Qbxmlrp2Processor(string appName = "DD Admin CS", string companyFile = "")
     {
         if (!OperatingSystem.IsWindows()) throw new QuickBooksUnavailableException("QuickBooks Desktop runs only on Windows.");
-        var type = Type.GetTypeFromProgID("QBXMLRP2.RequestProcessor2")
-            ?? throw new QuickBooksUnavailableException("QuickBooks is not installed on this computer (QBXMLRP2 was not found). This program must run as a 32-bit program on the computer where QuickBooks is installed.");
+        var type = FindType()
+            ?? throw new QuickBooksUnavailableException(
+                "QuickBooks' request processor (QBXMLRP2) is not registered for this " + (Environment.Is64BitProcess ? "64-bit" : "32-bit")
+                + " program. Tried: " + string.Join(", ", ProgIds) + ". This program must run as a 32-bit program on the computer where QuickBooks Desktop is installed; "
+                + "if QuickBooks is installed, start it once as an administrator and try again.");
         try
         {
             _rp = Activator.CreateInstance(type);
