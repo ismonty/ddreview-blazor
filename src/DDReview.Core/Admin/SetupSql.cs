@@ -95,7 +95,7 @@ public static class SetupValue
     {
         null or DBNull => "",
         bool b => b ? "true" : "false",
-        decimal d => d.ToString("0.####", CultureInfo.InvariantCulture),
+        decimal d => d.ToString("0.######", CultureInfo.InvariantCulture),
         DateTime dt => dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         string s => s.TrimEnd(),
         IFormattable f => f.ToString(null, CultureInfo.InvariantCulture) ?? "",
