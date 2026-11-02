@@ -197,3 +197,10 @@ img.sub-page { display: block; width: 100%; max-width: 816px; margin: 0 auto; ba
 /* Setup pages */
 ul.setup-list { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: .35rem; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
 ul.setup-list li { background: var(--card); border: 1px solid var(--edge); border-radius: 6px; padding: .45rem .7rem; }
+.setup-scroll { overflow-x: auto; }
+table.setup th { white-space: nowrap; text-align: left; font-size: .85rem; }
+table.setup td { vertical-align: middle; padding: .2rem .35rem; }
+table.setup td.n { text-align: right; font-variant-numeric: tabular-nums; }
+table.setup td.actions { white-space: nowrap; }
+table.setup tr.editing td { background: color-mix(in srgb, var(--gold) 14%, transparent); }
+table.setup input[type=text], table.setup input[type=date], table.setup select { width: 100%; min-width: 7rem; }

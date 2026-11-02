@@ -40,6 +40,7 @@ builder.Services.AddScoped<UserContextService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<SetupAccessStore>();
+builder.Services.AddSingleton<SetupGridService>();
 builder.Services.AddScoped<SetupAccessService>();
 
 var googleId = builder.Configuration["Authentication:Google:ClientId"];
