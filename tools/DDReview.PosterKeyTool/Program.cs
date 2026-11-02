@@ -11,7 +11,22 @@ if (args.Length < 1 || args[0] is "-h" or "--help" or "/?")
     Console.WriteLine("Usage: PosterKeyTool <key id> [folder]");
     Console.WriteLine("  key id : 1 to 24 characters, a-z 0-9 and '-', for example prod1 or staging1 (use a different one per site).");
     Console.WriteLine("  folder : where to write <key id>.signing-key.private.txt (default: the current folder).");
+    Console.WriteLine("       PosterKeyTool --public <private key file> <key id>");
+    Console.WriteLine("  prints the public entry again for a private key you already made (the public key is not secret; the private key never is printed).");
     return args.Length < 1 ? 1 : 0;
+}
+
+if (args[0] == "--public")
+{
+    if (args.Length < 3 || !PosterLinkRules.IsValidKeyId(args[2])) { Console.Error.WriteLine("Usage: PosterKeyTool --public <private key file> <key id>   (key id: a-z, 0-9 and '-', up to 24 characters)"); return 1; }
+    try
+    {
+        string pub = PosterLinkSigner.FromPrivateBase64(File.ReadAllText(args[1]).Trim(), args[2]).PublicKeyBase64;
+        Console.WriteLine($"    {{ \"kid\": \"{args[2]}\", \"publicKey\": \"{pub}\" }}");
+        return 0;
+    }
+    catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+    { Console.Error.WriteLine("Could not read a signing key from that file: " + ex.Message); return 1; }
 }
 
 string kid = args[0];

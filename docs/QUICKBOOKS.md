@@ -63,6 +63,8 @@ The browser asks once whether to open the program. The poster may be on another 
 ### Setting it up
 1. Make a key per site (use a different key id for staging and production):
    `dotnet run --project tools/DDReview.PosterKeyTool -- prod1 <folder>`. It writes `prod1.signing-key.private.txt` (never commit it) and prints the public key entry.
+   To see the public entry again later, run `dotnet run --project tools/DDReview.PosterKeyTool -- --public <private key file> prod1`
+   (the private key text is also in the server's `appsettings.Production.json`, so a deleted key file can be recreated from there).
 2. On the server, put the private key's text in the secret settings as `PosterLink:SigningKeyPkcs8` and the id as `PosterLink:KeyId`
    (see `deploy/appsettings.Production.example.json`), then delete the private key file. With both empty the button is not shown. One set and not the other stops the site at start.
 3. Add the printed `{ "kid": ..., "publicKey": ... }` entry to `deploy/poster-trusted-keys.json`, commit it, and publish the poster again so the keys file goes into the zip.
