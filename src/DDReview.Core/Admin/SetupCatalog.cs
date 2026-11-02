@@ -15,16 +15,16 @@ public static class SetupCatalog
     // The order follows the old button columns (top to bottom).
     public static IReadOnlyList<SetupEntry> All { get; } =
     [
-        new(SetupArea.GlSetup, GlSection, "Tax/Royalty/Fee Types", "tblTaxTypes"),
-        new(SetupArea.GlSetup, GlSection, "Tax Rates/Accts", "tblTaxRates"),
-        new(SetupArea.GlSetup, GlSection, "Royalty/Fee Rates/Accts", "tblTaxRates"),
+        new(SetupArea.GlSetup, GlSection, "Tax/Royalty/Fee Types", "tblTaxTypes", SetupTables.TaxTypes.Route),
+        new(SetupArea.GlSetup, GlSection, "Tax Rates/Accts", "tblTaxRates", SetupTables.TaxRates.Route),
+        new(SetupArea.GlSetup, GlSection, "Royalty/Fee Rates/Accts", "tblTaxRates", SetupTables.RoyaltyFeeRates.Route),
         new(SetupArea.GlSetup, GlSection, "Sales Accounts", "tblAccountsCredit"),
         new(SetupArea.GlSetup, GlSection, "Sales Account Mapping", "tblAccountsSalesMapping"),
         new(SetupArea.GlSetup, GlSection, "Receipt Account Mapping", "tblReceiptTypes"),
         new(SetupArea.GlSetup, GlSection, "Receipt Adjustments", "tblReceiptTypeAdjustments"),
         new(SetupArea.GlSetup, GlSection, "Paid Outs", "tblPayouts"),
         new(SetupArea.GlSetup, GlSection, "Gift Cards", "tblGiftCardTypes"),
-        new(SetupArea.GlSetup, GlSection, "Account Classes", "tblAccountsClasses"),
+        new(SetupArea.GlSetup, GlSection, "Account Classes", "tblAccountsClasses", SetupTables.AccountClasses.Route),
         new(SetupArea.ArSetup, ArSection, "A/R Accounts", "tblAccountsReceivableAccounts"),
         new(SetupArea.ArSetup, ArSection, "A/R Account Types", "tblAccountsReceivableAccountTypes"),
         new(SetupArea.ArSetup, ArSection, "A/R Parent Accounts", "tblAccountsReceivableAccounts"),

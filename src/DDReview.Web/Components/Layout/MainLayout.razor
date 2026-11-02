@@ -6,7 +6,9 @@
     <a href="/" class="brand">DD Review</a>
     <AuthorizeView>
         <Authorized>
-            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a> <a href="/gl">General ledger</a> <SetupNavLink />@if (Legacy.Value.Enabled) {<text> <a href="/classic-enter?to=@Uri.EscapeDataString(Legacy.Value.PathPrefix + "/Default.aspx")" target="_blank" rel="noopener" title="Opens the classic DDReview in a new tab">Classic&nbsp;&#8599;</a></text>}</nav>
+            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a> <a href="/gl">General ledger</a> <SetupNavLink />@if (Legacy.Value.Enabled) {<text> <a href="/classic-enter?to=@Uri.EscapeDataString(Legacy.Value.PathPrefix + "/Default.aspx")" target="_blank" rel="noopener" title="Opens the classic DDReview in a new tab">Classic&nbsp;&#8599;</a></text>}
+                <button type="button" class="fs-btn fs-enter" data-fullscreen="toggle" title="Fill the whole screen with this page">Full screen</button>
+                <button type="button" class="fs-btn fs-exit" data-fullscreen="toggle" title="Back to the normal window">Normal screen</button></nav>
             <form method="post" action="/account/logout" class="logout">
                 <AntiforgeryToken />
                 <a href="/account" title="Your account">@context.User.Identity?.Name</a>

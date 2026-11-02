@@ -11,3 +11,16 @@ window.ddDownload = function (name, base64, type) {
 document.addEventListener("click", function (e) {
     document.querySelectorAll("details.ms[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); });
 });
+
+// Full screen / normal screen buttons in the header. The page shows one or the other by the "fullscreen" class on <html>,
+// so it stays right however the header is re-rendered. Escape (or F11 from the browser) also leaves full screen and is picked up here.
+document.addEventListener("click", function (e) {
+    if (!e.target.closest || !e.target.closest("[data-fullscreen]")) return;
+    try {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen();
+    } catch (err) { /* browser refused; nothing to do */ }
+});
+document.addEventListener("fullscreenchange", function () {
+    document.documentElement.classList.toggle("fullscreen", !!document.fullscreenElement);
+});

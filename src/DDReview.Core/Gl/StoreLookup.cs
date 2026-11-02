@@ -55,6 +55,14 @@ public static class StoreLookup
         return await ReadAsync(cn, $" and StoreID in ({string.Join(",", ids.Select((_, i) => "@s" + i))})", ids, ct);
     }
 
+    /// <summary>Every active store, whatever the user is authorized for (the Setup pages: administrators see all of them).</summary>
+    public static async Task<IReadOnlyList<StoreInfo>> LoadAllActiveAsync(string connectionString, CancellationToken ct = default)
+    {
+        await using var cn = new SqlConnection(connectionString);
+        await cn.OpenAsync(ct);
+        return await ReadAsync(cn, "", [], ct);
+    }
+
     /// <summary>Only active stores (tblStores.Active &gt; 0) are listed, as in the old pages.
     /// The stores this user may use for a report: every store when unrestricted, otherwise the authorized ones.</summary>
     public static async Task<IReadOnlyList<StoreInfo>> LoadAuthorizedAsync(string connectionString, DDReview.Core.Tenancy.UserAccess access, DDReview.Core.Tenancy.ReportKind kind, CancellationToken ct = default)

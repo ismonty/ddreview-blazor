@@ -1,0 +1,219 @@
+@using DDReview.Core.Admin
+@using DDReview.Core.Gl
+@inject SetupAccessService Access
+@inject SetupGridService Grid
+
+@* One grid for every Setup table: the columns come from the table's declaration in SetupTables, narrowed to the columns this database has.
+   Every save asks SetupAccessService again and the service checks the Setup rules itself; showing the page is never the check. *@
+@if (!string.IsNullOrEmpty(Table.Help)) { <p class="muted">@Table.Help</p> }
+@if (msg is not null) { <p class="banner @(msgOk ? "ok" : "bad")" role="@(msgOk ? "status" : "alert")">@msg</p> }
+
+@if (Table.StoreColumn is not null)
+{
+    <p>
+        <label>Store
+            <select value="@storeId" @onchange="StoreChangedAsync" disabled="@busy">
+                <option value="0">Choose a store…</option>
+                @foreach (var st in stores) { <option value="@st.StoreId">@st.StoreName</option> }
+            </select>
+        </label>
+    </p>
+}
+
+@if (!loaded) { <p class="muted">Loading…</p> }
+else if (data is null) { <p class="banner bad" role="alert">This table is not in your database, or this login may not read it.</p> }
+else if (Table.StoreColumn is not null && storeId == 0) { <p class="muted">Choose a store to see its rows.</p> }
+else
+{
+    <div class="setup-scroll">
+    <table class="setup">
+        <thead>
+            <tr>
+                <th></th>
+                @foreach (var c in data.Columns) { <th title="@c.Def.Help">@c.Def.Label@(c.Required ? " *" : "")</th> }
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Rows())
+        {
+            var key = row?.Key ?? 0;
+            @if (editKey is { } ek && ek == key)
+            {
+                <tr class="editing">
+                    <td class="actions">
+                        <button disabled="@busy" @onclick="SaveAsync">Save</button>
+                        <button class="secondary" disabled="@busy" @onclick="CancelEdit">Cancel</button>
+                    </td>
+                    @foreach (var c in data.Columns)
+                    {
+                        var name = c.Def.Name;
+                        <td>
+                        @if (c.Def.Lookup is not null)
+                        {
+                            <select value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()">
+                                <option value="">@(c.Nullable ? "(none)" : "Choose…")</option>
+                                @foreach (var item in data.Lookups.GetValueOrDefault(c.Def.Lookup) ?? []) { <option value="@item.Value">@item.Text</option> }
+                            </select>
+                        }
+                        else if (c.Def.Kind == SetupKind.Bool)
+                        {
+                            <input type="checkbox" checked="@IsOn(name)" @onchange="e => SetBool(name, e)" />
+                        }
+                        else if (c.Def.Kind == SetupKind.Date)
+                        {
+                            <input type="date" value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()" />
+                        }
+                        else
+                        {
+                            <input type="text" value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()"
+                                   maxlength="@(c.Def.Kind == SetupKind.Text && c.Db.MaxLength > 0 ? c.Db.MaxLength : 40)"
+                                   inputmode="@(c.Def.Kind is SetupKind.Int or SetupKind.Decimal ? "decimal" : null)"
+                                   list="@(c.Def.Suggestions is null ? null : "dl_" + name)" />
+                            @if (c.Def.Suggestions is not null)
+                            {
+                                <datalist id="dl_@name">@foreach (var sg in c.Def.Suggestions) { <option value="@sg"></option> }</datalist>
+                            }
+                        }
+                        </td>
+                    }
+                </tr>
+            }
+            else if (row is not null)
+            {
+                <tr>
+                    <td class="actions">
+                        @if (confirmKey == row.Key)
+                        {
+                            <span>Remove this row?</span>
+                            <button disabled="@busy" @onclick="() => DeleteAsync(row.Key)">Yes</button>
+                            <button class="secondary" @onclick="() => confirmKey = null">No</button>
+                        }
+                        else
+                        {
+                            <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="() => StartEdit(row)">Edit</button>
+                            @if (Table.AllowDelete) { <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="() => confirmKey = row.Key">Delete</button> }
+                        }
+                    </td>
+                    @foreach (var c in data.Columns) { <td class="@(c.Def.Kind is SetupKind.Int or SetupKind.Decimal && c.Def.Lookup is null ? "n" : null)">@Show(c, row)</td> }
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+    </div>
+    @if (!data.Rows.Any() && editKey != 0) { <p class="muted">No rows yet.</p> }
+    @if (editKey is null) { <p><button disabled="@busy" @onclick="StartAdd">Add a row</button></p> }
+    @if (data.Columns.Any(c => c.Required)) { <p class="muted">* required</p> }
+}
+
+@code {
+    [Parameter, EditorRequired] public SetupTable Table { get; set; } = default!;
+
+    private IReadOnlyList<StoreInfo> stores = [];
+    private int storeId;
+    private SetupGridData? data;
+    private bool loaded, busy, msgOk;
+    private string? msg;
+    private int? editKey;            // 0 = a new row
+    private int? confirmKey;
+    private SetupRow? original;
+    private Dictionary<string, string?> edit = [];
+
+    private int? StoreArg => Table.StoreColumn is null ? null : storeId;
+    private IEnumerable<SetupRow?> Rows() => (editKey == 0 ? new SetupRow?[] { null } : []).Concat(data!.Rows);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var s = await Access.GetAsync();
+        if (s is null || !s.Decision.Allows(Table.Area)) { loaded = true; return; }
+        try
+        {
+            if (Table.StoreColumn is not null)
+            {
+                stores = await Grid.StoresAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table);
+                if (stores.Count == 1) storeId = stores[0].StoreId;     // one active store: chosen for you, as in the old forms
+            }
+            await ReloadAsync(s);
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or UnauthorizedAccessException) { Say(ex.Message, false); }
+        loaded = true;
+    }
+
+    private async Task ReloadAsync(SetupSituation s) =>
+        data = await Grid.LoadAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, StoreArg);
+
+    private async Task<SetupSituation?> FreshAsync()
+    {
+        var s = await Access.GetAsync(fresh: true);
+        if (s is null || !s.Decision.Allows(Table.Area)) { Say("Google's confirmation has run out. Reload the page and verify again.", false); return null; }
+        return s;
+    }
+
+    private bool IsOn(string name) => edit.GetValueOrDefault(name) == "true";
+    private void SetBool(string name, ChangeEventArgs e) => edit[name] = e.Value is true ? "true" : "false";
+
+    private void Say(string? text, bool ok) { msg = text; msgOk = ok; }
+
+    private async Task StoreChangedAsync(ChangeEventArgs e)
+    {
+        storeId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        editKey = null; confirmKey = null; Say(null, true);
+        await RunAsync(async s => await ReloadAsync(s));
+    }
+
+    /// <summary>One place for the busy flag and the messages every database call needs.</summary>
+    private async Task RunAsync(Func<SetupSituation, Task> work)
+    {
+        busy = true;
+        try
+        {
+            var s = await FreshAsync();
+            if (s is not null) await work(s);
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or UnauthorizedAccessException) { Say(ex.Message, false); }
+        finally { busy = false; }
+    }
+
+    private void StartAdd()
+    {
+        original = null; confirmKey = null; Say(null, true);
+        edit = data!.Columns.ToDictionary(c => c.Def.Name, c => c.Def.Kind == SetupKind.Bool ? "false" : (string?)null);
+        editKey = 0;
+    }
+
+    private void StartEdit(SetupRow row)
+    {
+        original = row; confirmKey = null; Say(null, true);
+        edit = data!.Columns.ToDictionary(c => c.Def.Name, c => (string?)SetupValue.Format(c.Def, row.Values.GetValueOrDefault(c.Def.Name)));
+        editKey = row.Key;
+    }
+
+    private void CancelEdit() { editKey = null; original = null; Say(null, true); }
+
+    private Task SaveAsync() => RunAsync(async s =>
+    {
+        var r = editKey == 0
+            ? await Grid.InsertAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, StoreArg, edit)
+            : await Grid.UpdateAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, StoreArg, original!, edit);
+        if (r.Ok) { editKey = null; original = null; await ReloadAsync(s); Say(r.Outcome == SetupOutcome.Saved ? "Saved." : r.Message, true); }
+        else if (r.Outcome is SetupOutcome.Conflict or SetupOutcome.NotFound) { editKey = null; original = null; await ReloadAsync(s); Say(r.Message, false); }
+        else Say(r.Message, false);          // invalid or refused: stay in the row so nothing typed is lost
+    });
+
+    private Task DeleteAsync(int key) => RunAsync(async s =>
+    {
+        var r = await Grid.DeleteAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, StoreArg, key);
+        confirmKey = null;
+        if (r.Ok || r.Outcome == SetupOutcome.NotFound) await ReloadAsync(s);
+        Say(r.Ok ? "Removed." : r.Message, r.Ok);
+    });
+
+    private string Show(SetupColumnInfo c, SetupRow row)
+    {
+        var v = row.Values.GetValueOrDefault(c.Def.Name);
+        if (c.Def.Lookup is not null && v is not null)
+            return data!.Lookups.GetValueOrDefault(c.Def.Lookup)?.FirstOrDefault(i => i.Value == Convert.ToInt32(v))?.Text ?? "#" + v;
+        if (c.Def.Kind == SetupKind.Bool) return v is true ? "✓" : "";
+        return SetupValue.Format(c.Def, v);
+    }
+}
