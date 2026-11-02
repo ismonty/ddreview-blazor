@@ -107,6 +107,9 @@ public sealed class SetupGridService
                 names.Add(c.Def.Name); values[c.Def.Name] = v; typed[c.Def.Name] = c.Db;
             }
 
+            if (ExclusiveProblem(table, n => values.TryGetValue(n, out var v) ? v is true
+                    : cols.FirstOrDefault(c => c.Def.Name == n) is { } ci && SetupValue.FromDefault(ci.Def, ci.Db) == "true") is { } ex) return Fail(tx, SetupOutcome.Invalid, ex);
+
             await using var cmd = new SqlCommand(SetupSql.Insert(table, FixedColumns(table, names)), cn, tx) { CommandTimeout = 60 };
             // the store and the fixed filter value are ordinary columns of the new row, filled by the page, never typed
             if (table.StoreColumn is not null) cmd.Parameters.Add("@v_" + table.StoreColumn, SqlDbType.Int).Value = storeId!.Value;
@@ -158,6 +161,8 @@ public sealed class SetupGridService
                 changed.Add(c); newValues[c.Def.Name] = newValue;
             }
             if (changed.Count == 0) { await tx.RollbackAsync(ct); return new SetupWrite(SetupOutcome.Unchanged, "Nothing was changed.", original.Key); }
+
+            if (ExclusiveProblem(table, n => newValues.TryGetValue(n, out var v) ? v is true : original.Values.GetValueOrDefault(n) is true) is { } ex) return Fail(tx, SetupOutcome.Invalid, ex);
 
             await using var cmd = new SqlCommand(SetupSql.Update(table, changed.Select(c => c.Def.Name).ToList()), cn, tx) { CommandTimeout = 60 };
             Bind(cmd, table, storeId, original.Key);
@@ -221,6 +226,15 @@ public sealed class SetupGridService
 
     // ---- helpers ----
 
+    /// <summary>The row as it would be stored must not have the leader on together with one of the columns it excludes.</summary>
+    internal static string? ExclusiveProblem(SetupTable t, Func<string, bool> isOn)
+    {
+        if (t.Exclusive is not { } x || !isOn(x.Leader)) return null;
+        var clash = t.Columns.Where(c => x.Others.Contains(c.Name) && isOn(c.Name)).Select(c => c.Label).ToList();
+        var lead = t.Columns.First(c => c.Name == x.Leader).Label;
+        return clash.Count == 0 ? null : $"\"{lead}\" cannot be on together with {string.Join(", ", clash)}. Turn one side off.";
+    }
+
     /// <summary>Store and filter columns are set by the page, never typed: added to every insert.</summary>
     private static IReadOnlyList<string> FixedColumns(SetupTable t, List<string> typed)
     {
@@ -267,8 +281,9 @@ public sealed class SetupGridService
     {
         var found = new Dictionary<string, SetupDbColumn>(StringComparer.OrdinalIgnoreCase);
         await using (var cmd = new SqlCommand(@"
-select c.name, t.name, c.is_nullable, c.is_identity, cast(case when c.default_object_id <> 0 then 1 else 0 end as bit), c.max_length, c.precision, c.scale
+select c.name, t.name, c.is_nullable, c.is_identity, cast(case when c.default_object_id <> 0 then 1 else 0 end as bit), c.max_length, c.precision, c.scale, dc.definition
 from sys.columns c join sys.types t on t.user_type_id = c.user_type_id
+left join sys.default_constraints dc on dc.object_id = c.default_object_id
 where c.object_id = object_id(@t)", cn, tx))
         {
             cmd.Parameters.Add("@t", SqlDbType.NVarChar, 300).Value = "dbo." + SetupSql.Q(table.Table);
@@ -277,7 +292,7 @@ where c.object_id = object_id(@t)", cn, tx))
             {
                 var type = r.GetString(1); var len = (int)r.GetInt16(5);
                 if (type is "nvarchar" or "nchar" && len > 0) len /= 2;
-                found[r.GetString(0)] = new SetupDbColumn(r.GetString(0), type, r.GetBoolean(2), r.GetBoolean(3), r.GetBoolean(4), len, r.GetByte(6), r.GetByte(7));
+                found[r.GetString(0)] = new SetupDbColumn(r.GetString(0), type, r.GetBoolean(2), r.GetBoolean(3), r.GetBoolean(4), len, r.GetByte(6), r.GetByte(7), r.IsDBNull(8) ? null : r.GetString(8));
             }
         }
         if (found.Count == 0 || !found.TryGetValue(table.Key, out var key) || !key.Identity) return null;

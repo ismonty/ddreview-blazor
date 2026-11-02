@@ -3,7 +3,7 @@ using System.Globalization;
 namespace DDReview.Core.Admin;
 
 /// <summary>A column as the client database has it (sys.columns). Older databases lack some columns; the grid only offers what exists.</summary>
-public sealed record SetupDbColumn(string Name, string Type, bool Nullable, bool Identity, bool HasDefault, int MaxLength, int Precision, int Scale)
+public sealed record SetupDbColumn(string Name, string Type, bool Nullable, bool Identity, bool HasDefault, int MaxLength, int Precision, int Scale, string? DefaultText = null)
 {
     /// <summary>A value must be given when adding a row: not null, and no default to fall back on.</summary>
     public bool Required => !Nullable && !HasDefault && !Identity;
@@ -86,6 +86,22 @@ public static class SetupValue
                 value = dt; return true;
             default: error = "Unsupported column."; return false;
         }
+    }
+
+    /// <summary>The database default of a column as the text a new row starts with (a plain number or yes/no); null when it has none or it is an expression.</summary>
+    public static string? FromDefault(SetupColumn col, SetupDbColumn db)
+    {
+        var t = db.DefaultText?.Trim();
+        while (t is { Length: > 1 } && t[0] == '(' && t[^1] == ')') t = t[1..^1].Trim();
+        if (string.IsNullOrEmpty(t)) return null;
+        if (t.Length >= 2 && t[0] == '\'' && t[^1] == '\'') return col.Kind == SetupKind.Text ? t[1..^1].Replace("''", "'") : null;
+        if (!decimal.TryParse(t, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d)) return null;
+        return col.Kind switch
+        {
+            SetupKind.Bool => d == 0 ? "false" : "true",
+            SetupKind.Int or SetupKind.Decimal => d.ToString("0.######", CultureInfo.InvariantCulture),
+            _ => null,
+        };
     }
 
     private static decimal Pow10(int digits) { var r = 1m; for (var i = 0; i < digits; i++) r *= 10m; return r; }

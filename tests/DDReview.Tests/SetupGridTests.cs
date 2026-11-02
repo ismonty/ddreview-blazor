@@ -14,10 +14,14 @@ public class SetupTableDeclarationTests
         ["tblTaxRates"] = "StoreID TaxTypeID TaxPayee TaxAcct TaxRate ItemID Marker Class AccountClassID Vendor DistReference DebitAccount DebitAccountClassID DebitDistReference RoyaltyFee DebitQuickBooksType CreditQuickBooksType RoyaltyPeriodStartDate RoyaltyPeriodEndDate RoyaltyPeriodSalesExcluded RoyaltyPeriodSalesExpected ProfitCenterAccountClassID Enabled",
         ["tblAccountsCredit"] = "CreditAccountID StoreID CreditAccount DistReference TaxTypeID SalesItem FranchiseSale Suspense AccountClassID SalesRedirectCreditAccountID AccountReportTitleID DiscountRedirectCreditAccount DiscountRedirectDistReference SalesRedirectCreditAccount SalesRedirectDistReference AdjustmentFactor AdjustmentDebitAccount AdjustmentDebitDistReference AdjustmentCreditAccount AdjustmentCreditDistReference DiscountRedirectAccountClassID SalesRedirectAccountClassID AdjustmentDebitAccountClassID AdjustmentCreditAccountClassID TotalSalesAccount MappingSetID ExemptTaxTypeID Delete NewAccount Exclude AdjustmentFactor2 UseTaxApplies DefaultQuickBooksType",
         ["tblAccountsSalesMapping"] = "ItemID StoreID Priority MainTypeID ProfitCenterID Special SaleTypeID PLU Discount TaxExempt CreditAccountID CreditAccount DistReference TaxTypeID SalesItem MappingSetID CompositeSalesTaxRate POSWindowID",
+        ["tblReceiptTypes"] = "ItemID StoreID ReceiptTypeID ReceiptType ReceiptQuery EODLine ReceiptPostedAsDiscount EODLineLevel Enabled Visible Blind Label ReceiptDebitAcct ReceiptContraAcct DiscountDebitAcct DiscountPercent DistReference Sorter CreditCardReceipt CurrencyCalculator ReceiptClass AccountClassID ServerDropMode EndOfShiftDayInitialCountedBlank PostARDetailInGL ARAccount ReportTitle ReportGroup ReportGroupTitle TotalBits CreditBalanceAccount GiftCard ReceiptCheckbookID DiscountDebitAccountClassID ARAccountClassID Suspense ARCustomerName ReceiptTypeVISA ReceiptTypeMC ReceiptTypeDiscover ReceiptTypeAmEx ReceiptTypeEMV ReceiptTypeOther DefaultQuickBooksType",
+        ["tblReceiptTypeAdjustments"] = "ItemID StoreID ReceiptTypeID AdjustmentFactor1 AdjustmentFactor2 AdjustmentDebitAccount AdjustmentDebitAccountClassID AdjustmentDebitDistReference AdjustmentCreditAccount AdjustmentCreditAccountClassID AdjustmentCreditDistReference IncludeAll IncludeFood IncludeBeverage IncludeOther IncludeCharge IncludeDiscounts IncludeTaxes IncludeTips IncludeAllOther",
+        ["tblPayouts"] = "ItemID StoreID PayoutID Payout PayoutSort Marker ExcludeCoverCount PayoutDebitAcct DistReference Class AccountClassID AdjustmentFactor AdjustmentDebitAccount AdjustmentDebitAccountClassID AdjustmentDebitDistReference AdjustmentCreditAccount AdjustmentCreditAccountClassID AdjustmentCreditDistReference TipsShortfall",
+        ["tblGiftCardTypes"] = "ItemID StoreID GiftCardTypeID GiftCardType GiftCardTypeSort GiftCardCreditAcct GiftCardDistReference AccountClassID",
     };
 
     // Columns that older client databases may not have yet (the old Access form fell back without them).
-    private static readonly HashSet<string> MayBeMissing = ["UseTaxApplies", "UseTaxPercentage", "POSWindowID"];
+    private static readonly HashSet<string> MayBeMissing = ["UseTaxApplies", "UseTaxPercentage", "POSWindowID", "TipsShortfall", "DefaultQuickBooksType"];
 
     [Fact] public void Every_declared_column_exists_in_the_real_schema_or_is_known_to_be_optional()
     {
@@ -85,6 +89,42 @@ public class SetupTableDeclarationTests
         Assert.Equal(SetupKind.Bool, SetupTables.SalesMapping.Columns.Single(c => c.Name == "Special").Kind);
         Assert.Equal("Priority", SetupTables.SalesMapping.Order![0].Column);
         Assert.True(SetupTables.SalesMapping.Order![^1].Descending);
+    }
+
+    [Fact] public void Exclusive_and_fill_rules_name_declared_columns()
+    {
+        foreach (var t in SetupTables.All)
+        {
+            var names = t.Columns.Select(c => c.Name).ToHashSet();
+            if (t.Exclusive is { } x) { Assert.Contains(x.Leader, names); foreach (var o in x.Others) Assert.Contains(o, names); Assert.DoesNotContain(x.Leader, x.Others); }
+            foreach (var f in t.Fills ?? [])
+            {
+                Assert.Contains(f.Column, names);
+                foreach (Match m in Regex.Matches(f.Template, @"\{(\w+)\}")) Assert.Contains(m.Groups[1].Value, names);
+            }
+        }
+        Assert.Equal("IncludeAll", SetupTables.ReceiptAdjustments.Exclusive!.Leader);
+    }
+
+    [Fact] public void All_and_a_specific_kind_cannot_both_be_on()
+    {
+        var t = SetupTables.ReceiptAdjustments;
+        Assert.Null(SetupGridService.ExclusiveProblem(t, n => n == "IncludeAll"));
+        Assert.Null(SetupGridService.ExclusiveProblem(t, n => n is "IncludeFood" or "IncludeTips"));
+        Assert.Null(SetupGridService.ExclusiveProblem(t, _ => false));
+        var bad = SetupGridService.ExclusiveProblem(t, n => n is "IncludeAll" or "IncludeTaxes");
+        Assert.NotNull(bad); Assert.Contains("Taxes", bad);
+        Assert.Null(SetupGridService.ExclusiveProblem(SetupTables.Payouts, _ => true));        // tables without the rule are never refused
+    }
+
+    [Fact] public void A_new_row_starts_with_the_database_default()
+    {
+        SetupDbColumn D(string type, string? def) => new("c", type, false, false, def is not null, 0, 0, 0, def);
+        Assert.Equal("true", SetupValue.FromDefault(new("c", "C", SetupKind.Bool), D("bit", "((1))")));
+        Assert.Equal("false", SetupValue.FromDefault(new("c", "C", SetupKind.Bool), D("bit", "((0))")));
+        Assert.Equal("1", SetupValue.FromDefault(new("c", "C", SetupKind.Int), D("int", "((1))")));
+        Assert.Null(SetupValue.FromDefault(new("c", "C", SetupKind.Date), D("datetime", "(getdate())")));
+        Assert.Null(SetupValue.FromDefault(new("c", "C", SetupKind.Int), D("int", null)));
     }
 
     [Fact] public void Tax_and_royalty_pages_share_a_table_but_never_each_others_rows()

@@ -13,12 +13,18 @@ public sealed record SetupColumn(string Name, string Label, SetupKind Kind = Set
 
 public sealed record SetupOrder(string Column, bool Descending = false);
 
+/// <summary>Of these yes/no columns the leader excludes the others: turning the leader on turns them off, turning one of them on turns the leader off (Include all vs. the specific kinds).</summary>
+public sealed record SetupExclusive(string Leader, string[] Others);
+
+/// <summary>What the old forms did on a double-click: fill an empty field from other fields of the row. {Name} is replaced by that column's value.</summary>
+public sealed record SetupFill(string Column, string Template);
+
 /// <param name="Key">The identity column; the row id the page works with.</param>
 /// <param name="StoreColumn">Set for per-store tables: rows are listed, added and changed for one chosen store.</param>
 /// <param name="FilterColumn">A bit column fixed to <paramref name="FilterValue"/> for this page (tax rates and royalty/fee rates share one table).</param>
 public sealed record SetupTable(string Id, SetupArea Area, string Title, string Table, string Key, IReadOnlyList<SetupColumn> Columns,
     string? StoreColumn = null, string? FilterColumn = null, bool FilterValue = false, IReadOnlyList<SetupOrder>? Order = null,
-    string? Help = null, bool AllowDelete = true)
+    string? Help = null, bool AllowDelete = true, SetupExclusive? Exclusive = null, IReadOnlyList<SetupFill>? Fills = null)
 {
     public string Route => "/admin/setup/table/" + Id;
 }
@@ -38,6 +44,7 @@ public static class SetupLookups
     public const string PosWindows = "PosWindows";
     public const string CreditAccounts = "CreditAccounts";
     public const string ReportTitles = "ReportTitles";
+    public const string ReceiptTypes = "ReceiptTypes";
 
     /// <summary>The query for a list: id, text and (optionally) a third int column, the parent a narrowing column filters by.</summary>
     public static string? Sql(string name) => name switch
@@ -62,6 +69,7 @@ public static class SetupLookups
         CreditAccounts => "select ca.CreditAccountID, rtrim(isnull(ca.DistReference, '')) + ' (' + rtrim(isnull(ca.CreditAccount, '')) + isnull(' - ' + rtrim(tt.TaxType), '') + isnull(' - ' + rtrim(ac.AccountClass), '') + ')' "
             + "from dbo.tblAccountsCredit ca left join dbo.tblTaxTypes tt on tt.TaxTypeID = ca.TaxTypeID left join dbo.tblAccountsClasses ac on ac.AccountClassID = ca.AccountClassID "
             + "where ca.StoreID = @store order by 2",
+        ReceiptTypes => "select ReceiptTypeID, ReceiptType from dbo.tblReceiptTypes where StoreID = @store and ReceiptTypeID between 1 and 999 order by ReceiptType",
         ReportTitles => "select AccountReportTitleID, ReportTitle from dbo.tblAccountsReportTitles order by ReportTitle",
         _ => null,
     };
@@ -205,7 +213,111 @@ public static class SetupTables
     Order: [new("Priority"), new("MainTypeID"), new("ProfitCenterID"), new("SaleTypeID"), new("Special", Descending: true)],
     Help: "Which G/L credit account a sale posts to, by what was sold. The first matching row in priority order wins, so a wrong row changes the next export.");
 
-    public static IReadOnlyList<SetupTable> All { get; } = [AccountClasses, TaxTypes, TaxRates, RoyaltyFeeRates, SalesAccounts, SalesMapping];
+    private static SetupColumn[] AdjustmentColumns(string prefix) =>
+    [
+        new(prefix + "Account", "Adjustment " + (prefix == "AdjustmentDebit" ? "debit" : "credit") + " account"),
+        new(prefix + "DistReference", "Adjustment " + (prefix == "AdjustmentDebit" ? "debit" : "credit") + " reference"),
+        new(prefix + "AccountClassID", "Adjustment " + (prefix == "AdjustmentDebit" ? "debit" : "credit") + " class", SetupKind.Int, SetupLookups.AccountClasses),
+    ];
+
+    public static SetupTable ReceiptTypes { get; } = new("receipt-types", SetupArea.GlSetup, "Receipt Account Mapping", "tblReceiptTypes", "ItemID",
+    [
+        new("ReceiptTypeID", "Receipt type id", SetupKind.Int, Help: "The POS's own number for this receipt type."),
+        new("ReceiptType", "Receipt type"),
+        new("Enabled", "Enabled", SetupKind.Bool),
+        new("Visible", "Visible", SetupKind.Bool),
+        new("ReceiptDebitAcct", "Debit account"),
+        new("DistReference", "Reference"),
+        new("AccountClassID", "Class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("ReceiptContraAcct", "Contra account"),
+        new("DiscountDebitAcct", "Discount debit account"),
+        new("DiscountDebitAccountClassID", "Discount debit class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("DiscountPercent", "Discount %", SetupKind.Decimal),
+        new("ARAccount", "A/R account"),
+        new("ARAccountClassID", "A/R class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("ARCustomerName", "A/R customer name"),
+        new("PostARDetailInGL", "Post A/R detail in G/L", SetupKind.Bool),
+        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes),
+        new("Label", "Label"),
+        new("Sorter", "Sort", SetupKind.Int),
+        new("ReceiptPostedAsDiscount", "Posted as discount", SetupKind.Bool),
+        new("CreditCardReceipt", "Credit card", SetupKind.Bool),
+        new("GiftCard", "Gift card", SetupKind.Bool),
+        new("Suspense", "Suspense", SetupKind.Bool),
+        new("CreditBalanceAccount", "Credit balance account", SetupKind.Bool),
+        new("Blind", "Blind", SetupKind.Bool),
+        new("EndOfShiftDayInitialCountedBlank", "Initial count blank", SetupKind.Bool),
+        new("ReceiptQuery", "Receipt query", SetupKind.Int),
+        new("EODLine", "End-of-day line", SetupKind.Int),
+        new("EODLineLevel", "End-of-day level", SetupKind.Int),
+        new("CurrencyCalculator", "Currency calculator", SetupKind.Int),
+        new("ReceiptClass", "Receipt class", SetupKind.Int),
+        new("ServerDropMode", "Server drop mode", SetupKind.Int),
+        new("ReportTitle", "Report title"),
+        new("ReportGroup", "Report group", SetupKind.Int),
+        new("ReportGroupTitle", "Report group title"),
+        new("TotalBits", "Total bits", SetupKind.Int),
+        new("ReceiptCheckbookID", "Checkbook id"),
+        new("ReceiptTypeVISA", "VISA", SetupKind.Int),
+        new("ReceiptTypeMC", "MC", SetupKind.Int),
+        new("ReceiptTypeDiscover", "Discover", SetupKind.Int),
+        new("ReceiptTypeAmEx", "AmEx", SetupKind.Int),
+        new("ReceiptTypeEMV", "EMV", SetupKind.Int),
+        new("ReceiptTypeOther", "Other card", SetupKind.Int),
+    ], StoreColumn: "StoreID", Order: [new("ReceiptTypeID")], AllowDelete: false,
+    Fills: [new("ReceiptDebitAcct", "Receipts: {ReceiptType}"), new("DistReference", "{ReceiptType} Receipts")],
+    Help: "The accounts each POS receipt type posts to. \"Fill empty accounts\" proposes a debit account and reference from the receipt type name. Receipt types come from the POS, so they cannot be removed here.");
+
+    public static SetupTable ReceiptAdjustments { get; } = new("receipt-adjustments", SetupArea.GlSetup, "Receipt Adjustments", "tblReceiptTypeAdjustments", "ItemID",
+    [
+        new("ReceiptTypeID", "Receipt type", SetupKind.Int, SetupLookups.ReceiptTypes),
+        new("AdjustmentFactor1", "Factor 1", SetupKind.Decimal),
+        new("AdjustmentFactor2", "Factor 2", SetupKind.Decimal),
+        .. AdjustmentColumns("AdjustmentDebit"),
+        .. AdjustmentColumns("AdjustmentCredit"),
+        new("IncludeAll", "All", SetupKind.Bool, Help: "Turning this on turns the specific kinds off, and turning one of them on turns this off."),
+        new("IncludeFood", "Food", SetupKind.Bool),
+        new("IncludeBeverage", "Beverage", SetupKind.Bool),
+        new("IncludeOther", "Other", SetupKind.Bool),
+        new("IncludeCharge", "Charge", SetupKind.Bool),
+        new("IncludeDiscounts", "Discounts", SetupKind.Bool),
+        new("IncludeTaxes", "Taxes", SetupKind.Bool),
+        new("IncludeTips", "Tips", SetupKind.Bool),
+        new("IncludeAllOther", "All other", SetupKind.Bool),
+    ], StoreColumn: "StoreID", Order: [new("ReceiptTypeID")],
+    Exclusive: new("IncludeAll", ["IncludeFood", "IncludeBeverage", "IncludeOther", "IncludeCharge", "IncludeDiscounts", "IncludeTaxes", "IncludeTips", "IncludeAllOther"]),
+    Help: "An extra posting for a receipt type: a factor of the amounts, debited and credited to the accounts given. \"All\" or specific kinds of sales, not both.");
+
+    public static SetupTable Payouts { get; } = new("paid-outs", SetupArea.GlSetup, "Paid Outs", "tblPayouts", "ItemID",
+    [
+        new("PayoutID", "Paid out id", SetupKind.Int),
+        new("Payout", "Paid out"),
+        new("PayoutSort", "Sort"),
+        new("PayoutDebitAcct", "Debit account"),
+        new("DistReference", "Reference"),
+        new("AccountClassID", "Class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("TipsShortfall", "Tips shortfall", SetupKind.Bool),
+        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes),
+        new("AdjustmentFactor", "Adjustment factor", SetupKind.Decimal),
+        .. AdjustmentColumns("AdjustmentDebit"),
+        .. AdjustmentColumns("AdjustmentCredit"),
+    ], StoreColumn: "StoreID", Order: [new("PayoutSort")],
+    Fills: [new("PayoutDebitAcct", "{Payout}"), new("DistReference", "Paid Out - {Payout}")],
+    Help: "The accounts each kind of paid out posts to for the chosen store. Tips shortfall only shows in databases that have the column.");
+
+    public static SetupTable GiftCards { get; } = new("gift-cards", SetupArea.GlSetup, "Gift Cards", "tblGiftCardTypes", "ItemID",
+    [
+        new("GiftCardTypeID", "Gift card type id", SetupKind.Int),
+        new("GiftCardType", "Gift card type"),
+        new("GiftCardTypeSort", "Sort"),
+        new("GiftCardCreditAcct", "Credit account"),
+        new("GiftCardDistReference", "Reference"),
+        new("AccountClassID", "Class", SetupKind.Int, SetupLookups.AccountClasses),
+    ], StoreColumn: "StoreID", Order: [new("GiftCardTypeSort")],
+    Fills: [new("GiftCardDistReference", "{GiftCardType}")],
+    Help: "The credit account each gift card type posts to for the chosen store.");
+
+    public static IReadOnlyList<SetupTable> All { get; } = [AccountClasses, TaxTypes, TaxRates, RoyaltyFeeRates, SalesAccounts, SalesMapping, ReceiptTypes, ReceiptAdjustments, Payouts, GiftCards];
 
     public static SetupTable? Find(string? id) => All.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.Ordinal));
 }
