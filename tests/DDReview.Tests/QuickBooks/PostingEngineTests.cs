@@ -69,6 +69,26 @@ public class PostingEngineTests
     }
 
     [Fact]
+    public void A_changed_account_mapping_modifies_the_entry_and_the_next_identical_post_is_unchanged()
+    {
+        var qb = new FakeQuickBooks();
+        var engine = new PostingEngine(qb);
+        engine.Run(Plan(), commit: true);
+        var plan = Plan();
+        var je = plan.Of<JournalEntry>().First();
+        var lines = je.Lines.ToList();
+        string other = lines.Select(l => l.Account).First(a => a != lines[0].Account);
+        lines[0].Account = other;                 // same amounts, a different account
+        var changed = engine.Run(plan, commit: true);
+        Assert.Single(changed.Modified);
+        Assert.Equal(1, qb.Sent("JournalEntryModRq"));
+        var again = engine.Run(plan, commit: true);
+        Assert.Empty(again.Modified);
+        Assert.Empty(again.Added);
+        Assert.Equal(1, qb.Sent("JournalEntryModRq"));
+    }
+
+    [Fact]
     public void An_existing_parent_account_gives_its_type_to_new_children()
     {
         var qb = new FakeQuickBooks();

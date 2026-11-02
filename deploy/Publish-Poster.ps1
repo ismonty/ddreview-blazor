@@ -55,7 +55,7 @@ Step 'Publishing the poster (win-x86, self-contained)'
 $publishDir = Join-Path $OutDir 'poster'
 if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
-& dotnet publish (Join-Path $repo 'src/DDReview.QuickBooks.Win/DDReview.QuickBooks.Win.csproj') -c Release -r win-x86 --self-contained true -o $publishDir --nologo
+& dotnet publish (Join-Path $repo 'src/DDReview.QuickBooks.Win/DDReview.QuickBooks.Win.csproj') -c Release -r win-x86 --self-contained true -o $publishDir -p:SourceRevisionId=$sha --nologo
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
 
 Step 'Tidying and checking the folder'

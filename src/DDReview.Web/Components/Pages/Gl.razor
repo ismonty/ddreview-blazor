@@ -8,6 +8,7 @@
 @inject DDReview.QuickBooks.Launch.PosterLinkService PosterLinks
 @inject NavigationManager Nav
 @inject ILogger<Gl> Logger
+@inject IJSRuntime JS
 
 @using DDReview.Web.Components.Home
 
@@ -34,8 +35,8 @@ else
         <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
         @if (PosterLinks.IsConfigured)
         {
-            <button type="button" @onclick="PostToQuickBooks" disabled="@busy"
-                    title="Opens the QuickBooks poster on this computer with these stores, dates and choice filled in. Nothing is posted until you Preview and Post there.">Post to QuickBooks…</button>
+            <button type="button" @onclick="PostToQuickBooksAsync" disabled="@(!GlPostingGate.HasData(report, busy))"
+                    title="Opens the QuickBooks poster on this computer with the stores, dates and choice of the report shown below. Needs a report on the page. Nothing is posted until you Preview and Post there.">Post to QuickBooks…</button>
         }
     </EditForm>
 
@@ -163,7 +164,7 @@ else
     private IReadOnlyList<GlSummaryLine>? summaryLines;
 
     // Submission reports: the stores and dates of the last successful run, and the viewer opened over the page.
-    private sealed record RunInfo(string Stores, DateOnly Start, DateOnly End);
+    private sealed record RunInfo(string Stores, DateOnly Start, DateOnly End, int ArFlag);
     private RunInfo? lastRun;
     private bool subsOpen, subsBusy;
     private string subsTitle = "";
@@ -190,16 +191,25 @@ else
     /// Makes a signed, short-lived ddposter:// link for the stores, dates and choice on the page and hands it to the browser, which asks the person's own computer to open the poster.
     /// Only stores this user is authorized for are put in the link (the same check Run makes), and the link never carries a password or connection string.
     /// </summary>
-    private void PostToQuickBooks()
+    private async Task PostToQuickBooksAsync()
     {
         posterMsg = null;
         if (ctx is null || !allowed || !PosterLinks.IsConfigured) return;
-        if (selected.Count == 0) { posterMsg = "Pick at least one store."; return; }
+        if (lastRun is null || !GlPostingGate.HasData(report, busy)) { posterMsg = "Run the report first; the poster opens with what is shown."; return; }
+        // What is on the page is what goes to the poster, not whatever the filters say now.
         var authorized = stores.Select(s => s.StoreId).ToHashSet();
-        var ids = selected.Where(authorized.Contains).OrderBy(x => x).ToList();
-        var request = new DDReview.QuickBooks.Sql.PostingRequest(ids, start.Date, end.Date, arFlag);
+        var ids = lastRun.Stores.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => int.TryParse(t, out var n) ? n : 0).Where(authorized.Contains).Distinct().OrderBy(x => x).ToList();
+        if (ids.Count == 0) { posterMsg = "Pick at least one store."; return; }
+        var question = GlPostingGate.BalanceQuestion(report);
+        if (question is not null)
+        {
+            if (!await JS.InvokeAsync<bool>("confirm", question)) { posterMsg = "Nothing was sent to the poster."; return; }
+            Logger.LogWarning("Web user {UserId} opened the poster from an out-of-balance report", ctx.WebUserId);
+        }
+        var request = new DDReview.QuickBooks.Sql.PostingRequest(ids, lastRun.Start.ToDateTime(TimeOnly.MinValue), lastRun.End.ToDateTime(TimeOnly.MinValue), lastRun.ArFlag);
         if (!PosterLinks.TryCreate(request, ctx.WebUserId, DateTimeOffset.UtcNow, out var link, out var why)) { posterMsg = why; return; }
-        Logger.LogInformation("QuickBooks poster link made for web user {UserId}: {StoreCount} stores, {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}, scope {Scope}", ctx.WebUserId, ids.Count, start, end, arFlag);
+        Logger.LogInformation("QuickBooks poster link made for web user {UserId}: {StoreCount} stores, {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}, scope {Scope}", ctx.WebUserId, ids.Count, lastRun.Start, lastRun.End, lastRun.ArFlag);
         posterMsg = "Opening the QuickBooks poster on this computer. Nothing has been posted: use Preview in the poster first. If nothing opens, start DDQuickBooksPoster.exe once and choose “Register DD Review links”.";
         Nav.NavigateTo(link, forceLoad: true);
     }
@@ -235,7 +245,7 @@ else
                 var d = rows.Sum(l => l.Debit); var c = rows.Sum(l => l.Credit);
                 report = new GlBalanceReport(d, c, []);
             }
-            lastRun = new RunInfo(req.StoreListCsv, req.Start, req.End);
+            lastRun = new RunInfo(req.StoreListCsv, req.Start, req.End, req.ArFlag);
         }
         catch (Exception ex) { error = "The query failed: " + ex.Message; }
         finally { busy = false; }
