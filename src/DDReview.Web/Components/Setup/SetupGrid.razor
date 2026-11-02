@@ -52,7 +52,16 @@ else
                         {
                             <select value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()">
                                 <option value="">@(c.Nullable ? "(none)" : "Choose…")</option>
-                                @foreach (var item in data.Lookups.GetValueOrDefault(c.Def.Lookup) ?? []) { <option value="@item.Value">@item.Text</option> }
+                                @foreach (var item in Offered(c)) { <option value="@item.Value">@item.Text</option> }
+                            </select>
+                        }
+                        else if (c.Def.Kind == SetupKind.Bool && c.Nullable)
+                        {
+                            @* yes / no / blank: blank means "either" for the mapping flags *@
+                            <select value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()">
+                                <option value="">(either)</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
                             </select>
                         }
                         else if (c.Def.Kind == SetupKind.Bool)
@@ -177,7 +186,7 @@ else
     private void StartAdd()
     {
         original = null; confirmKey = null; Say(null, true);
-        edit = data!.Columns.ToDictionary(c => c.Def.Name, c => c.Def.Kind == SetupKind.Bool ? "false" : (string?)null);
+        edit = data!.Columns.ToDictionary(c => c.Def.Name, c => c.Def.Kind == SetupKind.Bool && !c.Nullable ? "false" : (string?)null);
         editKey = 0;
     }
 
@@ -208,11 +217,21 @@ else
         Say(r.Ok ? "Removed." : r.Message, r.Ok);
     });
 
+    /// <summary>The list for a drop-down, narrowed by the column it follows (sale types by main type). The value already chosen stays offered.</summary>
+    private IEnumerable<SetupLookupItem> Offered(SetupColumnInfo c)
+    {
+        var all = data!.Lookups.GetValueOrDefault(c.Def.Lookup!) ?? [];
+        if (c.Def.LookupParent is not { } parent || !int.TryParse(edit.GetValueOrDefault(parent), out var p)) return all;
+        int.TryParse(edit.GetValueOrDefault(c.Def.Name), out var current);
+        return all.Where(i => i.Parent == p || (current != 0 && i.Value == current));
+    }
+
     private string Show(SetupColumnInfo c, SetupRow row)
     {
         var v = row.Values.GetValueOrDefault(c.Def.Name);
         if (c.Def.Lookup is not null && v is not null)
             return data!.Lookups.GetValueOrDefault(c.Def.Lookup)?.FirstOrDefault(i => i.Value == Convert.ToInt32(v))?.Text ?? "#" + v;
+        if (c.Def.Kind == SetupKind.Bool && c.Nullable) return v is true ? "Yes" : v is false ? "No" : "";
         if (c.Def.Kind == SetupKind.Bool) return v is true ? "✓" : "";
         return SetupValue.Format(c.Def, v);
     }

@@ -12,7 +12,7 @@ public sealed record SetupColumnInfo(SetupColumn Def, SetupDbColumn Db)
 }
 
 public sealed record SetupRow(int Key, IReadOnlyDictionary<string, object?> Values);
-public sealed record SetupLookupItem(int Value, string Text);
+public sealed record SetupLookupItem(int Value, string Text, int? Parent = null);
 
 public sealed record SetupGridData(SetupTable Table, IReadOnlyList<SetupColumnInfo> Columns, IReadOnlyList<SetupRow> Rows,
     IReadOnlyDictionary<string, IReadOnlyList<SetupLookupItem>> Lookups);
@@ -67,7 +67,7 @@ public sealed class SetupGridService
                 rows.Add(new SetupRow(Convert.ToInt32(r[table.Key]), values));
             }
         }
-        return new SetupGridData(table, cols, rows, await LookupsAsync(cn, null, cols, ct));
+        return new SetupGridData(table, cols, rows, await LookupsAsync(cn, null, cols, storeId, ct));
     }
 
     private async Task<SetupGridData?> EmptyAsync(string cs, SetupTable table, CancellationToken ct)
@@ -75,7 +75,7 @@ public sealed class SetupGridService
         await using var cn = new SqlConnection(cs);
         await cn.OpenAsync(ct);
         var cols = await ColumnsAsync(cn, null, table, ct);
-        return cols is null ? null : new SetupGridData(table, cols, [], await LookupsAsync(cn, null, cols, ct));
+        return cols is null ? null : new SetupGridData(table, cols, [], await LookupsAsync(cn, null, cols, null, ct));
     }
 
     /// <param name="edits">What was typed, by column name. Blank means "none" (or the database default when adding).</param>
@@ -91,7 +91,7 @@ public sealed class SetupGridService
             var cols = await ColumnsAsync(cn, tx, table, ct);
             if (cols is null) return Fail(tx, SetupOutcome.NotFound, "That table is not in this database.");
             if (await CheckStoreAsync(cn, tx, table, storeId, ct) is { } storeProblem) return Fail(tx, SetupOutcome.Invalid, storeProblem);
-            var lookups = await LookupsAsync(cn, tx, cols, ct);
+            var lookups = await LookupsAsync(cn, tx, cols, storeId, ct);
 
             var names = new List<string>(); var values = new Dictionary<string, object?>(); var typed = new Dictionary<string, SetupDbColumn>();
             foreach (var c in cols.Where(c => !c.Db.Identity))
@@ -136,7 +136,7 @@ public sealed class SetupGridService
             var cols = await ColumnsAsync(cn, tx, table, ct);
             if (cols is null) return Fail(tx, SetupOutcome.NotFound, "That table is not in this database.");
             if (await CheckStoreAsync(cn, tx, table, storeId, ct) is { } storeProblem) return Fail(tx, SetupOutcome.Invalid, storeProblem);
-            var lookups = await LookupsAsync(cn, tx, cols, ct);
+            var lookups = await LookupsAsync(cn, tx, cols, storeId, ct);
 
             var changed = new List<SetupColumnInfo>(); var newValues = new Dictionary<string, object?>();
             foreach (var c in cols.Where(c => !c.Db.Identity && edits.ContainsKey(c.Def.Name)))
@@ -151,9 +151,10 @@ public sealed class SetupGridService
                 else
                 {
                     if (!SetupValue.TryParse(c.Def, c.Db, text, out newValue, out var err)) return Fail(tx, SetupOutcome.Invalid, err);
-                    if (LookupProblem(c, newValue, lookups) is { } lp) return Fail(tx, SetupOutcome.Invalid, lp);
                 }
                 if (SetupValue.Format(c.Def, newValue) == SetupValue.Format(c.Def, was)) continue;
+                // only a value that is really being changed has to be on the list (an old row may hold one that no longer is)
+                if (LookupProblem(c, newValue, lookups) is { } lp) return Fail(tx, SetupOutcome.Invalid, lp);
                 changed.Add(c); newValues[c.Def.Name] = newValue;
             }
             if (changed.Count == 0) { await tx.RollbackAsync(ct); return new SetupWrite(SetupOutcome.Unchanged, "Nothing was changed.", original.Key); }
@@ -290,7 +291,7 @@ where c.object_id = object_id(@t)", cn, tx))
         return list;
     }
 
-    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<SetupLookupItem>>> LookupsAsync(SqlConnection cn, SqlTransaction? tx, IReadOnlyList<SetupColumnInfo> cols, CancellationToken ct)
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<SetupLookupItem>>> LookupsAsync(SqlConnection cn, SqlTransaction? tx, IReadOnlyList<SetupColumnInfo> cols, int? storeId, CancellationToken ct)
     {
         var result = new Dictionary<string, IReadOnlyList<SetupLookupItem>>();
         foreach (var name in cols.Select(c => c.Def.Lookup).Where(n => n is not null).Distinct())
@@ -301,8 +302,11 @@ where c.object_id = object_id(@t)", cn, tx))
             try
             {
                 await using var cmd = new SqlCommand(sql, cn, tx);
+                if (sql.Contains("@store", StringComparison.Ordinal)) cmd.Parameters.Add("@store", SqlDbType.Int).Value = storeId ?? 0;
                 await using var r = await cmd.ExecuteReaderAsync(ct);
-                while (await r.ReadAsync(ct)) items.Add(new SetupLookupItem(Convert.ToInt32(r.GetValue(0)), r.IsDBNull(1) ? "" : r.GetString(1).Trim()));
+                while (await r.ReadAsync(ct))
+                    items.Add(new SetupLookupItem(Convert.ToInt32(r.GetValue(0)), r.IsDBNull(1) ? "" : r.GetString(1).Trim(),
+                        r.FieldCount > 2 && !r.IsDBNull(2) ? Convert.ToInt32(r.GetValue(2)) : null));
             }
             catch (SqlException) { /* an older database without the lookup table: the list stays empty */ }
             result[name!] = items;

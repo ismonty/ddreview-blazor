@@ -12,10 +12,12 @@ public class SetupTableDeclarationTests
         ["tblAccountsClasses"] = "AccountClassID AccountClass InterClassSameClassAccount InterClassSameClassDistReference OtherAccountClassID InterClassOtherClassAccount InterClassOtherClassDistReference InterClassSameClassDebitCreditFlag InterClassOtherClassDebitCreditFlag ExportFlag InterClassSameClassDefaultQuickBooksType InterClassOtherClassDefaultQuickBooksType",
         ["tblTaxTypes"] = "TaxTypeID TaxType RoyaltyFee",
         ["tblTaxRates"] = "StoreID TaxTypeID TaxPayee TaxAcct TaxRate ItemID Marker Class AccountClassID Vendor DistReference DebitAccount DebitAccountClassID DebitDistReference RoyaltyFee DebitQuickBooksType CreditQuickBooksType RoyaltyPeriodStartDate RoyaltyPeriodEndDate RoyaltyPeriodSalesExcluded RoyaltyPeriodSalesExpected ProfitCenterAccountClassID Enabled",
+        ["tblAccountsCredit"] = "CreditAccountID StoreID CreditAccount DistReference TaxTypeID SalesItem FranchiseSale Suspense AccountClassID SalesRedirectCreditAccountID AccountReportTitleID DiscountRedirectCreditAccount DiscountRedirectDistReference SalesRedirectCreditAccount SalesRedirectDistReference AdjustmentFactor AdjustmentDebitAccount AdjustmentDebitDistReference AdjustmentCreditAccount AdjustmentCreditDistReference DiscountRedirectAccountClassID SalesRedirectAccountClassID AdjustmentDebitAccountClassID AdjustmentCreditAccountClassID TotalSalesAccount MappingSetID ExemptTaxTypeID Delete NewAccount Exclude AdjustmentFactor2 UseTaxApplies DefaultQuickBooksType",
+        ["tblAccountsSalesMapping"] = "ItemID StoreID Priority MainTypeID ProfitCenterID Special SaleTypeID PLU Discount TaxExempt CreditAccountID CreditAccount DistReference TaxTypeID SalesItem MappingSetID CompositeSalesTaxRate POSWindowID",
     };
 
     // Columns that older client databases may not have yet (the old Access form fell back without them).
-    private static readonly HashSet<string> MayBeMissing = ["UseTaxApplies", "UseTaxPercentage"];
+    private static readonly HashSet<string> MayBeMissing = ["UseTaxApplies", "UseTaxPercentage", "POSWindowID"];
 
     [Fact] public void Every_declared_column_exists_in_the_real_schema_or_is_known_to_be_optional()
     {
@@ -55,6 +57,34 @@ public class SetupTableDeclarationTests
             foreach (var c in t.Columns.Where(c => c.Lookup is not null)) Assert.NotNull(SetupLookups.Sql(c.Lookup!));
             Assert.Equal("/admin/setup/table/" + t.Id, t.Route);
         }
+    }
+
+    [Fact] public void Store_lists_use_the_chosen_store_as_a_parameter_and_nothing_is_spliced_in()
+    {
+        foreach (var t in SetupTables.All)
+            foreach (var c in t.Columns.Where(c => c.Lookup is not null))
+            {
+                var sql = SetupLookups.Sql(c.Lookup!)!;
+                if (t.StoreColumn is null) Assert.DoesNotContain("@store", sql);
+                Assert.Equal(0, Regex.Matches(sql, "@\\w+").Count(m => m.Value != "@store"));
+            }
+    }
+
+    [Fact] public void A_narrowing_column_is_another_column_of_the_same_table_and_its_list_carries_the_parent()
+    {
+        foreach (var t in SetupTables.All)
+            foreach (var c in t.Columns.Where(c => c.LookupParent is not null))
+            {
+                Assert.Contains(t.Columns, x => x.Name == c.LookupParent);
+                Assert.Contains("MainTypeID", SetupLookups.Sql(c.Lookup!)!);        // third column of the sale type list
+            }
+    }
+
+    [Fact] public void Mapping_flags_are_left_blank_to_mean_either()
+    {
+        Assert.Equal(SetupKind.Bool, SetupTables.SalesMapping.Columns.Single(c => c.Name == "Special").Kind);
+        Assert.Equal("Priority", SetupTables.SalesMapping.Order![0].Column);
+        Assert.True(SetupTables.SalesMapping.Order![^1].Descending);
     }
 
     [Fact] public void Tax_and_royalty_pages_share_a_table_but_never_each_others_rows()

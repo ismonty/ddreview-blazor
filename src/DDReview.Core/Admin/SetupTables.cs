@@ -7,8 +7,9 @@ public enum SetupKind { Text, Int, Decimal, Bool, Date }
 /// declarations (never from the browser), values always travel as parameters.
 /// </summary>
 /// <param name="Lookup">A name from <see cref="SetupLookups"/>: the value is the id of a row there and is shown as its text.</param>
+/// <param name="LookupParent">Another column of the same row that narrows this list (sale types follow the main type): only items whose parent matches are offered.</param>
 public sealed record SetupColumn(string Name, string Label, SetupKind Kind = SetupKind.Text, string? Lookup = null,
-    string[]? Suggestions = null, string? Help = null);
+    string[]? Suggestions = null, string? Help = null, string? LookupParent = null);
 
 public sealed record SetupOrder(string Column, bool Descending = false);
 
@@ -28,12 +29,40 @@ public static class SetupLookups
     public const string AccountClasses = "AccountClasses";
     public const string TaxTypes = "TaxTypes";
     public const string RoyaltyFeeTypes = "RoyaltyFeeTypes";
+    // per-store lists (they use @store, the store chosen on the page)
+    public const string MainTypes = "MainTypes";
+    public const string ProfitCenters = "ProfitCenters";
+    public const string SaleTypes = "SaleTypes";
+    public const string MenuItems = "MenuItems";
+    public const string Discounts = "Discounts";
+    public const string PosWindows = "PosWindows";
+    public const string CreditAccounts = "CreditAccounts";
+    public const string ReportTitles = "ReportTitles";
 
+    /// <summary>The query for a list: id, text and (optionally) a third int column, the parent a narrowing column filters by.</summary>
     public static string? Sql(string name) => name switch
     {
         AccountClasses => "select AccountClassID, AccountClass from dbo.tblAccountsClasses order by AccountClass",
         TaxTypes => "select TaxTypeID, TaxType from dbo.tblTaxTypes where RoyaltyFee = 0 order by TaxType",
         RoyaltyFeeTypes => "select TaxTypeID, TaxType from dbo.tblTaxTypes where RoyaltyFee = 1 order by TaxType",
+        MainTypes => "select MainTypeID, Description from dbo.tblMainTypes where MainTypeID is not null order by DisplayOrder, Description",
+        ProfitCenters => "select ProfitCenterID, ProfitCenter from dbo.tblProfitCenters where StoreID = @store and ProfitCenterID is not null order by ProfitCenter",
+        SaleTypes => "select st.SaleTypeID, st.SaleType, mg.MainTypeID from dbo.tblSaleTypes st "
+            + "left join dbo.tblMainGroups mg on mg.StoreID = st.StoreID and mg.MainGroupID = st.MainGroupID "
+            + "where st.StoreID = @store and st.SaleTypeID is not null order by st.SaleType",
+        // the menu item list the old form used (it folds in the charge items), one line per PLU
+        MenuItems => "select PLU, isnull(max(Description), '') + ' (' + convert(varchar(12), PLU) + ')' from dbo.fn_MenuItemList(@store, null, null) group by PLU order by 2",
+        // negative ids are receipt types posted as discounts, -1 is every discount: the same encoding the old form wrote
+        Discounts => "select DiscountID, Discount from ("
+            + "select -1 as Sorter, -1 as DiscountID, '<All Discounts>' as Discount "
+            + "union all select 0, DiscountID, Discount from dbo.tblDiscounts where StoreID = @store and DiscountID is not null "
+            + "union all select 1, -ReceiptTypeID, 'Receipt: ' + ReceiptType from dbo.tblReceiptTypes where StoreID = @store and ReceiptPostedAsDiscount = 1"
+            + ") d order by Sorter, Discount",
+        PosWindows => "select POSWindowID, POSWindowName from dbo.tblPOSWindows where StoreID = @store order by POSWindowName",
+        CreditAccounts => "select ca.CreditAccountID, rtrim(isnull(ca.DistReference, '')) + ' (' + rtrim(isnull(ca.CreditAccount, '')) + isnull(' - ' + rtrim(tt.TaxType), '') + isnull(' - ' + rtrim(ac.AccountClass), '') + ')' "
+            + "from dbo.tblAccountsCredit ca left join dbo.tblTaxTypes tt on tt.TaxTypeID = ca.TaxTypeID left join dbo.tblAccountsClasses ac on ac.AccountClassID = ca.AccountClassID "
+            + "where ca.StoreID = @store order by 2",
+        ReportTitles => "select AccountReportTitleID, ReportTitle from dbo.tblAccountsReportTitles order by ReportTitle",
         _ => null,
     };
 }
@@ -119,7 +148,64 @@ public static class SetupTables
         Order: [new("TaxTypeID"), new("Enabled")],
         Help: "Royalties and fees charged on sales for the chosen store, and the accounts they post to.");
 
-    public static IReadOnlyList<SetupTable> All { get; } = [AccountClasses, TaxTypes, TaxRates, RoyaltyFeeRates];
+
+    private const string TriHelp = "Leave blank for either (the mapping then applies whether or not it is set).";
+
+    public static SetupTable SalesAccounts { get; } = new("sales-accounts", SetupArea.GlSetup, "Sales Accounts", "tblAccountsCredit", "CreditAccountID",
+    [
+        new("DistReference", "Reference"),
+        new("CreditAccount", "Credit account"),
+        new("TaxTypeID", "Tax type", SetupKind.Int, SetupLookups.TaxTypes),
+        new("AccountClassID", "Class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("SalesItem", "Sales item", SetupKind.Bool),
+        new("FranchiseSale", "Franchise sale", SetupKind.Bool),
+        new("Suspense", "Suspense", SetupKind.Bool),
+        new("TotalSalesAccount", "Total sales account", SetupKind.Bool),
+        new("Exclude", "Exclude", SetupKind.Bool),
+        new("UseTaxApplies", "Use tax applies", SetupKind.Bool),
+        new("ExemptTaxTypeID", "Exempt tax type", SetupKind.Int, SetupLookups.TaxTypes),
+        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes),
+        new("AccountReportTitleID", "Report title", SetupKind.Int, SetupLookups.ReportTitles),
+        new("SalesRedirectCreditAccountID", "Sales redirect to", SetupKind.Int, SetupLookups.CreditAccounts),
+        new("SalesRedirectCreditAccount", "Sales redirect account"),
+        new("SalesRedirectDistReference", "Sales redirect reference"),
+        new("SalesRedirectAccountClassID", "Sales redirect class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("DiscountRedirectCreditAccount", "Discount redirect account"),
+        new("DiscountRedirectDistReference", "Discount redirect reference"),
+        new("DiscountRedirectAccountClassID", "Discount redirect class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("AdjustmentFactor", "Adjustment factor", SetupKind.Decimal),
+        new("AdjustmentFactor2", "Adjustment factor 2", SetupKind.Decimal),
+        new("AdjustmentDebitAccount", "Adjustment debit account"),
+        new("AdjustmentDebitDistReference", "Adjustment debit reference"),
+        new("AdjustmentDebitAccountClassID", "Adjustment debit class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("AdjustmentCreditAccount", "Adjustment credit account"),
+        new("AdjustmentCreditDistReference", "Adjustment credit reference"),
+        new("AdjustmentCreditAccountClassID", "Adjustment credit class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("POSWindowID", "POS window", SetupKind.Int, SetupLookups.PosWindows),
+        new("MappingSetID", "Mapping set", SetupKind.Int),
+        new("Delete", "Delete", SetupKind.Bool),
+        new("NewAccount", "New account"),
+    ], StoreColumn: "StoreID", Order: [new("DistReference"), new("CreditAccount")],
+    Help: "The G/L credit accounts that sales post to for the chosen store, and where discounts, redirected sales and adjustments go.");
+
+    public static SetupTable SalesMapping { get; } = new("sales-mapping", SetupArea.GlSetup, "Sales Account Mapping", "tblAccountsSalesMapping", "ItemID",
+    [
+        new("Priority", "Priority", SetupKind.Int, Help: "Mappings are tried in this order; the first that matches a sale is used."),
+        new("MainTypeID", "Main type", SetupKind.Int, SetupLookups.MainTypes),
+        new("ProfitCenterID", "Profit center", SetupKind.Int, SetupLookups.ProfitCenters),
+        new("SaleTypeID", "Sale type", SetupKind.Int, SetupLookups.SaleTypes, LookupParent: "MainTypeID", Help: "Only sale types of the chosen main type are offered."),
+        new("Special", "Special", SetupKind.Bool, Help: TriHelp),
+        new("PLU", "Menu item", SetupKind.Int, SetupLookups.MenuItems),
+        new("Discount", "Discount", SetupKind.Int, SetupLookups.Discounts),
+        new("POSWindowID", "POS window", SetupKind.Int, SetupLookups.PosWindows),
+        new("TaxExempt", "Tax exempt", SetupKind.Bool, Help: TriHelp),
+        new("CreditAccountID", "Credit account", SetupKind.Int, SetupLookups.CreditAccounts),
+        new("CompositeSalesTaxRate", "Composite tax rate", SetupKind.Decimal),
+    ], StoreColumn: "StoreID",
+    Order: [new("Priority"), new("MainTypeID"), new("ProfitCenterID"), new("SaleTypeID"), new("Special", Descending: true)],
+    Help: "Which G/L credit account a sale posts to, by what was sold. The first matching row in priority order wins, so a wrong row changes the next export.");
+
+    public static IReadOnlyList<SetupTable> All { get; } = [AccountClasses, TaxTypes, TaxRates, RoyaltyFeeRates, SalesAccounts, SalesMapping];
 
     public static SetupTable? Find(string? id) => All.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.Ordinal));
 }
