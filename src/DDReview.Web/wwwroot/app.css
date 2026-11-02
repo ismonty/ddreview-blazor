@@ -178,6 +178,7 @@ tbody.gl-grand tr.total td { border-top: 2px solid currentColor; }
 button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--edge); }
 .login-card form.google { text-align: center; }
 .login-card form.google p { margin: .6rem 0 .4rem; }
+.login-card .google-out { text-align: center; margin: .9rem 0 0; font-size: .8rem; }
 
 /* Submission reports (General Ledger): button, thumbnail overlay and full page view */
 .sub-actions { margin: 1rem 0 2rem; }
