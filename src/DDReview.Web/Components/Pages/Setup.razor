@@ -1,0 +1,31 @@
+@page "/admin/setup"
+@attribute [Authorize]
+@using DDReview.Core.Admin
+@using DDReview.Web.Components.Setup
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Setup</h1>
+
+<SetupGate Context="s">
+    <p class="muted">Google confirmed you until @s.VerifiedUntil?.ToLocalTime().ToString("h:mm tt").</p>
+
+    @foreach (var section in SetupCatalog.All.Where(e => s.Decision.Allows(e.Area)).GroupBy(e => e.Section))
+    {
+        <h2>@section.Key</h2>
+        <ul class="setup-list">
+        @foreach (var e in section)
+        {
+            <li>
+                @if (e.Route is not null) { <a href="@e.Route">@e.Title</a> }
+                else { <span class="muted">@e.Title (coming)</span> }
+            </li>
+        }
+        </ul>
+    }
+
+    @if (s.Decision.CanManageAccess)
+    {
+        <h2>Who may use Setup</h2>
+        <p><a href="/admin/setup/access">Allow or remove people, and see what was changed</a></p>
+    }
+</SetupGate>

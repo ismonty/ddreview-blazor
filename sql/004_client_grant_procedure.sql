@@ -1,6 +1,6 @@
 -- Run on each CLIENT database (or let Admin > Database updater add it). Safe to run again. SQL Server 2012 and later.
 -- Adds one stored procedure, dbo.usp_DDReviewGrantAccess, that holds EVERY permission the web login needs in a client database
--- (today: execute on the dbo.DrillPair table type). Adding it changes no permissions by itself. You launch it, as someone who may grant:
+-- (execute on the dbo.DrillPair table type, and the Setup pages' access and audit tables). Adding it changes no permissions by itself. You launch it, as someone who may grant:
 --
 --     exec dbo.usp_DDReviewGrantAccess @UserName = N'the web login user';                   -- lists what it WOULD grant, changes nothing
 --     exec dbo.usp_DDReviewGrantAccess @UserName = N'the web login user', @Execute = 1;     -- does it
@@ -28,6 +28,11 @@ begin
     -- ===== THE LIST: one line per permission the web login needs. Add new ones here. =====
     if type_id(N'dbo.DrillPair') is not null
         insert @todo (Stmt) values (N'grant execute on type::dbo.DrillPair to ' + @q + N';');
+    -- Setup pages (sql/007): the web login may read and write who is allowed in, but only add to the audit trail.
+    if object_id(N'dbo.tblDDReviewAdminAccess', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, update on dbo.tblDDReviewAdminAccess to ' + @q + N';');
+    if object_id(N'dbo.tblDDReviewAdminAudit', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert on dbo.tblDDReviewAdminAudit to ' + @q + N';');
     -- insert @todo (Stmt) values (N'grant select on dbo.SomeTable to ' + @q + N';');
     -- =====================================================================================
 
