@@ -147,7 +147,7 @@ public class SetupSqlTests
 public class SetupValueTests
 {
     private static SetupDbColumn Db(string type, int len = 0, int precision = 0, int scale = 0, bool nullable = true) => new("c", type, nullable, false, false, len, precision, scale);
-    private static SetupColumn Col(SetupKind k, bool account = false) => new("c", "Thing", k, AccountName: account);
+    private static SetupColumn Col(SetupKind k) => new("c", "Thing", k);
 
     private static object? Parse(SetupColumn c, SetupDbColumn d, string text, out string? error)
     {
@@ -167,10 +167,9 @@ public class SetupValueTests
         Assert.Equal(new string('x', 9000), Parse(Col(SetupKind.Text), Db("varchar", -1), new string('x', 9000), out _));
     }
 
-    [Fact] public void Account_names_lose_their_accents_so_quickbooks_names_match()
+    [Fact] public void Accented_text_is_stored_as_typed()
     {
-        Assert.Equal("Cafe Receipts", Parse(Col(SetupKind.Text, account: true), Db("varchar", 50), "Café Receipts", out _));
-        Assert.Equal("Café", Parse(Col(SetupKind.Text), Db("varchar", 50), "Café", out _));     // other text keeps it
+        Assert.Equal("Café Receipts", Parse(Col(SetupKind.Text), Db("varchar", 50), "Café Receipts", out _));
     }
 
     [Theory]

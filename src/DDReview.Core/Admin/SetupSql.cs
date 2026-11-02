@@ -59,7 +59,6 @@ public static class SetupValue
         switch (col.Kind)
         {
             case SetupKind.Text:
-                if (col.AccountName) text = text.Replace('é', 'e').Replace('É', 'E');
                 if (db.MaxLength > 0 && text.Length > db.MaxLength) { error = $"{col.Label} can be at most {db.MaxLength} characters."; return false; }
                 value = text; return true;
             case SetupKind.Int:

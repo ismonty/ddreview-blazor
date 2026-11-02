@@ -7,9 +7,8 @@ public enum SetupKind { Text, Int, Decimal, Bool, Date }
 /// declarations (never from the browser), values always travel as parameters.
 /// </summary>
 /// <param name="Lookup">A name from <see cref="SetupLookups"/>: the value is the id of a row there and is shown as its text.</param>
-/// <param name="AccountName">An account name typed for QuickBooks: an accented e is stored as a plain e (the old form did this so the names match).</param>
 public sealed record SetupColumn(string Name, string Label, SetupKind Kind = SetupKind.Text, string? Lookup = null,
-    bool AccountName = false, string[]? Suggestions = null, string? Help = null);
+    string[]? Suggestions = null, string? Help = null);
 
 public sealed record SetupOrder(string Column, bool Descending = false);
 
@@ -56,12 +55,12 @@ public static class SetupTables
     [
         new("AccountClass", "Class"),
         new("ExportFlag", "Export", SetupKind.Bool),
-        new("InterClassSameClassAccount", "Same-class account", AccountName: true),
+        new("InterClassSameClassAccount", "Same-class account"),
         new("InterClassSameClassDistReference", "Same-class reference"),
         new("InterClassSameClassDebitCreditFlag", "Same-class debit/credit", SetupKind.Int, Help: FlagHelp),
         new("InterClassSameClassDefaultQuickBooksType", "Same-class QuickBooks type", Suggestions: QuickBooksTypes),
         new("OtherAccountClassID", "Other class", SetupKind.Int, SetupLookups.AccountClasses),
-        new("InterClassOtherClassAccount", "Other-class account", AccountName: true),
+        new("InterClassOtherClassAccount", "Other-class account"),
         new("InterClassOtherClassDistReference", "Other-class reference"),
         new("InterClassOtherClassDebitCreditFlag", "Other-class debit/credit", SetupKind.Int, Help: FlagHelp),
         new("InterClassOtherClassDefaultQuickBooksType", "Other-class QuickBooks type", Suggestions: QuickBooksTypes),
@@ -83,11 +82,11 @@ public static class SetupTables
             new("Enabled", "Enabled", SetupKind.Bool),
             new("TaxPayee", royalty ? "Payee" : "Tax payee"),
             new("TaxRate", royalty ? "Rate" : "Tax rate", SetupKind.Decimal),
-            new("TaxAcct", royalty ? "Credit account" : "Tax account", AccountName: true),
+            new("TaxAcct", royalty ? "Credit account" : "Tax account"),
             new("DistReference", "Reference"),
             new("AccountClassID", "Class", SetupKind.Int, SetupLookups.AccountClasses),
             new("Vendor", "Vendor"),
-            new("DebitAccount", "Debit account", AccountName: true),
+            new("DebitAccount", "Debit account"),
             new("DebitDistReference", "Debit reference"),
             new("DebitAccountClassID", "Debit class", SetupKind.Int, SetupLookups.AccountClasses),
         };
