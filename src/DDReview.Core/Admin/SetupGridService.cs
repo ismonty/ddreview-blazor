@@ -83,6 +83,7 @@ public sealed class SetupGridService
         IReadOnlyDictionary<string, string?> edits, CancellationToken ct = default)
     {
         Require(actor, decision, now, table.Area);
+        if (!table.AllowAdd) return new SetupWrite(SetupOutcome.Refused, "Rows cannot be added here.");
         await using var cn = new SqlConnection(cs);
         await cn.OpenAsync(ct);
         await using var tx = (SqlTransaction)await cn.BeginTransactionAsync(ct);
@@ -94,7 +95,7 @@ public sealed class SetupGridService
             var lookups = await LookupsAsync(cn, tx, cols, storeId, ct);
 
             var names = new List<string>(); var values = new Dictionary<string, object?>(); var typed = new Dictionary<string, SetupDbColumn>();
-            foreach (var c in cols.Where(c => !c.Db.Identity))
+            foreach (var c in cols.Where(c => !c.Db.Identity && !c.Def.ReadOnly))
             {
                 edits.TryGetValue(c.Def.Name, out var text);
                 if (string.IsNullOrWhiteSpace(text))
@@ -142,7 +143,7 @@ public sealed class SetupGridService
             var lookups = await LookupsAsync(cn, tx, cols, storeId, ct);
 
             var changed = new List<SetupColumnInfo>(); var newValues = new Dictionary<string, object?>();
-            foreach (var c in cols.Where(c => !c.Db.Identity && edits.ContainsKey(c.Def.Name)))
+            foreach (var c in cols.Where(c => !c.Db.Identity && !c.Def.ReadOnly && edits.ContainsKey(c.Def.Name)))
             {
                 var text = edits[c.Def.Name];
                 original.Values.TryGetValue(c.Def.Name, out var was);
@@ -295,7 +296,7 @@ where c.object_id = object_id(@t)", cn, tx))
                 found[r.GetString(0)] = new SetupDbColumn(r.GetString(0), type, r.GetBoolean(2), r.GetBoolean(3), r.GetBoolean(4), len, r.GetByte(6), r.GetByte(7), r.IsDBNull(8) ? null : r.GetString(8));
             }
         }
-        if (found.Count == 0 || !found.TryGetValue(table.Key, out var key) || !key.Identity) return null;
+        if (found.Count == 0 || !found.TryGetValue(table.Key, out var key) || (!key.Identity && table.AllowAdd)) return null;     // rows are added only to tables whose key the database numbers
         // older databases lack some columns, and the page's own store/filter columns are never offered as fields
         var list = new List<SetupColumnInfo>();
         foreach (var c in table.Columns)

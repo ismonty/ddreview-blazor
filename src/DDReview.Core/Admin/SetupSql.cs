@@ -23,6 +23,7 @@ public static class SetupSql
         if (byKey) w.Add(Q(t.Key) + " = @key");
         if (t.StoreColumn is not null) w.Add(Q(t.StoreColumn) + " = @store");
         if (t.FilterColumn is not null) w.Add(Q(t.FilterColumn) + " = @filter");
+        if (t.FixedWhere is not null) w.Add("(" + t.FixedWhere + ")");
         return w.Count == 0 ? "" : " where " + string.Join(" and ", w);
     }
 

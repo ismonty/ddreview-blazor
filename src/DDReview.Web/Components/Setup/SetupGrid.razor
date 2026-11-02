@@ -49,7 +49,11 @@ else
                     {
                         var name = c.Def.Name;
                         <td>
-                        @if (c.Def.Lookup is not null)
+                        @if (c.Def.ReadOnly)
+                        {
+                            @(original is null ? "" : Show(c, original))
+                        }
+                        else if (c.Def.Lookup is not null)
                         {
                             <select value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()">
                                 <option value="">@(c.Def.BlankText is { } bt ? "(" + bt + ")" : c.Nullable ? "(none)" : "Choose…")</option>
@@ -112,7 +116,7 @@ else
     </table>
     </div>
     @if (!data.Rows.Any() && editKey != 0) { <p class="muted">No rows yet.</p> }
-    @if (editKey is null) { <p><button disabled="@busy" @onclick="StartAdd">Add a row</button></p> }
+    @if (editKey is null && Table.AllowAdd) { <p><button disabled="@busy" @onclick="StartAdd">Add a row</button></p> }
     @if (data.Columns.Any(c => c.Required)) { <p class="muted">* required</p> }
 }
 

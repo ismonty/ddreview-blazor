@@ -8,9 +8,10 @@ public enum SetupKind { Text, Int, Decimal, Bool, Date }
 /// </summary>
 /// <param name="Lookup">A name from <see cref="SetupLookups"/>: the value is the id of a row there and is shown as its text.</param>
 /// <param name="BlankText">What an empty value means, shown instead of blank (the mapping columns: "any").</param>
+/// <param name="ReadOnly">Shown so the row can be recognised (a store's name), never changed here.</param>
 /// <param name="LookupParent">Another column of the same row that narrows this list (sale types follow the main type): only items whose parent matches are offered.</param>
 public sealed record SetupColumn(string Name, string Label, SetupKind Kind = SetupKind.Text, string? Lookup = null,
-    string[]? Suggestions = null, string? Help = null, string? LookupParent = null, string? BlankText = null);
+    string[]? Suggestions = null, string? Help = null, string? LookupParent = null, string? BlankText = null, bool ReadOnly = false);
 
 public sealed record SetupOrder(string Column, bool Descending = false);
 
@@ -22,10 +23,12 @@ public sealed record SetupFill(string Column, string Template);
 
 /// <param name="Key">The identity column; the row id the page works with.</param>
 /// <param name="StoreColumn">Set for per-store tables: rows are listed, added and changed for one chosen store.</param>
+/// <param name="AllowAdd">False for tables whose rows exist already (one per store, or the single global row).</param>
+/// <param name="FixedWhere">A fixed condition written here in code, e.g. "Active > 0" (never built from anything typed).</param>
 /// <param name="FilterColumn">A bit column fixed to <paramref name="FilterValue"/> for this page (tax rates and royalty/fee rates share one table).</param>
 public sealed record SetupTable(string Id, SetupArea Area, string Title, string Table, string Key, IReadOnlyList<SetupColumn> Columns,
     string? StoreColumn = null, string? FilterColumn = null, bool FilterValue = false, IReadOnlyList<SetupOrder>? Order = null,
-    string? Help = null, bool AllowDelete = true, SetupExclusive? Exclusive = null, IReadOnlyList<SetupFill>? Fills = null)
+    string? Help = null, bool AllowDelete = true, SetupExclusive? Exclusive = null, IReadOnlyList<SetupFill>? Fills = null, bool AllowAdd = true, string? FixedWhere = null)
 {
     public string Route => "/admin/setup/table/" + Id;
 }
@@ -46,6 +49,8 @@ public static class SetupLookups
     public const string CreditAccounts = "CreditAccounts";
     public const string ReportTitles = "ReportTitles";
     public const string ReceiptTypes = "ReceiptTypes";
+    public const string AllCreditAccounts = "AllCreditAccounts";
+    public const string ArIdentifiers = "ArIdentifiers";
 
     /// <summary>The query for a list: id, text and (optionally) a third int column, the parent a narrowing column filters by.</summary>
     public static string? Sql(string name) => name switch
@@ -70,6 +75,9 @@ public static class SetupLookups
         CreditAccounts => "select ca.CreditAccountID, rtrim(isnull(ca.DistReference, '')) + ' (' + rtrim(isnull(ca.CreditAccount, '')) + isnull(' - ' + rtrim(tt.TaxType), '') + isnull(' - ' + rtrim(ac.AccountClass), '') + ')' "
             + "from dbo.tblAccountsCredit ca left join dbo.tblTaxTypes tt on tt.TaxTypeID = ca.TaxTypeID left join dbo.tblAccountsClasses ac on ac.AccountClassID = ca.AccountClassID "
             + "where ca.StoreID = @store order by 2",
+        AllCreditAccounts => "select ca.CreditAccountID, rtrim(s.StoreGCode) + ': ' + rtrim(isnull(ca.DistReference, '')) + ' (' + rtrim(isnull(ca.CreditAccount, '')) + ')' "
+            + "from dbo.tblAccountsCredit ca join dbo.tblStores s on s.StoreID = ca.StoreID order by 2",
+        ArIdentifiers => "select v, t from (values (0, 'Account number'), (1, 'Account name'), (2, 'Account number and name'), (3, 'Account name and number')) x(v, t)",
         ReceiptTypes => "select ReceiptTypeID, ReceiptType from dbo.tblReceiptTypes where StoreID = @store and ReceiptTypeID between 1 and 999 order by ReceiptType",
         ReportTitles => "select AccountReportTitleID, ReportTitle from dbo.tblAccountsReportTitles order by ReportTitle",
         _ => null,
@@ -318,7 +326,53 @@ public static class SetupTables
     Fills: [new("GiftCardDistReference", "{GiftCardType}")],
     Help: "The credit account each gift card type posts to for the chosen store.");
 
-    public static IReadOnlyList<SetupTable> All { get; } = [AccountClasses, TaxTypes, TaxRates, RoyaltyFeeRates, SalesAccounts, SalesMapping, ReceiptTypes, ReceiptAdjustments, Payouts, GiftCards];
+    private static SetupColumn[] AcctRef(string acct, string label, string refCol, string classCol) =>
+    [
+        new(acct, label + " account"),
+        new(refCol, label + " reference"),
+        new(classCol, label + " class", SetupKind.Int, SetupLookups.AccountClasses),
+    ];
+
+    public static SetupTable Stores { get; } = new("stores", SetupArea.StoreAndGlobal, "Store Setup (G/L fields)", "tblStores", "StoreID",
+    [
+        new("StoreNumber", "Store no.", SetupKind.Int, ReadOnly: true),
+        new("StoreName", "Store", ReadOnly: true),
+        .. AcctRef("GiftCertificateSoldCreditAcct", "Gift card sold credit", "GiftCertificateSoldDistReference", "GiftCertificateSoldAccountClassID"),
+        .. AcctRef("GiftCertificateBonusDebitAcct", "Gift card bonus debit", "GiftCertificateBonusDistReference", "GiftCertificateBonusAccountClassID"),
+        .. AcctRef("TipsWithheldAcct", "Tips withheld credit", "TipsWithheldDistReference", "TipsWithheldAccountClassID"),
+        .. AcctRef("ChargedTipFeeAcct", "Charged tip fee credit", "ChargedTipFeeDistReference", "ChargedTipFeeAccountClassID"),
+        .. AcctRef("PayInCreditAcct", "A/R paid in credit", "PayInDistReference", "PayInAccountClassID"),
+        .. AcctRef("TaxesOverShortAcct", "Taxes over/short", "TaxesOverShortDistReference", "TaxesOverShortAccountClassID"),
+        new("TaxesOverShortVendor", "Taxes over/short vendor"),
+        new("GLExportAROffsetAccount", "G/L export A/R offset account"),
+        new("GLExportAROffsetAccountClassID", "G/L export A/R offset class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("ARExportGLOffsetAccount", "A/R export G/L offset account"),
+        new("ARExportGLOffsetAccountClassID", "A/R export G/L offset class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("FoodSpecialDiscountCreditAccountID", "Food special discount account", SetupKind.Int, SetupLookups.AllCreditAccounts),
+        new("BeverageSpecialDiscountCreditAccountID", "Beverage special discount account", SetupKind.Int, SetupLookups.AllCreditAccounts),
+        new("OtherSpecialDiscountCreditAccountID", "Other special discount account", SetupKind.Int, SetupLookups.AllCreditAccounts),
+        new("CheckbookID", "Bank rec. checkbook id"),
+        new("QuickbooksItemPrefix", "QuickBooks item prefix"),
+    ], Order: [new("StoreNumber")], AllowAdd: false, AllowDelete: false, FixedWhere: "Active > 0",
+    Help: "The general ledger accounts each active store posts to. Stores themselves are set up in the Access front end; only their G/L fields are changed here.");
+
+    public static SetupTable Global { get; } = new("global", SetupArea.StoreAndGlobal, "Global Settings (G/L fields)", "tblGlobal", "ItemID",
+    [
+        new("GeneralLedgerPostDateNumberOfDaysLater", "G/L date post add days", SetupKind.Int),
+        new("CombineGeneralLedgerBatches", "Combine G/L batches", SetupKind.Bool),
+        new("ARAccountIdentifier", "A/R account identifier", SetupKind.Int, SetupLookups.ArIdentifiers),
+        new("AccountsReceivablePostingMode", "A/R posting mode", SetupKind.Int,
+            Help: "Add up: 1 itemized detail, 2 receipt comment, 4 categorical summary. The old form named the combinations; 1 is itemized with no comment."),
+        new("AccountsReceivableCategoricalSummarySalesDescription", "A/R description when no detail is posted"),
+        new("QuickbooksARExportCustomerName", "QuickBooks A/R export customer name", SetupKind.Bool),
+        new("AccountsReceivableAccountNumberZeroFillDigits", "A/R accounts zero-fill digits", SetupKind.Int),
+        new("SalesTaxBreakoutMode", "Break down sales tax by rate on review / export", SetupKind.Bool),
+        new("OutputCashAndSalesByAccountClass", "Output by account class on review / export", SetupKind.Bool),
+        new("ExportDistReference", "Export dist reference to accounting software", SetupKind.Bool),
+    ], AllowAdd: false, AllowDelete: false,
+    Help: "The settings that control how the general ledger and A/R exports are put together. They apply to every store.");
+
+    public static IReadOnlyList<SetupTable> All { get; } = [AccountClasses, TaxTypes, TaxRates, RoyaltyFeeRates, SalesAccounts, SalesMapping, ReceiptTypes, ReceiptAdjustments, Payouts, GiftCards, Stores, Global];
 
     public static SetupTable? Find(string? id) => All.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.Ordinal));
 }
