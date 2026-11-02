@@ -54,9 +54,17 @@ itself rights: if the reports' login lacks db_ddladmin it shows the `sp_addrolem
 - Not tried on staging yet: the Database updater itself, the new GL modes, the all-zero skipping (all pass tests only).
 - Everything is merged into `main` (PR #1 and the dashboard PR #2). `deploy\Deploy-Auto.ps1` + `Register-AutoDeploy.ps1` (staging auto-deploy from `main`, docs/DEPLOY-STAGING.md) and `deploy\Deploy-Production.ps1` (manual, only a commit staging runs; docs/DEPLOY-PRODUCTION.md, https://blazor.ddreview.com) are written but not yet run on the server.
 
-## Next big item: wrap the old site behind the new one
-See `docs/LEGACY-PROXY-PLAN.md` (agreed 2026-10-31, nothing built yet): the old WebForms site is installed on the new server on loopback only and reached through a YARP proxy in this app, behind the new site's login (password/Google), later with a signed handoff so there is one login.
-Same central master, separate least-privilege SQL logins. The owner is checking which copy of the old source is best. Claude cannot compile VS 2008 code, so old-side changes stay tiny and the owner builds them.
+## The old site behind the new one (built and working, 2026-11-01)
+Done and merged: the old WebForms site runs on the server as IIS site `ddreview-classic` (127.0.0.1:8081 only, application `/classic`) and the new app proxies it at `/classic` after sign-in
+(YARP; `LegacyProxy` section in `appsettings.Production.json`, off unless `Enabled`). A signed one-time ticket (`/classic-enter`) gives one sign-in; there is a Classic link in the top nav and a
+"signed out of Classic" page. Design and install lessons: `docs/LEGACY-PROXY-PLAN.md`, `docs/LEGACY-OLDSIDE.md` (what is built in VS 2008). The owner builds the old-side code; Claude cannot compile it.
+Still open:
+- Least-privilege SQL for the old site (`sql/005`, `sql/006`, login `ddreview_classic`): run on the central master and Valentini's. Not yet run on the other client data server (owner needs its admin password).
+  The old site still connects with its original login; switching its `web.config` to `ddreview_classic` is not done. Unconfirmed: whether client pages take their login from the connection strings stored in the central master.
+- Check the owner's VS 2008 handoff edits (`LegacyHandoff.cs`, csproj line, `LoginPage.aspx.cs`) into their own source control.
+- Not yet looked at on staging: stacked Discounts on the dashboard/Daily Summary charts, header width on a phone, zero-day submission reports left out, the signed-out page, friendly store names (`StoreReportName`) in dropdowns.
+- Optional: the old master page background `~/images/...` does not load through the proxy.
+Store names: `StoreName` is the licensed hard lock name (it is on the stored submission report picture); `StoreReportName` is the display name, shown almost everywhere (`StoreLookup.NameSql`).
 
 ## Resources the owner has (on the owner's computer, reachable when the session is linked to it)
 - Original source: `C:\Users\ismon\source\repos\DDReview` (solution `DDReviewDev.sln`; `DDReview\` and `DDReviewMarauder\` web projects, `DDReviewAppCode\App_Code` shared classes:
