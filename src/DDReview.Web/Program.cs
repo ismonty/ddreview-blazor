@@ -57,7 +57,16 @@ authBuilder.AddCookie(ExternalScheme, o =>
     o.ExpireTimeSpan = TimeSpan.FromMinutes(10);
 });
 if (googleOn)
-    authBuilder.AddGoogle(o => { o.ClientId = googleId!; o.ClientSecret = googleSecret!; o.SignInScheme = ExternalScheme; o.CallbackPath = "/signin-google"; });
+    authBuilder.AddGoogle(o =>
+    {
+        o.ClientId = googleId!; o.ClientSecret = googleSecret!; o.SignInScheme = ExternalScheme; o.CallbackPath = "/signin-google";
+        // Always show Google's account chooser, so the browser never signs in silently as whichever Google account it used last.
+        o.Events.OnRedirectToAuthorizationEndpoint = ctx =>
+        {
+            ctx.Response.Redirect(ctx.RedirectUri + (ctx.RedirectUri.Contains('?') ? "&" : "?") + "prompt=select_account");
+            return Task.CompletedTask;
+        };
+    });
 authBuilder.AddCookie(o =>
 {
     o.LoginPath = "/login";
