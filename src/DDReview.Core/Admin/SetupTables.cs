@@ -7,9 +7,10 @@ public enum SetupKind { Text, Int, Decimal, Bool, Date }
 /// declarations (never from the browser), values always travel as parameters.
 /// </summary>
 /// <param name="Lookup">A name from <see cref="SetupLookups"/>: the value is the id of a row there and is shown as its text.</param>
+/// <param name="BlankText">What an empty value means, shown instead of blank (the mapping columns: "any").</param>
 /// <param name="LookupParent">Another column of the same row that narrows this list (sale types follow the main type): only items whose parent matches are offered.</param>
 public sealed record SetupColumn(string Name, string Label, SetupKind Kind = SetupKind.Text, string? Lookup = null,
-    string[]? Suggestions = null, string? Help = null, string? LookupParent = null);
+    string[]? Suggestions = null, string? Help = null, string? LookupParent = null, string? BlankText = null);
 
 public sealed record SetupOrder(string Column, bool Descending = false);
 
@@ -157,7 +158,7 @@ public static class SetupTables
         Help: "Royalties and fees charged on sales for the chosen store, and the accounts they post to.");
 
 
-    private const string TriHelp = "Leave blank for either (the mapping then applies whether or not it is set).";
+    private const string TriHelp = "Leave blank for any (the row then matches whether or not it is set).";
 
     public static SetupTable SalesAccounts { get; } = new("sales-accounts", SetupArea.GlSetup, "Sales Accounts", "tblAccountsCredit", "CreditAccountID",
     [
@@ -198,20 +199,20 @@ public static class SetupTables
 
     public static SetupTable SalesMapping { get; } = new("sales-mapping", SetupArea.GlSetup, "Sales Account Mapping", "tblAccountsSalesMapping", "ItemID",
     [
-        new("Priority", "Priority", SetupKind.Int, Help: "Mappings are tried in this order; the first that matches a sale is used."),
-        new("MainTypeID", "Main type", SetupKind.Int, SetupLookups.MainTypes),
-        new("ProfitCenterID", "Profit center", SetupKind.Int, SetupLookups.ProfitCenters),
-        new("SaleTypeID", "Sale type", SetupKind.Int, SetupLookups.SaleTypes, LookupParent: "MainTypeID", Help: "Only sale types of the chosen main type are offered."),
-        new("Special", "Special", SetupKind.Bool, Help: TriHelp),
-        new("PLU", "Menu item", SetupKind.Int, SetupLookups.MenuItems),
-        new("Discount", "Discount", SetupKind.Int, SetupLookups.Discounts),
-        new("POSWindowID", "POS window", SetupKind.Int, SetupLookups.PosWindows),
-        new("TaxExempt", "Tax exempt", SetupKind.Bool, Help: TriHelp),
+        new("Priority", "Priority", SetupKind.Int, Help: "A sale is checked against the rows in this order and takes the first row that matches (lowest number first)."),
+        new("MainTypeID", "Main type", SetupKind.Int, SetupLookups.MainTypes, BlankText: "any"),
+        new("ProfitCenterID", "Profit center", SetupKind.Int, SetupLookups.ProfitCenters, BlankText: "any"),
+        new("SaleTypeID", "Sale type", SetupKind.Int, SetupLookups.SaleTypes, BlankText: "any", LookupParent: "MainTypeID", Help: "Only sale types of the chosen main type are offered."),
+        new("Special", "Special", SetupKind.Bool, Help: TriHelp, BlankText: "any"),
+        new("PLU", "Menu item", SetupKind.Int, SetupLookups.MenuItems, BlankText: "any"),
+        new("Discount", "Discount", SetupKind.Int, SetupLookups.Discounts, BlankText: "any"),
+        new("POSWindowID", "POS window", SetupKind.Int, SetupLookups.PosWindows, BlankText: "any"),
+        new("TaxExempt", "Tax exempt", SetupKind.Bool, Help: TriHelp, BlankText: "any"),
         new("CreditAccountID", "Credit account", SetupKind.Int, SetupLookups.CreditAccounts),
         new("CompositeSalesTaxRate", "Composite tax rate", SetupKind.Decimal),
     ], StoreColumn: "StoreID",
     Order: [new("Priority"), new("MainTypeID"), new("ProfitCenterID"), new("SaleTypeID"), new("Special", Descending: true)],
-    Help: "Which G/L credit account a sale posts to, by what was sold. The first matching row in priority order wins, so a wrong row changes the next export.");
+    Help: "Which G/L credit account a sale posts to, by what was sold. A blank column matches everything. Each sale takes the first row, in priority order, whose filled-in columns all match it, so a row above another with more blanks hides it, and a wrong row changes the next export.");
 
     private static SetupColumn[] AdjustmentColumns(string prefix) =>
     [
