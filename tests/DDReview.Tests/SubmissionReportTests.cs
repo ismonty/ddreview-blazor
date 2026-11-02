@@ -72,4 +72,11 @@ public class SubmissionReportTests
         Assert.Contains("fn_CreateKeyTableValueFromCSVString(@allowed)", withTest);   // store restriction is in both
         Assert.Contains("fn_CreateKeyTableValueFromCSVString(@allowed)", without);
     }
+
+    [Fact]
+    public void Captions_use_the_report_name_when_the_column_exists()
+    {
+        Assert.Contains("isnull(sto.StoreReportName, isnull(sto.StoreName, sto.StoreGCode)) as StoreName", SubmissionReportService.ListSql(true));
+        Assert.DoesNotContain("StoreReportName", SubmissionReportService.ListSql(true, hasReportName: false));
+    }
 }

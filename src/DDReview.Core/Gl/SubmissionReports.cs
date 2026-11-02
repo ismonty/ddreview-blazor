@@ -35,8 +35,8 @@ public sealed class SubmissionReportService
   and (exists (select 1 from dbo.tblCashAndSalesSales css with (nolock) where css.BatchID = csb.BatchID and css.Amount <> 0)
     or exists (select 1 from dbo.tblCashAndSalesReceipts csr with (nolock) where csr.BatchID = csb.BatchID and csr.AmountTotal <> 0))";
 
-    public static string ListSql(bool skipQuietDays) => $@"
-select top ({MaxListed}) csb.BatchID, csb.StoreID, sto.StoreNumber, isnull(sto.StoreName, sto.StoreGCode) as StoreName, csb.PostingDate
+    public static string ListSql(bool skipQuietDays, bool hasReportName = true) => $@"
+select top ({MaxListed}) csb.BatchID, csb.StoreID, sto.StoreNumber, {StoreLookup.NameSql(hasReportName, "sto")} as StoreName, csb.PostingDate
 from dbo.tblCashAndSalesBatches csb
 inner join dbo.tblStores sto on sto.StoreID = csb.StoreID
 where csb.StoreID in (select KeyValue from dbo.fn_CreateKeyTableValueFromCSVString(@stores))
@@ -55,17 +55,18 @@ order by csb.PostingDate, sto.StoreNumber, csb.BatchID";
     {
         await using var cn = new SqlConnection(connectionString);
         await cn.OpenAsync(ct);
-        try { return await ListCoreAsync(cn, true, storeListCsv, allowedStoresCsv, start, end, ct); }
+        var reportName = await StoreLookup.HasReportNameAsync(cn, ct);   // captions use the friendly name; the picture itself keeps the licensed name
+        try { return await ListCoreAsync(cn, true, reportName, storeListCsv, allowedStoresCsv, start, end, ct); }
         catch (SqlException ex) when (ex.Number is 207 or 208)   // invalid column / object name: an older schema
         {
-            return await ListCoreAsync(cn, false, storeListCsv, allowedStoresCsv, start, end, ct);
+            return await ListCoreAsync(cn, false, reportName, storeListCsv, allowedStoresCsv, start, end, ct);
         }
     }
 
-    static async Task<IReadOnlyList<SubmissionBatch>> ListCoreAsync(SqlConnection cn, bool skipQuietDays, string storeListCsv, string? allowedStoresCsv,
+    static async Task<IReadOnlyList<SubmissionBatch>> ListCoreAsync(SqlConnection cn, bool skipQuietDays, bool reportName, string storeListCsv, string? allowedStoresCsv,
         DateOnly start, DateOnly end, CancellationToken ct)
     {
-        await using var cmd = new SqlCommand(ListSql(skipQuietDays), cn) { CommandTimeout = 120 };
+        await using var cmd = new SqlCommand(ListSql(skipQuietDays, reportName), cn) { CommandTimeout = 120 };
         cmd.Parameters.Add("@stores", SqlDbType.VarChar, 8000).Value = storeListCsv ?? "";
         cmd.Parameters.Add("@allowed", SqlDbType.VarChar, 8000).Value = (object?)allowedStoresCsv ?? DBNull.Value;
         cmd.Parameters.Add("@start", SqlDbType.DateTime).Value = start.ToDateTime(TimeOnly.MinValue);
@@ -82,8 +83,9 @@ order by csb.PostingDate, sto.StoreNumber, csb.BatchID";
         await using var cn = new SqlConnection(connectionString);
         await cn.OpenAsync(ct);
         SubmissionBatch? batch;
-        await using (var cmd = new SqlCommand(@"
-select csb.BatchID, csb.StoreID, sto.StoreNumber, isnull(sto.StoreName, sto.StoreGCode) as StoreName, csb.PostingDate
+        var reportName = await StoreLookup.HasReportNameAsync(cn, ct);
+        await using (var cmd = new SqlCommand($@"
+select csb.BatchID, csb.StoreID, sto.StoreNumber, {StoreLookup.NameSql(reportName, "sto")} as StoreName, csb.PostingDate
 from dbo.tblCashAndSalesBatches csb
 inner join dbo.tblStores sto on sto.StoreID = csb.StoreID
 where csb.BatchID = @id
