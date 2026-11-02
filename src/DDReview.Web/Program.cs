@@ -79,6 +79,7 @@ authBuilder.AddCookie(o =>
 });
 builder.Services.AddAuthorization();
 builder.AddLegacyProxy();
+builder.AddPosterLinks();   // a wrong PosterLink setting stops the site here, at start, not later on someone's click
 
 var app = builder.Build();
 

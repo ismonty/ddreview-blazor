@@ -10,6 +10,8 @@ public sealed class UserSettings
     public bool WriteDebugFiles { get; set; }
     public string QuickBooksCompanyFile { get; set; } = "";
     public string AppName { get; set; } = "DD Admin CS";
+    /// <summary>The "let DD Review website links open this program?" question has been asked once; it is not asked again.</summary>
+    public bool LinksPromptShown { get; set; }
 
     static string PathToFile => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DDReview", "QuickBooksPoster.json");
 

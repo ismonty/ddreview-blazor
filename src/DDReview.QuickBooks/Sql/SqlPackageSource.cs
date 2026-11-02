@@ -32,6 +32,23 @@ public static class SqlPackageSource
         return rows;
     }
 
+    /// <summary>
+    /// The date this database calls day 0 (<c>dbo.fn_CalcDayNumberDate(0)</c>; each database defines its own so day 0 is the first day of the store week and payroll week).
+    /// Null when the database has no such function or it gives nothing usable, in which case only the fixed earliest date applies.
+    /// </summary>
+    public static DateTime? ReadDayZero(string connectionString)
+    {
+        try
+        {
+            using var cn = new SqlConnection(connectionString);
+            cn.Open();
+            using var cmd = cn.CreateCommand();
+            cmd.CommandText = "select dbo.fn_CalcDayNumberDate(0)";
+            return cmd.ExecuteScalar() is DateTime d ? d.Date : null;
+        }
+        catch (SqlException) { return null; }
+    }
+
     /// <summary>One value from cs_spGlobalSettingsGetNoValue, the call DDAdminCS makes (the setting name is tag + subtag).</summary>
     public static (string String, int Int) Setting(SqlConnection cn, string tag, string subTag)
     {

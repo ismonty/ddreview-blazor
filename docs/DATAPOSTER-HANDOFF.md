@@ -27,7 +27,14 @@ dotnet publish src\DDReview.QuickBooks.Win\DDReview.QuickBooks.Win.csproj -c Rel
 Delete the `.pdb` files, zip the folder (about 47 MB), unblock the zip on the target machine, unzip anywhere, run `DDQuickBooksPoster.exe`. Nothing to install or register; the target machine needs QuickBooks Desktop (opened as Admin on the company file the first time), network access to the SQL Server and a SQL login that can read the client database and run the export function.
 A `deploy\Publish-Poster.ps1` that does the build and zip in one step was offered and is not written yet.
 
-## First thing to do next: launch the poster from the website with parameters set
+## Status of the launch-from-the-website work (2026-11-02)
+Built on branch `poster-launch-link`: the `ddposter://` link (signed, short-lived, validated on both sides), the **Post to QuickBooks…** button on `/gl`, the poster's argument handling, per-user registration,
+single-instance forwarding, store limits for link sessions, the day-0 check, and `tools/DDReview.PosterKeyTool`. Setup and rules are in `docs/QUICKBOOKS.md` ("Opening the poster from the website").
+Chosen with the owner: signed links; an unverified link opens the poster with nothing filled in and says why. Still to do, in this order: a downloadable `.ddposter` file as a fallback for PCs that block URL protocols
+(same signed payload, same validator), then ClickOnce (needs a code-signing decision), then the small clean-ups below. Not yet checked on a real Windows PC and browser: the one-click flow itself.
+The text below is the original brief, kept for the reasoning.
+
+## First thing to do next (original brief): launch the poster from the website with parameters set
 Wanted: on the Blazor site (for example on the General Ledger page, or a "Post to QuickBooks" button) the user clicks once and the poster opens on their computer with the **date range, scope (GL / A/R / adjustments), stores** and other options already filled in, ready to Preview (and Post). The poster may run on another computer than the browser's server, so the website cannot start it; the browser on the user's own PC must.
 Options to weigh (decide with the owner, then build the site side and the poster side together):
 1. **Custom URL protocol** (for example `ddposter://run?...`). The poster registers the scheme under `HKCU\Software\Classes` (no administrator needed, per user, from a "register" switch or first run) and parses the arguments. The website button is a link. The browser asks once whether to open it. Works from any browser on that PC, including when the poster is not running yet (start it) or is (pass it on to the running instance, for example a named pipe or single-instance mutex).
