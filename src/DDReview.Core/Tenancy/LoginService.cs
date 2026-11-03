@@ -7,7 +7,7 @@ public enum LoginOutcome { Success, InvalidCredentials, LockedOut, Redirect, NoC
 public sealed record LoginResult(LoginOutcome Outcome, CentralAccount? Account = null, int WebLoginId = 0, string? RedirectUrl = null);
 
 /// <summary>The databases (logins) a Google account can open. <see cref="MustChoose"/> is true when the person gets a list instead of being signed straight in.</summary>
-public sealed record GoogleOptions(IReadOnlyList<LoginChoice> Choices, bool IsTopAdmin, bool MustChoose);
+public sealed record GoogleOptions(IReadOnlyList<LoginChoice> Choices, bool IsTopAdmin, bool MustChoose, IReadOnlyList<DatabaseRow>? Databases = null);
 
 public sealed class LoginService(ICentralDirectory central, LoginThrottle throttle, bool upgradeLegacyPasswords)
 {
@@ -58,7 +58,8 @@ public sealed class LoginService(ICentralDirectory central, LoginThrottle thrott
         catch (Microsoft.Data.SqlClient.SqlException) { top = false; }   // sql/008 not run yet: behave as before (linked logins only)
         if (!top) return new GoogleOptions(linked, false, linked.Count > 1);
         var all = await central.ListAllLoginsAsync(filter, 200, includeInactive, ct);
-        return new GoogleOptions(all, true, true);
+        var dbs = await central.ListDatabasesAsync(ct);
+        return new GoogleOptions(all, true, true, dbs.Count > 0 ? dbs : null);
     }
 
     /// <summary>

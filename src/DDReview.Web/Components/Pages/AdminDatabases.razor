@@ -44,10 +44,14 @@ else
     @if (logins is null) { <p class="muted">Loading…</p> }
     else
     {
-        <table>
-            <thead><tr><th>Login</th><th>Friendly name</th><th>Linked Google account</th><th>Active</th><th></th></tr></thead>
-            <tbody>
-            @foreach (var l in logins)
+        @foreach (var g in groups)
+        {
+            <details class="pick-db" open="@(!string.IsNullOrWhiteSpace(filter) || groups.Count == 1)">
+                <summary>@g.Label <span class="muted small">(@g.Logins.Count login@(g.Logins.Count == 1 ? "" : "s"))</span></summary>
+                <table>
+                    <thead><tr><th>Login</th><th>Friendly name</th><th>Linked Google account</th><th>Active</th><th></th></tr></thead>
+                    <tbody>
+            @foreach (var l in g.Logins)
             {
                 <tr>
                     <td>@l.UserName</td>
@@ -60,8 +64,10 @@ else
                     </td>
                 </tr>
             }
-            </tbody>
-        </table>
+                    </tbody>
+                </table>
+            </details>
+        }
         @if (logins.Count >= 200) { <p class="muted small">Showing the first 200. Type part of a name to narrow the list.</p> }
     }
 
@@ -93,6 +99,7 @@ else
     private CentralDenial denial;
     private CentralActor? actor;
     private IReadOnlyList<LoginChoice>? logins;
+    private IReadOnlyList<DatabaseGroup> groups = [];
     private IReadOnlyList<TopAdminRow>? admins;
     private readonly Dictionary<int, string> edits = new();
     private string filter = "", newEmail = "";
@@ -121,6 +128,7 @@ else
     private async Task LoadAsync()
     {
         logins = await Admin.ListLoginsAsync(actor!, filter, 200);
+        groups = DatabaseGroups.Build(await Admin.ListDatabasesAsync(actor!), logins, keepEmpty: string.IsNullOrWhiteSpace(filter));
         admins = await Admin.ListTopAdminsAsync(actor!);
     }
 

@@ -31,6 +31,9 @@ public sealed class CentralAdminService(ICentralDirectory central, TimeProvider 
     public async Task<IReadOnlyList<LoginChoice>> ListLoginsAsync(CentralActor a, string? filter, int top, CancellationToken ct = default)
     { await Require(a, ct); return await central.ListAllLoginsAsync(filter, top, true, ct); }
 
+    public async Task<IReadOnlyList<DatabaseRow>> ListDatabasesAsync(CentralActor a, CancellationToken ct = default)
+    { await Require(a, ct); return await central.ListDatabasesAsync(ct); }
+
     public async Task<bool> SetFriendlyNameAsync(CentralActor a, int webUserId, string? name, CancellationToken ct = default)
     {
         await Require(a, ct);
