@@ -18,6 +18,9 @@ public sealed record SetupOrder(string Column, bool Descending = false);
 /// <summary>Of these yes/no columns the leader excludes the others: turning the leader on turns them off, turning one of them on turns the leader off (Include all vs. the specific kinds).</summary>
 public sealed record SetupExclusive(string Leader, string[] Others);
 
+/// <summary>A parent column that must not make the row its own ancestor: checked with the database's own dbo.fn_TraverseAccountCore (A/R parent accounts).</summary>
+public sealed record SetupParentCheck(string Column, string AccountColumn);
+
 /// <summary>What the old forms did on a double-click: fill an empty field from other fields of the row. {Name} is replaced by that column's value.</summary>
 public sealed record SetupFill(string Column, string Template);
 
@@ -25,10 +28,12 @@ public sealed record SetupFill(string Column, string Template);
 /// <param name="StoreColumn">Set for per-store tables: rows are listed, added and changed for one chosen store.</param>
 /// <param name="AllowAdd">False for tables whose rows exist already (one per store, or the single global row).</param>
 /// <param name="FixedWhere">A fixed condition written here in code, e.g. "Active > 0" (never built from anything typed).</param>
+/// <param name="SearchColumn">A text column the page offers a filter box for (rows whose text contains what was typed).</param>
+/// <param name="TopRows">For long tables: at most this many rows are read; the page says so and the filter narrows them.</param>
 /// <param name="FilterColumn">A bit column fixed to <paramref name="FilterValue"/> for this page (tax rates and royalty/fee rates share one table).</param>
 public sealed record SetupTable(string Id, SetupArea Area, string Title, string Table, string Key, IReadOnlyList<SetupColumn> Columns,
     string? StoreColumn = null, string? FilterColumn = null, bool FilterValue = false, IReadOnlyList<SetupOrder>? Order = null,
-    string? Help = null, bool AllowDelete = true, SetupExclusive? Exclusive = null, IReadOnlyList<SetupFill>? Fills = null, bool AllowAdd = true, string? FixedWhere = null)
+    string? Help = null, bool AllowDelete = true, SetupExclusive? Exclusive = null, IReadOnlyList<SetupFill>? Fills = null, bool AllowAdd = true, string? FixedWhere = null, string? SearchColumn = null, int TopRows = 0, SetupParentCheck? ParentCheck = null)
 {
     public string Route => "/admin/setup/table/" + Id;
 }
@@ -51,6 +56,10 @@ public static class SetupLookups
     public const string ReceiptTypes = "ReceiptTypes";
     public const string AllCreditAccounts = "AllCreditAccounts";
     public const string ArIdentifiers = "ArIdentifiers";
+    public const string ArAccounts = "ArAccounts";
+    public const string ArAccountTypes = "ArAccountTypes";
+    public const string ArReceiptTypes = "ArReceiptTypes";
+    public const string AllStores = "AllStores";
 
     /// <summary>The query for a list: id, text and (optionally) a third int column, the parent a narrowing column filters by.</summary>
     public static string? Sql(string name) => name switch
@@ -78,6 +87,11 @@ public static class SetupLookups
         AllCreditAccounts => "select ca.CreditAccountID, rtrim(s.StoreGCode) + ': ' + rtrim(isnull(ca.DistReference, '')) + ' (' + rtrim(isnull(ca.CreditAccount, '')) + ')' "
             + "from dbo.tblAccountsCredit ca join dbo.tblStores s on s.StoreID = ca.StoreID order by 2",
         ArIdentifiers => "select v, t from (values (0, 'Account number'), (1, 'Account name'), (2, 'Account number and name'), (3, 'Account name and number')) x(v, t)",
+        ArAccounts => "select AccountID, rtrim(AccountName) + isnull(' (' + rtrim(AccountNumber) + ')', '') from dbo.tblAccountsReceivableAccounts where StoreID = @store order by AccountName",
+        ArAccountTypes => "select AccountTypeID, AccountType from dbo.tblAccountsReceivableAccountTypes where StoreID = @store order by AccountType",
+        ArReceiptTypes => "select ReceiptTypeID, ReceiptType from (select -1 as Sorter, 0 as ReceiptTypeID, 'None' as ReceiptType union all "
+            + "select 0, ReceiptTypeID, ReceiptType from dbo.tblReceiptTypes where StoreID = @store and ReceiptTypeID < 100 and ReceiptTypeID > 0) r order by Sorter, ReceiptTypeID",
+        AllStores => "select StoreID, rtrim(StoreGCode) + ' ' + rtrim(isnull(StoreName, '')) from dbo.tblStores order by StoreNumber",
         ReceiptTypes => "select ReceiptTypeID, ReceiptType from dbo.tblReceiptTypes where StoreID = @store and ReceiptTypeID between 1 and 999 order by ReceiptType",
         ReportTitles => "select AccountReportTitleID, ReportTitle from dbo.tblAccountsReportTitles order by ReportTitle",
         _ => null,
@@ -372,7 +386,86 @@ public static class SetupTables
     ], AllowAdd: false, AllowDelete: false,
     Help: "The settings that control how the general ledger and A/R exports are put together. They apply to every store.");
 
-    public static IReadOnlyList<SetupTable> All { get; } = [AccountClasses, TaxTypes, TaxRates, RoyaltyFeeRates, SalesAccounts, SalesMapping, ReceiptTypes, ReceiptAdjustments, Payouts, GiftCards, Stores, Global];
+    public static SetupTable ArAccountTypes { get; } = new("ar-account-types", SetupArea.ArSetup, "A/R Account Types", "tblAccountsReceivableAccountTypes", "ItemID",
+    [
+        new("AccountTypeID", "Type id", SetupKind.Int),
+        new("AccountType", "Account type"),
+        new("AccountTypeGroup", "Group"),
+        new("AccountTypeAbbreviation", "Abbreviation"),
+        new("ReceiptTypeID", "Receipt type", SetupKind.Int, SetupLookups.ArReceiptTypes),
+        new("TaxExempt", "Tax exempt", SetupKind.Bool),
+        new("MinimumApplies", "Minimum applies", SetupKind.Bool),
+        new("MinimumAmount", "Minimum amount", SetupKind.Decimal),
+        new("GLAccount", "G/L account"),
+        new("GLDistReference", "G/L reference"),
+        new("GLAccountClassID", "G/L class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("OverrideGLAccount", "Override G/L account"),
+        new("OverrideGLDistReference", "Override G/L reference"),
+        new("OverrideGLAccountClassID", "Override G/L class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("OverrideOffsetGLAccount", "Override offset account"),
+        new("OverrideOffsetGLDistReference", "Override offset reference"),
+        new("OverrideOffsetGLAccountClassID", "Override offset class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("AccountsReceivableGLAccount", "A/R G/L account"),
+        new("AccountsReceivableGLDistReference", "A/R G/L reference"),
+    ], StoreColumn: "StoreID", Order: [new("AccountType")],
+    Help: "The kinds of A/R account for the chosen store: which POS receipt type they settle with and the G/L accounts they post to.");
+
+    public static SetupTable ArAccounts { get; } = new("ar-accounts", SetupArea.ArSetup, "A/R Accounts", "tblAccountsReceivableAccounts", "ItemID",
+    [
+        new("AccountNumber", "Number", ReadOnly: true),
+        new("AccountName", "Account", ReadOnly: true),
+        new("AccountTypeID", "Type", SetupKind.Int, SetupLookups.ArAccountTypes, ReadOnly: true),
+        new("DebitAcct", "Debit account"),
+        new("DistReference", "Reference"),
+        new("AccountClassID", "Class", SetupKind.Int, SetupLookups.AccountClasses),
+        new("MinimumsApply", "Minimums apply", SetupKind.Bool),
+        new("Inactive", "Inactive", SetupKind.Bool),
+        new("ParentAccountID", "Parent account", SetupKind.Int, SetupLookups.ArAccounts, BlankText: "none"),
+    ], StoreColumn: "StoreID", Order: [new("AccountName")], AllowAdd: false, AllowDelete: false, SearchColumn: "AccountName", TopRows: 2000,
+    ParentCheck: new("ParentAccountID", "AccountID"),
+    Help: "The G/L postings for each A/R account of the chosen store. Accounts come from the POS, so they cannot be added or removed here. A parent that would make the account its own ancestor is refused.");
+
+    public static SetupTable ArParents { get; } = new("ar-parents", SetupArea.ArSetup, "A/R Parent Accounts", "tblAccountsReceivableAccounts", "ItemID",
+    [
+        new("AccountNumber", "Number", ReadOnly: true),
+        new("AccountName", "Account", ReadOnly: true),
+        new("AccountTypeID", "Type", SetupKind.Int, SetupLookups.ArAccountTypes, ReadOnly: true),
+        new("ParentAccountID", "Parent account", SetupKind.Int, SetupLookups.ArAccounts, BlankText: "none"),
+        new("AccountNameQB", "QuickBooks name"),
+    ], StoreColumn: "StoreID", Order: [new("AccountName")], AllowAdd: false, AllowDelete: false, FixedWhere: "Inactive = 0",
+    SearchColumn: "AccountName", TopRows: 2000, ParentCheck: new("ParentAccountID", "AccountID"),
+    Help: "Which account each active A/R account rolls up to, and the name QuickBooks knows it by. A parent that would make the account its own ancestor is refused.");
+
+    public static SetupTable CommentSubstitution { get; } = new("comment-substitution", SetupArea.ArSetup, "Comment Substitution", "tblAccountsReceivableCommentCodeSubstitutionTable", "ItemID",
+    [
+        new("CommentCode", "Comment code"),
+        new("CommentOutput", "Output as"),
+    ], Order: [new("CommentCode")],
+    Help: "A comment code found on an A/R receipt is replaced by this text on the A/R output.");
+
+    public static SetupTable ArMenuDescriptions { get; } = new("ar-menu-descriptions", SetupArea.ArSetup, "Other A/R Descriptions", "tblMenuItems", "ItemID",
+    [
+        new("PLU", "PLU", SetupKind.Int, ReadOnly: true),
+        new("Description", "Menu item", ReadOnly: true),
+        new("SaleTypeID", "Sale type", SetupKind.Int, SetupLookups.SaleTypes, ReadOnly: true),
+        new("AccountsReceivableNote", "A/R description"),
+    ], StoreColumn: "StoreID", Order: [new("Description"), new("PLU")], AllowAdd: false, AllowDelete: false,
+    FixedWhere: "SaleTypeID in (select st.SaleTypeID from dbo.tblSaleTypes st join dbo.tblMainGroups mg on mg.StoreID = st.StoreID and mg.MainGroupID = st.MainGroupID where mg.MainTypeID = 3 and st.StoreID = tblMenuItems.StoreID)",
+    SearchColumn: "Description", TopRows: 2000,
+    Help: "What the A/R output calls each menu item of the \"other\" kind (main type 3). Only the A/R description is changed here; the menu itself comes from the POS.");
+
+    public static SetupTable CardAssignment { get; } = new("credit-card-assignment", SetupArea.ArSetup, "Credit Card Assignment", "tblAccountsReceivableAccountsReceiptCustomerIdentifiers", "ReceiptCustomerIdentifierID",
+    [
+        new("ReceiptCustomerIdentifier", "Customer identifier", ReadOnly: true),
+        new("FirstUsed", "First used", SetupKind.Date, ReadOnly: true),
+        new("LastUsed", "Last used", SetupKind.Date, ReadOnly: true),
+        new("AssignedStoreID", "Assigned store", SetupKind.Int, SetupLookups.AllStores, BlankText: "not assigned"),
+        new("AssignedCustomerID", "Assigned A/R account id", SetupKind.Int, Help: "The A/R account number (AccountID) at the assigned store."),
+    ], Order: [new("LastUsed", Descending: true)], AllowAdd: false, AllowDelete: false, SearchColumn: "ReceiptCustomerIdentifier", TopRows: 500,
+    Help: "Which A/R account a credit card (or other customer identifier seen on receipts) belongs to. Newest first; the filter narrows the list.");
+
+    public static IReadOnlyList<SetupTable> All { get; } = [AccountClasses, TaxTypes, TaxRates, RoyaltyFeeRates, SalesAccounts, SalesMapping, ReceiptTypes, ReceiptAdjustments, Payouts, GiftCards, Stores, Global,
+        ArAccountTypes, ArAccounts, ArParents, CommentSubstitution, ArMenuDescriptions, CardAssignment];
 
     public static SetupTable? Find(string? id) => All.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.Ordinal));
 }

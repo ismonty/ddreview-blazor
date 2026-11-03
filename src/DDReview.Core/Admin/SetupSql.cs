@@ -17,22 +17,29 @@ public static class SetupSql
 {
     public static string Q(string identifier) => "[" + identifier.Replace("]", "]]") + "]";
 
-    private static string Where(SetupTable t, bool byKey)
+    private static string Where(SetupTable t, bool byKey, bool searching = false)
     {
         var w = new List<string>();
         if (byKey) w.Add(Q(t.Key) + " = @key");
         if (t.StoreColumn is not null) w.Add(Q(t.StoreColumn) + " = @store");
         if (t.FilterColumn is not null) w.Add(Q(t.FilterColumn) + " = @filter");
         if (t.FixedWhere is not null) w.Add("(" + t.FixedWhere + ")");
+        if (searching && t.SearchColumn is not null) w.Add(Q(t.SearchColumn) + " like @search escape '\\'");
         return w.Count == 0 ? "" : " where " + string.Join(" and ", w);
     }
 
-    public static string Select(SetupTable t, IReadOnlyList<string> columns, bool lockRow = false, bool byKey = false)
+    /// <summary>" where Key = @key" plus the page's own store/filter conditions, for statements written outside this class.</summary>
+    internal static string WhereKey(SetupTable t) => Where(t, true);
+
+    public static string Select(SetupTable t, IReadOnlyList<string> columns, bool lockRow = false, bool byKey = false, bool searching = false)
     {
         var order = (t.Order ?? []).Where(o => columns.Contains(o.Column)).Select(o => Q(o.Column) + (o.Descending ? " desc" : "")).Append(Q(t.Key));
-        return "select " + string.Join(", ", columns.Prepend(t.Key).Distinct().Select(Q)) + " from dbo." + Q(t.Table) + (lockRow ? " with (updlock, rowlock)" : "")
-            + Where(t, byKey) + (byKey ? "" : " order by " + string.Join(", ", order));
+        return "select " + (!byKey && t.TopRows > 0 ? $"top ({t.TopRows}) " : "") + string.Join(", ", columns.Prepend(t.Key).Distinct().Select(Q)) + " from dbo." + Q(t.Table) + (lockRow ? " with (updlock, rowlock)" : "")
+            + Where(t, byKey, searching) + (byKey ? "" : " order by " + string.Join(", ", order));
     }
+
+    /// <summary>What was typed in the filter box as a LIKE pattern: contains, with the pattern characters taken literally.</summary>
+    public static string LikePattern(string typed) => "%" + typed.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("[", "\\[") + "%";
 
     public static string Insert(SetupTable t, IReadOnlyList<string> columns) =>
         columns.Count == 0

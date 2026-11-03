@@ -45,7 +45,7 @@ public sealed class SetupGridService
     }
 
     /// <summary>The rows of one table (for one store when it is per-store). Null when the table is not in this database.</summary>
-    public async Task<SetupGridData?> LoadAsync(string cs, SetupActor actor, SetupDecision decision, DateTimeOffset now, SetupTable table, int? storeId, CancellationToken ct = default)
+    public async Task<SetupGridData?> LoadAsync(string cs, SetupActor actor, SetupDecision decision, DateTimeOffset now, SetupTable table, int? storeId, string? search = null, CancellationToken ct = default)
     {
         Require(actor, decision, now, table.Area);
         if (table.StoreColumn is not null && storeId is null or <= 0) return await EmptyAsync(cs, table, ct);
@@ -56,9 +56,11 @@ public sealed class SetupGridService
         if (cols is null) return null;
 
         var rows = new List<SetupRow>();
-        await using (var cmd = new SqlCommand(SetupSql.Select(table, cols.Select(c => c.Def.Name).ToList()), cn) { CommandTimeout = 60 })
+        var searching = table.SearchColumn is not null && !string.IsNullOrWhiteSpace(search);
+        await using (var cmd = new SqlCommand(SetupSql.Select(table, cols.Select(c => c.Def.Name).ToList(), searching: searching), cn) { CommandTimeout = 60 })
         {
             Bind(cmd, table, storeId, null);
+            if (searching) cmd.Parameters.Add("@search", SqlDbType.NVarChar, 400).Value = SetupSql.LikePattern(search!);
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
@@ -163,6 +165,9 @@ public sealed class SetupGridService
             }
             if (changed.Count == 0) { await tx.RollbackAsync(ct); return new SetupWrite(SetupOutcome.Unchanged, "Nothing was changed.", original.Key); }
 
+            if (table.ParentCheck is { } pc && newValues.TryGetValue(pc.Column, out var newParent) && newParent is not null
+                && await CircularAsync(cn, tx, table, storeId, original.Key, Convert.ToInt32(newParent), ct) is { } loop) return Fail(tx, SetupOutcome.Invalid, loop);
+
             if (ExclusiveProblem(table, n => newValues.TryGetValue(n, out var v) ? v is true : original.Values.GetValueOrDefault(n) is true) is { } ex) return Fail(tx, SetupOutcome.Invalid, ex);
 
             await using var cmd = new SqlCommand(SetupSql.Update(table, changed.Select(c => c.Def.Name).ToList()), cn, tx) { CommandTimeout = 60 };
@@ -218,6 +223,82 @@ public sealed class SetupGridService
             Bind(cmd, table, storeId, key);
             await cmd.ExecuteNonQueryAsync(ct);
             await SetupAudit.WriteAsync(cn, tx, actor, table.Area, table.Table, key.ToString(), "delete", Json(Scope(table, storeId, gone)), null, ct);
+            await tx.CommitAsync(ct);
+            return new SetupWrite(SetupOutcome.Saved, null, key);
+        }
+        catch (SqlException ex) { return Fail(tx, SetupOutcome.Refused, Describe(ex)); }
+        catch { await SafeRollbackAsync(tx); throw; }
+    }
+
+    // ---- A/R parent accounts ----
+
+    public sealed record ParentConflict(int AccountId, string AccountName, int? ParentAccountId, string ParentAccountName, int Depth);
+
+    /// <summary>The same check the old form made: the database's own function counts the steps up the parents, 1000 or more means a loop.</summary>
+    private static async Task<string?> CircularAsync(SqlConnection cn, SqlTransaction tx, SetupTable table, int? storeId, int key, int parentAccountId, CancellationToken ct)
+    {
+        var pc = table.ParentCheck!;
+        int accountId;
+        await using (var read = new SqlCommand($"select {SetupSql.Q(pc.AccountColumn)} from dbo.{SetupSql.Q(table.Table)}{SetupSql.WhereKey(table)}", cn, tx))
+        {
+            Bind(read, table, storeId, key);
+            var v = await read.ExecuteScalarAsync(ct);
+            if (v is null or DBNull) return null;          // the row is gone: the update reports that itself
+            accountId = Convert.ToInt32(v);
+        }
+        await using var cmd = new SqlCommand("select dbo.fn_TraverseAccountCore(@s, @a, @p, '-1')", cn, tx);
+        cmd.Parameters.Add("@s", SqlDbType.Int).Value = storeId ?? 0;
+        cmd.Parameters.Add("@a", SqlDbType.Int).Value = accountId;
+        cmd.Parameters.Add("@p", SqlDbType.Int).Value = parentAccountId;
+        var steps = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        return steps >= 1000 ? "Circular reference: that parent would make the account its own ancestor." : null;
+    }
+
+    /// <summary>Accounts whose parents already loop back on themselves (the old "inbreeding check").</summary>
+    public async Task<IReadOnlyList<ParentConflict>> ParentConflictsAsync(string cs, SetupActor actor, SetupDecision decision, DateTimeOffset now, SetupTable table, int storeId, CancellationToken ct = default)
+    {
+        Require(actor, decision, now, table.Area);
+        if (table.ParentCheck is null) return [];
+        await using var cn = new SqlConnection(cs);
+        await cn.OpenAsync(ct);
+        var list = new List<ParentConflict>();
+        await using var cmd = new SqlCommand("select AccountID, AccountName, ParentAccountID, ParentAccountName, TraverseCount from dbo.fn_AccountsReceivableAccountParentConflicts(@s)", cn) { CommandTimeout = 120 };
+        cmd.Parameters.Add("@s", SqlDbType.Int).Value = storeId;
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            list.Add(new ParentConflict(Convert.ToInt32(r[0]), r[1] is DBNull ? "" : r.GetString(1).Trim(), r[2] is DBNull ? null : Convert.ToInt32(r[2]),
+                r[3] is DBNull ? "" : r.GetString(3).Trim(), Convert.ToInt32(r[4])));
+        return list;
+    }
+
+    /// <summary>Removes the parent of one account (the fix the old conflict list offered), with an audit row.</summary>
+    public async Task<SetupWrite> ClearParentAsync(string cs, SetupActor actor, SetupDecision decision, DateTimeOffset now, SetupTable table, int storeId, int accountId, CancellationToken ct = default)
+    {
+        Require(actor, decision, now, table.Area);
+        if (table.ParentCheck is not { } pc || table.StoreColumn is null) return new SetupWrite(SetupOutcome.Refused, "Not available here.");
+        await using var cn = new SqlConnection(cs);
+        await cn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await cn.BeginTransactionAsync(ct);
+        try
+        {
+            if (await CheckStoreAsync(cn, tx, table, storeId, ct) is { } storeProblem) return Fail(tx, SetupOutcome.Invalid, storeProblem);
+            int key; object? was;
+            await using (var read = new SqlCommand($"select {SetupSql.Q(table.Key)}, {SetupSql.Q(pc.Column)} from dbo.{SetupSql.Q(table.Table)} with (updlock, rowlock) where {SetupSql.Q(pc.AccountColumn)} = @a and {SetupSql.Q(table.StoreColumn)} = @store", cn, tx))
+            {
+                read.Parameters.Add("@a", SqlDbType.Int).Value = accountId;
+                read.Parameters.Add("@store", SqlDbType.Int).Value = storeId;
+                await using var r = await read.ExecuteReaderAsync(ct);
+                if (!await r.ReadAsync(ct)) return Fail(tx, SetupOutcome.NotFound, "That account no longer exists.");
+                key = Convert.ToInt32(r[0]); was = r[1] is DBNull ? null : r[1];
+            }
+            if (was is null) { await tx.RollbackAsync(ct); return new SetupWrite(SetupOutcome.Unchanged, "That account has no parent.", key); }
+            await using (var upd = new SqlCommand($"update dbo.{SetupSql.Q(table.Table)} set {SetupSql.Q(pc.Column)} = null where {SetupSql.Q(table.Key)} = @key", cn, tx))
+            {
+                upd.Parameters.Add("@key", SqlDbType.Int).Value = key;
+                await upd.ExecuteNonQueryAsync(ct);
+            }
+            await SetupAudit.WriteAsync(cn, tx, actor, table.Area, table.Table, key.ToString(), "update",
+                Json(Scope(table, storeId, new() { [pc.Column] = Convert.ToInt32(was).ToString() })), Json(Scope(table, storeId, new() { [pc.Column] = "" })), ct);
             await tx.CommitAsync(ct);
             return new SetupWrite(SetupOutcome.Saved, null, key);
         }
