@@ -13,10 +13,10 @@
 @if (!string.IsNullOrEmpty(Notice)) { <p class="banner ok" role="status">@Notice</p> }
 <p>Signed in as <b>@name</b>.</p>
 
-@if (topAdmin)
+@if (topAdmin || (GoogleStatus.Enabled && !googleSession))
 {
     <h2>All databases</h2>
-    <p><a href="/admin/databases">Databases and friendly names</a>: edit the names people see when they choose a database, and manage top-level administrators. Needs Google.</p>
+    <p><a href="/admin/databases">Databases and friendly names</a>: edit the names people see when they choose a database, and manage top-level administrators. Needs Google, and only top-level administrators can use it.</p>
 }
 
 @if (isAdmin)
@@ -54,7 +54,7 @@ else if (loaded)
     private string name = "";
     private string? googleEmail;
     private bool loaded;
-    private bool isAdmin, topAdmin;
+    private bool isAdmin, topAdmin, googleSession;
     private string? Notice => G switch
     {
         "linked" => "Google account linked.",
@@ -71,6 +71,7 @@ else if (loaded)
         {
             try { googleEmail = await Central.GetGoogleEmailAsync(id); } catch (Microsoft.Data.SqlClient.SqlException) { googleEmail = null; }
         }
+        googleSession = user.HasClaim(DDReview.Core.Admin.SetupClaims.AuthMethod, DDReview.Core.Admin.SetupClaims.Google);
         var sub = user.FindFirstValue(DDReview.Core.Tenancy.GoogleClaims.Subject);
         if (GoogleStatus.Enabled && sub is not null)
             try { topAdmin = await Central.IsTopAdminAsync(sub, null, false); } catch (Microsoft.Data.SqlClient.SqlException) { }
