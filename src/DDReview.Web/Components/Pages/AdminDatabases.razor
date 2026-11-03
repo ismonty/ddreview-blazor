@@ -1,0 +1,165 @@
+@page "/admin/databases"
+@attribute [Authorize]
+@using System.Security.Claims
+@using DDReview.Core.Admin
+@using DDReview.Core.Tenancy
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.WebUtilities
+@inject CentralAdminService Admin
+@inject AuthenticationStateProvider Auth
+@inject IHttpContextAccessor Http
+@inject GoogleSignInStatus GoogleStatus
+@inject NavigationManager Nav
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Databases and friendly names</h1>
+
+@if (!loaded) { <p class="muted">Loading…</p> }
+else if (denial == CentralDenial.NotGoogle || denial == CentralDenial.NeedsVerification)
+{
+    <p>@(denial == CentralDenial.NotGoogle ? "This page needs Google to confirm who you are." : "Google has not confirmed you in the last 30 minutes.")
+        It asks every time, even if you are already signed in to Google in this browser.</p>
+    @if (!GoogleStatus.Enabled) { <p class="muted">Google sign-in is not turned on for this site.</p> }
+    else
+    {
+        <form method="post" action="/admin/verify">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="/admin/databases" />
+            <button type="submit">Verify with Google</button>
+        </form>
+    }
+}
+else if (denial == CentralDenial.NotTopAdmin) { <p>This page is for top-level administrators.</p> }
+else
+{
+    <p>Each row is one login in the central master. The friendly name is what people see in the "Choose a database" list. People are not linked to a database here; they link their own Google account on the Account page.</p>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (notice is not null) { <p class="banner ok" role="status">@notice</p> }
+
+    <form @onsubmit="SearchAsync" @onsubmit:preventDefault class="pick-filter">
+        <input @bind="filter" placeholder="Find a login or friendly name" maxlength="100" aria-label="Find a login or friendly name" />
+        <button type="submit" class="secondary">Find</button>
+    </form>
+
+    @if (logins is null) { <p class="muted">Loading…</p> }
+    else
+    {
+        <table>
+            <thead><tr><th>Login</th><th>Friendly name</th><th>Linked Google account</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var l in logins)
+            {
+                <tr>
+                    <td>@l.UserName</td>
+                    <td><input value="@NameFor(l)" @onchange="e => edits[l.WebUserId] = e.Value?.ToString() ?? string.Empty" maxlength="100" aria-label="Friendly name for @l.UserName" /></td>
+                    <td>@(l.GoogleEmail ?? "none")</td>
+                    <td>
+                        <button disabled="@busy" @onclick="() => SaveAsync(l)">Save</button>
+                        @if (l.GoogleEmail is not null) { <button class="secondary" disabled="@busy" @onclick="() => UnlinkAsync(l)">Unlink Google</button> }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        @if (logins.Count >= 200) { <p class="muted small">Showing the first 200. Type part of a name to narrow the list.</p> }
+    }
+
+    <h2>Top-level administrators</h2>
+    <p>They can open any login (with that login's own access) and edit friendly names. Add the Google email address; it is tied to the person's Google account the first time they sign in with it.</p>
+    @if (admins is not null)
+    {
+        <table>
+            <thead><tr><th>Google email</th><th>Tied to a Google account</th><th>Added by</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var a in admins)
+            {
+                <tr>
+                    <td>@a.GoogleEmail</td><td>@(a.Bound ? "yes" : "not yet")</td><td>@a.AddedBy</td>
+                    <td><button class="secondary" disabled="@busy" @onclick="() => RemoveAsync(a)">Remove</button></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+    <form @onsubmit="AddAsync" @onsubmit:preventDefault class="pick-filter">
+        <input @bind="newEmail" type="email" placeholder="name@example.com" maxlength="320" aria-label="Google email to add" />
+        <button type="submit" disabled="@busy">Add</button>
+    </form>
+}
+
+@code {
+    private bool loaded, busy;
+    private CentralDenial denial;
+    private CentralActor? actor;
+    private IReadOnlyList<LoginChoice>? logins;
+    private IReadOnlyList<TopAdminRow>? admins;
+    private readonly Dictionary<int, string> edits = new();
+    private string filter = "", newEmail = "";
+    private string? error, notice;
+    private bool started;
+
+    // Interactive circuits have no HttpContext after the first render, so the page waits for its own render before reading anything.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (started) return;
+        started = true;
+        var user = (await Auth.GetAuthenticationStateAsync()).User;
+        actor = new CentralActor(user.FindFirstValue(GoogleClaims.Subject), null, SetupClaims.IsGoogleSession(user), SetupClaims.VerifiedAt(user), Http.HttpContext?.Connection.RemoteIpAddress?.ToString());
+        try
+        {
+            denial = await Admin.DecideAsync(actor);
+            if (denial == CentralDenial.None) { await LoadAsync(); }
+        }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The central master tables are not ready (has sql/008 been run?)."; denial = CentralDenial.NotTopAdmin; }
+        loaded = true;
+        StateHasChanged();
+    }
+
+    private string NameFor(LoginChoice l) => edits.TryGetValue(l.WebUserId, out var v) ? v : l.FriendlyName ?? "";
+
+    private async Task LoadAsync()
+    {
+        logins = await Admin.ListLoginsAsync(actor!, filter, 200);
+        admins = await Admin.ListTopAdminsAsync(actor!);
+    }
+
+    private async Task Run(Func<Task> work)
+    {
+        busy = true; error = null; notice = null;
+        try { await work(); }
+        catch (UnauthorizedAccessException) { error = "Google has not confirmed you in the last 30 minutes. Reload the page to verify again."; }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The central master could not be updated."; }
+        busy = false;
+    }
+
+    private Task SearchAsync() => Run(async () => { edits.Clear(); await LoadAsync(); });
+
+    private Task SaveAsync(LoginChoice l) => Run(async () =>
+    {
+        var name = edits.TryGetValue(l.WebUserId, out var v) ? v : l.FriendlyName;
+        notice = await Admin.SetFriendlyNameAsync(actor!, l.WebUserId, name) ? $"Saved {l.UserName}." : "That login no longer exists.";
+        edits.Remove(l.WebUserId);
+        await LoadAsync();
+    });
+
+    private Task UnlinkAsync(LoginChoice l) => Run(async () =>
+    {
+        await Admin.UnlinkLoginAsync(actor!, l.WebUserId);
+        notice = $"Unlinked the Google account from {l.UserName}.";
+        await LoadAsync();
+    });
+
+    private Task AddAsync() => Run(async () =>
+    {
+        notice = await Admin.AddTopAdminAsync(actor!, newEmail) ? $"Added {newEmail.Trim()}." : "Enter an email address that is not already in the list.";
+        newEmail = "";
+        await LoadAsync();
+    });
+
+    private Task RemoveAsync(TopAdminRow a) => Run(async () =>
+    {
+        notice = await Admin.RemoveTopAdminAsync(actor!, a) ? $"Removed {a.GoogleEmail}." : "The last top-level administrator cannot be removed.";
+        await LoadAsync();
+    });
+}

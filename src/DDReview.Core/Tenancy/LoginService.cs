@@ -6,6 +6,9 @@ public enum LoginOutcome { Success, InvalidCredentials, LockedOut, Redirect, NoC
 
 public sealed record LoginResult(LoginOutcome Outcome, CentralAccount? Account = null, int WebLoginId = 0, string? RedirectUrl = null);
 
+/// <summary>The databases (logins) a Google account can open. <see cref="MustChoose"/> is true when the person gets a list instead of being signed straight in.</summary>
+public sealed record GoogleOptions(IReadOnlyList<LoginChoice> Choices, bool IsTopAdmin, bool MustChoose);
+
 public sealed class LoginService(ICentralDirectory central, LoginThrottle throttle, bool upgradeLegacyPasswords)
 {
     public async Task<LoginResult> SignInAsync(string userOrEmail, string password, string? ip, string? userAgent, string? hostName, CancellationToken ct = default)
@@ -43,6 +46,40 @@ public sealed class LoginService(ICentralDirectory central, LoginThrottle thrott
         if (string.IsNullOrWhiteSpace(googleSubject) || googleSubject.Length > 100) return new LoginResult(LoginOutcome.InvalidCredentials);
         var match = await central.FindByGoogleAsync(googleSubject, ct);
         return match is null ? new LoginResult(LoginOutcome.InvalidCredentials) : await CompleteAsync(match, ip, userAgent, hostName, ct);
+    }
+
+    /// <summary>What a Google account may open: the logins it is linked to, or (top-level administrators) every login.</summary>
+    public async Task<GoogleOptions> GoogleOptionsAsync(string googleSubject, string? email, bool emailVerified, string? filter = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(googleSubject) || googleSubject.Length > 100) return new GoogleOptions([], false, false);
+        var linked = await central.ListLinkedAsync(googleSubject, ct);
+        bool top;
+        try { top = await central.IsTopAdminAsync(googleSubject, email, emailVerified, ct); }
+        catch (Microsoft.Data.SqlClient.SqlException) { top = false; }   // sql/008 not run yet: behave as before (linked logins only)
+        if (!top) return new GoogleOptions(linked, false, linked.Count > 1);
+        var all = await central.ListAllLoginsAsync(filter, 200, ct);
+        return new GoogleOptions(all, true, true);
+    }
+
+    /// <summary>
+    /// Signs in as the login the person chose from their list. The choice is checked again here: it must be one of the logins this Google account
+    /// is linked to, or the person must be a top-level administrator. A top-level administrator gets that login's own access, nothing more.
+    /// </summary>
+    public async Task<LoginResult> SignInWithGoogleChoiceAsync(string googleSubject, string? email, bool emailVerified, int webUserId, string? ip, string? userAgent, string? hostName, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(googleSubject) || googleSubject.Length > 100) return new LoginResult(LoginOutcome.InvalidCredentials);
+        var allowed = await central.IsLinkedAsync(googleSubject, webUserId, ct);
+        var viaTop = false;
+        if (!allowed)
+        {
+            try { viaTop = allowed = await central.IsTopAdminAsync(googleSubject, email, emailVerified, ct); }
+            catch (Microsoft.Data.SqlClient.SqlException) { allowed = false; }
+        }
+        if (!allowed) return new LoginResult(LoginOutcome.InvalidCredentials);
+        var match = await central.GetByIdAsync(webUserId, ct);
+        if (match is null) return new LoginResult(LoginOutcome.InvalidCredentials);
+        await central.AuditAsync(viaTop ? "pick-top" : "pick", googleSubject, email, webUserId, null, ip, ct);
+        return await CompleteAsync(match, ip, userAgent, hostName, ct);
     }
 
     private async Task<LoginResult> CompleteAsync(CentralAccount match, string? ip, string? userAgent, string? hostName, CancellationToken ct)

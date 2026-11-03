@@ -12,6 +12,7 @@
             <form method="post" action="/account/logout" class="logout">
                 <AntiforgeryToken />
                 <a href="/account" title="Your account">@context.User.Identity?.Name</a>
+                @if (context.User.HasClaim("can_switch", "1")) { <button type="submit" formaction="/account/google/start" class="secondary" title="Sign in with Google again and choose another database">Switch database</button> }
                 <button type="submit">Sign out</button>
             </form>
         </Authorized>
