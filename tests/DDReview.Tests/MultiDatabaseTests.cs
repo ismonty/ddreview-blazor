@@ -142,3 +142,16 @@ public class MultiDatabaseTests
     [Theory] [InlineData("true", true)] [InlineData("True", true)] [InlineData("false", false)] [InlineData(null, false)] [InlineData("1", false)]
     public void Email_verified_claim_parsing(string? v, bool expected) => Assert.Equal(expected, GoogleClaims.IsTrue(v));
 }
+
+public class UserAccessCopyTests
+{
+    [Fact] public void AsAdministrator_copies_the_access_and_leaves_the_original_alone()
+    {
+        var a = new UserAccess { ClientWebUserId = 5, UserName = "bob" };
+        a.Stores[ReportKind.Sales].Add(7); a.AllStores.Add(ReportKind.Payroll);
+        var b = a.AsAdministrator();
+        Assert.True(b.Administrator); Assert.False(a.Administrator);
+        Assert.Equal(5, b.ClientWebUserId); Assert.Contains(7, b.Stores[ReportKind.Sales]);
+        b.Stores[ReportKind.Sales].Add(9); Assert.DoesNotContain(9, a.Stores[ReportKind.Sales]);
+    }
+}
