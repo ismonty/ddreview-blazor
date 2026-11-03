@@ -1,5 +1,6 @@
 using System.Text;
 using System.Xml.Linq;
+using DDReview.QuickBooks;
 using DDReview.QuickBooks.Launch;
 using DDReview.QuickBooks.Model;
 using DDReview.QuickBooks.Planning;
@@ -27,6 +28,7 @@ sealed class MainForm : Form
     readonly CheckBox _arAdj = new() { Text = "Accounts receivable adjustments", AutoSize = true };
     readonly CheckBox _debug = new() { Text = "Write debug files to:", AutoSize = true };
     readonly TextBox _debugDir = new() { Width = 320 };
+    readonly Button _openDebug = new() { Text = "Open folder", AutoSize = true };
     readonly Button _loadStores = new() { Text = "Connect and load stores", AutoSize = true };
     readonly Button _preview = new() { Text = "Preview (changes nothing)", AutoSize = true, Enabled = false };
     readonly Button _post = new() { Text = "Post to QuickBooks...", AutoSize = true, Enabled = false };
@@ -56,7 +58,7 @@ sealed class MainForm : Form
         _launchLink = launchLink;
         _trusted = TrustedKeyFile.Load(Path.Combine(AppContext.BaseDirectory, TrustedKeyFile.FileName), out _keyProblems);
 
-        Text = "Post to QuickBooks";
+        Text = "Post to QuickBooks  " + VersionText();
         Width = 980; Height = 740; MinimumSize = new Size(820, 560);
         StartPosition = FormStartPosition.CenterScreen;
 
@@ -96,7 +98,8 @@ sealed class MainForm : Form
         var opts = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(8) };
         opts.Controls.Add(Row(new Label { Text = "From", AutoSize = true, Anchor = AnchorStyles.Left }, _start, new Label { Text = "to", AutoSize = true }, _end));
         opts.Controls.Add(_gl); opts.Controls.Add(_ar); opts.Controls.Add(_arAdj);
-        opts.Controls.Add(Row(_debug, _debugDir));
+        opts.Controls.Add(Row(_debug, _debugDir, _openDebug));
+        _openDebug.Click += (_, _) => OpenDebugFolder();
         middle.Panel2.Controls.Add(opts);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(8, 4, 8, 4) };
@@ -259,7 +262,34 @@ sealed class MainForm : Form
 
     void Log(string s)
     {
-        _log.AppendText(s + Environment.NewLine);
+        _log.AppendText(LogScrubber.Scrub(s, _connection.Text) + Environment.NewLine);   // never show a password, even inside an error message
+    }
+
+    /// <summary>"1.1.0 (abc1234, built 2026-11-02)" from the exe itself, so a screenshot says which build it is.</summary>
+    static string VersionText()
+    {
+        var asm = typeof(MainForm).Assembly;
+        string v = System.Diagnostics.FileVersionInfo.GetVersionInfo(asm.Location).ProductVersion ?? asm.GetName().Version?.ToString() ?? "";
+        int plus = v.IndexOf('+');
+        string ver = plus >= 0 ? v[..plus] : v;
+        string sha = plus >= 0 ? v[(plus + 1)..] : "";
+        if (sha.Length > 7) sha = sha[..7];
+        string built = File.GetLastWriteTime(asm.Location).ToString("yyyy-MM-dd");
+        return $"{ver} ({(sha.Length > 0 ? sha + ", " : "")}built {built})";
+    }
+
+    /// <summary>Opens the folder the debug files go to, choosing an easy-to-find default the first time.</summary>
+    void OpenDebugFolder()
+    {
+        if (_debugDir.Text.Trim().Length == 0)
+            _debugDir.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DDReview", "PosterDebug");
+        try
+        {
+            Directory.CreateDirectory(_debugDir.Text.Trim());
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "\"" + _debugDir.Text.Trim() + "\"") { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.ComponentModel.Win32Exception)
+        { Log("Could not open the debug folder: " + ex.Message); }
     }
 
     void Busy(bool busy, string status = "")
