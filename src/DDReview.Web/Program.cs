@@ -243,9 +243,9 @@ if (googleOn)
         try
         {
             // Allowed when this Google account is linked to THIS login, or when it is the account this session came from and it is a top-level
-            // administrator (who may be looking at a login they are not linked to; they get that login's own access, nothing more).
+            // administrator (who may be on a login they are not linked to, signed in by password or from the list; they get that login's own access, nothing more).
             var ok = int.TryParse(me, out var meId) && await central.IsLinkedAsync(sub, meId, ctx.RequestAborted);
-            if (!ok && ctx.User.FindFirstValue(GoogleClaims.Subject) == sub)
+            if (!ok)   // also from a password session: Google has just proved this account, and top-level administrators may use any login
                 ok = await central.IsTopAdminAsync(sub, ext.Principal!.FindFirstValue(ClaimTypes.Email), GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified)), ctx.RequestAborted);
             if (!ok) return Results.Redirect(SetupReturn.WithFlag(back, "notlinked"));
         }
