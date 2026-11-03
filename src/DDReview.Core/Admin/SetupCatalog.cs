@@ -31,7 +31,7 @@ public static class SetupCatalog
         new(SetupArea.ArSetup, ArSection, "Comment Substitution", "tblAccountsReceivableCommentCodeSubstitutionTable"),
         new(SetupArea.ArSetup, ArSection, "Other A/R Descriptions", "tblMenuItems"),
         new(SetupArea.ArSetup, ArSection, "Credit Card Assignment", "tblAccountsReceivableAccountsReceiptCustomerIdentifiers"),
-        new(SetupArea.StoreAndGlobal, StoreSection, "Store Setup (G/L fields)", "tblStores"),
-        new(SetupArea.StoreAndGlobal, StoreSection, "Global Settings (G/L fields)", "tblGlobal"),
+        new(SetupArea.StoreAndGlobal, StoreSection, "Store Setup (G/L fields)", "tblStores", SetupTables.Stores.Route),
+        new(SetupArea.StoreAndGlobal, StoreSection, "Global Settings (G/L fields)", "tblGlobal", SetupTables.Global.Route),
     ];
 }
