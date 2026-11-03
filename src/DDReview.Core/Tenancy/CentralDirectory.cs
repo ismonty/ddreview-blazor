@@ -26,6 +26,8 @@ public interface ICentralDirectory
     Task<bool> IsTopAdminAsync(string googleSubject, string? email, bool emailVerified, CancellationToken ct = default);
     /// <summary>Every login (for top-level administrators), optionally filtered on user name or friendly name.</summary>
     Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, bool includeInactive = false, CancellationToken ct = default);
+    /// <summary>The databases, by short name. Empty when dbo.tblWebUserSecurityDatabases does not exist.</summary>
+    Task<IReadOnlyList<DatabaseRow>> ListDatabasesAsync(CancellationToken ct = default);
     /// <summary>True when a login is marked inactive (sql/009). False when it is not, or when that table does not exist yet.</summary>
     Task<bool> IsInactiveAsync(int webUserId, CancellationToken ct = default);
     Task SetInactiveAsync(int webUserId, bool inactive, string? by, CancellationToken ct = default);
@@ -40,9 +42,15 @@ public interface ICentralDirectory
 }
 
 /// <summary>A login as the "choose a database" list shows it.</summary>
-public sealed record LoginChoice(int WebUserId, string UserName, string? FriendlyName, string? GoogleEmail, bool Inactive = false)
+public sealed record LoginChoice(int WebUserId, string UserName, string? FriendlyName, string? GoogleEmail, bool Inactive = false, int? DatabaseId = null)
 {
     public string Label => string.IsNullOrWhiteSpace(FriendlyName) ? UserName : FriendlyName!;
+}
+
+/// <summary>One database (dbo.tblWebUserSecurityDatabases). The connection string is deliberately not read: the list never needs it.</summary>
+public sealed record DatabaseRow(int DatabaseId, string ShortName, string DatabaseName)
+{
+    public string Label => string.IsNullOrWhiteSpace(ShortName) ? DatabaseName : ShortName;
 }
 
 public sealed record TopAdminRow(int TopAdminId, string GoogleEmail, bool Bound, DateTime AddedUtc, string? AddedBy);
@@ -171,13 +179,13 @@ select 1", cn);
     }
 
     public async Task<IReadOnlyList<LoginChoice>> ListLinkedAsync(string googleSubject, CancellationToken ct = default) =>
-        await ChoicesAsync((join, filt, flag) => $@"
-select wus.WebUserID, wus.UserName, f.FriendlyName, g.GoogleEmail, {flag} as Inactive
+        await ChoicesAsync(p => $@"
+select wus.WebUserID, wus.UserName, f.FriendlyName, g.GoogleEmail, {p.Flag} as Inactive, {p.DbId} as DatabaseID
 from dbo.tblWebUserGoogle g
 join dbo.tblWebUserSecurity wus on wus.WebUserID = g.WebUserID
 left join dbo.tblWebUserFriendlyName f on f.WebUserID = wus.WebUserID
-{join}
-where g.GoogleSubject = @s {(filt is null ? "" : "and " + filt)}
+{p.Join}
+where g.GoogleSubject = @s {(p.Filter is null ? "" : "and " + p.Filter)}
 order by coalesce(f.FriendlyName, wus.UserName), wus.WebUserID", includeInactive: false,
             c => c.Parameters.Add("@s", System.Data.SqlDbType.VarChar, 100).Value = googleSubject, ct);
 
@@ -212,31 +220,41 @@ else select 0", cn);
     public async Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, bool includeInactive = false, CancellationToken ct = default)
     {
         var like = string.IsNullOrWhiteSpace(filter) ? null : "%" + filter.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("[", "\\[") + "%";
-        return await ChoicesAsync((join, filt, flag) => $@"
-select top ({Math.Clamp(top, 1, 500)}) wus.WebUserID, wus.UserName, f.FriendlyName, g.GoogleEmail, {flag} as Inactive
+        return await ChoicesAsync(p => $@"
+select top ({Math.Clamp(top, 1, 500)}) wus.WebUserID, wus.UserName, f.FriendlyName, g.GoogleEmail, {p.Flag} as Inactive, {p.DbId} as DatabaseID
 from dbo.tblWebUserSecurity wus
 left join dbo.tblWebUserFriendlyName f on f.WebUserID = wus.WebUserID
 left join dbo.tblWebUserGoogle g on g.WebUserID = wus.WebUserID
-{join}
-where (@f is null or wus.UserName like @f escape '\' or f.FriendlyName like @f escape '\') {(filt is null ? "" : "and " + filt)}
+{p.Join}
+where (@f is null or wus.UserName like @f escape '\' or f.FriendlyName like @f escape '\'{p.DbMatch}) {(p.Filter is null ? "" : "and " + p.Filter)}
 order by coalesce(f.FriendlyName, wus.UserName), wus.WebUserID", includeInactive,
             c => c.Parameters.Add("@f", System.Data.SqlDbType.VarChar, 250).Value = (object?)like ?? DBNull.Value, ct);
     }
 
+    /// <summary>The pieces a login-list query is built from, so it can still run when an optional table or column does not exist yet.</summary>
+    private sealed record Pieces(string Join, string? Filter, string Flag, string DbId, string DbMatch);
+
     /// <summary>
-    /// Runs a login-list query. The SQL is built by <paramref name="sql"/> from three pieces: the join to the inactive table, a filter that drops inactive logins,
-    /// and the Inactive column. When sql/009 has not been run (no such table) it runs again without them, so nothing breaks before the script is run.
+    /// Runs a login-list query built by <paramref name="sql"/>. It tries with the inactive table (sql/009) and the databases table, then without the databases
+    /// table, then without either (invalid object 208 or invalid column 207), so nothing breaks before those scripts have been run.
     /// </summary>
-    private async Task<IReadOnlyList<LoginChoice>> ChoicesAsync(Func<string, string?, string, string> sql, bool includeInactive, Action<SqlCommand> bind, CancellationToken ct)
+    private async Task<IReadOnlyList<LoginChoice>> ChoicesAsync(Func<Pieces, string> sql, bool includeInactive, Action<SqlCommand> bind, CancellationToken ct)
     {
+        const string inaJoin = "left join dbo.tblWebUserInactive ina on ina.WebUserID = wus.WebUserID";
+        const string inaFlag = "cast(case when ina.WebUserID is null then 0 else 1 end as bit)";
+        var inaFilter = includeInactive ? null : "ina.WebUserID is null";
         try
         {
-            return await RunChoicesAsync(sql("left join dbo.tblWebUserInactive ina on ina.WebUserID = wus.WebUserID", includeInactive ? null : "ina.WebUserID is null",
-                "cast(case when ina.WebUserID is null then 0 else 1 end as bit)"), bind, ct);
+            return await RunChoicesAsync(sql(new Pieces(inaJoin + " left join dbo.tblWebUserSecurityDatabases db on db.DatabaseID = wus.DatabaseID", inaFilter, inaFlag,
+                "wus.DatabaseID", " or db.ShortName like @f or db.DatabaseName like @f")), bind, ct);
         }
-        catch (SqlException ex) when (ex.Number == 208)   // invalid object name: tblWebUserInactive does not exist yet
+        catch (SqlException ex) when (ex.Number is 207 or 208)   // no databases table or DatabaseID column yet (or no inactive table)
         {
-            return await RunChoicesAsync(sql("", null, "cast(0 as bit)"), bind, ct);
+            try { return await RunChoicesAsync(sql(new Pieces(inaJoin, inaFilter, inaFlag, "cast(null as int)", "")), bind, ct); }
+            catch (SqlException ex2) when (ex2.Number == 208)   // sql/009 not run either
+            {
+                return await RunChoicesAsync(sql(new Pieces("", null, "cast(0 as bit)", "cast(null as int)", "")), bind, ct);
+            }
         }
     }
 
@@ -250,8 +268,25 @@ order by coalesce(f.FriendlyName, wus.UserName), wus.WebUserID", includeInactive
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new LoginChoice((int)r["WebUserID"], (string)r["UserName"],
-                r["FriendlyName"] is DBNull ? null : (string)r["FriendlyName"], r["GoogleEmail"] is DBNull ? null : (string)r["GoogleEmail"], (bool)r["Inactive"]));
+                r["FriendlyName"] is DBNull ? null : (string)r["FriendlyName"], r["GoogleEmail"] is DBNull ? null : (string)r["GoogleEmail"], (bool)r["Inactive"],
+                r["DatabaseID"] is DBNull ? null : Convert.ToInt32(r["DatabaseID"])));
         return list;
+    }
+
+    public async Task<IReadOnlyList<DatabaseRow>> ListDatabasesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await using var cn = new SqlConnection(_o.CentralConnectionString);
+            await cn.OpenAsync(ct);
+            await using var cmd = new SqlCommand("select DatabaseID, ShortName, DatabaseName from dbo.tblWebUserSecurityDatabases order by coalesce(nullif(ShortName, ''), DatabaseName), DatabaseID", cn);
+            var list = new List<DatabaseRow>();
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                list.Add(new DatabaseRow(Convert.ToInt32(r["DatabaseID"]), r["ShortName"] is DBNull ? "" : (string)r["ShortName"], r["DatabaseName"] is DBNull ? "" : (string)r["DatabaseName"]));
+            return list;
+        }
+        catch (SqlException ex) when (ex.Number is 207 or 208) { return []; }   // table (or column) not there yet: the list stays flat
     }
 
     public async Task<bool> IsInactiveAsync(int webUserId, CancellationToken ct = default)

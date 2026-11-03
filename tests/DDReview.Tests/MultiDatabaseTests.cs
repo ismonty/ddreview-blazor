@@ -183,3 +183,40 @@ public class UserAccessCopyTests
         b.Stores[ReportKind.Sales].Add(9); Assert.DoesNotContain(9, a.Stores[ReportKind.Sales]);
     }
 }
+
+public class DatabaseGroupTests
+{
+    private static LoginChoice L(int id, string name, int? db, bool inactive = false) => new(id, name, null, null, inactive, db);
+
+    [Fact] public void Logins_are_grouped_under_their_database_in_short_name_order_and_empty_databases_are_left_out()
+    {
+        var dbs = new[] { new DatabaseRow(2, "Zebra", "DDCS-Zebra"), new DatabaseRow(1, "Acme", "DDCS-Acme"), new DatabaseRow(3, "Empty", "DDCS-Empty") };
+        var g = DatabaseGroups.Build(dbs, [L(10, "z1", 2), L(11, "a1", 1), L(12, "a2", 1)]);
+        Assert.Equal(["Acme", "Zebra"], g.Select(x => x.Label));
+        Assert.Equal(2, g[0].Logins.Count);
+        Assert.Equal(["Acme", "Empty", "Zebra"], DatabaseGroups.Build(dbs, [L(10, "z1", 2), L(11, "a1", 1)], keepEmpty: true).Select(x => x.Label));
+    }
+
+    [Fact] public void Same_short_name_gets_the_id_added_and_a_missing_short_name_falls_back_to_the_database_name()
+    {
+        var dbs = new[] { new DatabaseRow(80, "GRC-CS", "GRC-CS"), new DatabaseRow(81, "GRC-CS", "GRC-CS"), new DatabaseRow(5, "", "DDCS-Plain") };
+        var g = DatabaseGroups.Build(dbs, [L(1, "a", 80), L(2, "b", 81), L(3, "c", 5)]);
+        Assert.Equal(["DDCS-Plain", "GRC-CS (ID 80)", "GRC-CS (ID 81)"], g.Select(x => x.Label));
+    }
+
+    [Fact] public void Logins_with_no_database_or_an_unknown_one_go_last_under_other()
+    {
+        var g = DatabaseGroups.Build([new DatabaseRow(1, "Acme", "x")], [L(1, "a", 1), L(2, "loose", null), L(3, "gone", 99)]);
+        Assert.Equal(["Acme", "Other logins"], g.Select(x => x.Label));
+        Assert.Equal(["loose", "gone"], g[1].Logins.Select(x => x.UserName));
+    }
+
+    [Fact] public async Task A_top_admin_gets_the_databases_with_their_options_and_others_do_not()
+    {
+        var c = new LoginServiceTests.FakeCentral(new CentralAccount(1, "u1", "p", null, "Server=x", "u", "p", 3, null, null, false, true, false, false, null));
+        c.Databases.Add(new DatabaseRow(1, "Acme", "x")); c.DbOf[1] = 1; c.TopAdmins.Add("boss"); c.Link("g", 1);
+        var s = new LoginService(c, new DDReview.Core.Security.LoginThrottle(), false);
+        Assert.Single((await s.GoogleOptionsAsync("boss", null, true)).Databases!);
+        Assert.Null((await s.GoogleOptionsAsync("g", null, true)).Databases);
+    }
+}

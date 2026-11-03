@@ -66,7 +66,7 @@ public class LoginServiceTests
         public Task<string?> GetGoogleEmailAsync(int id, CancellationToken ct = default) => Task.FromResult<string?>(Links.Any(l => l.Id == id) ? "me@example.com" : null);
         public Task UnlinkGoogleAsync(int id, CancellationToken ct = default) { Links.RemoveAll(l => l.Id == id); return Task.CompletedTask; }
         public HashSet<int> Inactive = new();
-        private LoginChoice Choice(CentralAccount a) => new(a.WebUserId, a.UserName, Names.GetValueOrDefault(a.WebUserId), null, Inactive.Contains(a.WebUserId));
+        private LoginChoice Choice(CentralAccount a) => new(a.WebUserId, a.UserName, Names.GetValueOrDefault(a.WebUserId), null, Inactive.Contains(a.WebUserId), DbOf.TryGetValue(a.WebUserId, out var d) ? d : null);
         public Task<IReadOnlyList<LoginChoice>> ListLinkedAsync(string sub, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<LoginChoice>>(Links.Where(l => l.Sub == sub && !Inactive.Contains(l.Id)).Select(l => Choice(accounts.First(a => a.WebUserId == l.Id))).OrderBy(c => c.Label).ToList());
         public Task<bool> IsLinkedAsync(string sub, int id, CancellationToken ct = default) => Task.FromResult(Links.Contains((sub, id)));
@@ -79,6 +79,8 @@ public class LoginServiceTests
         public Task<IReadOnlyList<TopAdminRow>> ListTopAdminsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TopAdminRow>>(Admins);
         public Task<bool> AddTopAdminAsync(string email, string? by, CancellationToken ct = default) { Admins.Add(new TopAdminRow(Admins.Count + 1, email, false, DateTime.UtcNow, by)); return Task.FromResult(true); }
         public Task<bool> RemoveTopAdminAsync(int id, CancellationToken ct = default) { if (Admins.Count <= 1) return Task.FromResult(false); Admins.RemoveAll(a => a.TopAdminId == id); return Task.FromResult(true); }
+        public List<DatabaseRow> Databases = new(); public Dictionary<int, int> DbOf = new();
+        public Task<IReadOnlyList<DatabaseRow>> ListDatabasesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<DatabaseRow>>(Databases);
         public Task<bool> IsInactiveAsync(int id, CancellationToken ct = default) => Task.FromResult(Inactive.Contains(id));
         public Task SetInactiveAsync(int id, bool inactive, string? by, CancellationToken ct = default) { if (inactive) Inactive.Add(id); else Inactive.Remove(id); return Task.CompletedTask; }
         public Task AuditAsync(string action, string? sub, string? email, int? id, string? detail, string? ip, CancellationToken ct = default) { Audit.Add(action); return Task.CompletedTask; }
