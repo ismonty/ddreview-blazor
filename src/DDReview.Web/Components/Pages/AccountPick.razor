@@ -1,0 +1,67 @@
+@page "/account/pick"
+@attribute [ExcludeFromInteractiveRouting]
+@using System.Security.Claims
+@using DDReview.Core.Tenancy
+@using Microsoft.AspNetCore.Authentication
+@inject LoginService Login
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<div class="login-card pick-card">
+    <h1>Choose a database</h1>
+    @if (!ready)
+    {
+        <p class="error" role="alert">That Google sign-in has expired. <a href="/login">Back to sign in</a></p>
+    }
+    else
+    {
+        <p class="muted">Signed in with Google as @email. Which database do you want to open?</p>
+        @if (options!.IsTopAdmin)
+        {
+            <form method="get" action="/account/pick" class="pick-filter">
+                <input name="q" value="@Q" placeholder="Find a database" maxlength="100" aria-label="Find a database" />
+                <button type="submit" class="secondary">Find</button>
+            </form>
+        }
+        @if (options.Choices.Count == 0)
+        {
+            <p class="muted">Nothing matches.</p>
+        }
+        else
+        {
+            <form method="post" action="/account/pick">
+                <AntiforgeryToken />
+                <ul class="pick-list">
+                @foreach (var c in options.Choices)
+                {
+                    <li><button type="submit" name="loginId" value="@c.WebUserId" class="pick-btn">@c.Label@if (c.Label != c.UserName) {<span class="muted small"> (@c.UserName)</span>}</button></li>
+                }
+                </ul>
+            </form>
+            @if (options.IsTopAdmin && options.Choices.Count >= 200) { <p class="muted small">Showing the first 200. Type part of a name to narrow the list.</p> }
+        }
+        <p class="muted small"><a href="/login">Cancel</a></p>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext? Http { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    private GoogleOptions? options;
+    private string? email;
+    private bool ready;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Http is null) return;
+        var ext = await Http.AuthenticateAsync("ddreview.external");
+        var sub = ext.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!ext.Succeeded || string.IsNullOrEmpty(sub)) return;
+        email = ext.Principal!.FindFirstValue(ClaimTypes.Email);
+        try
+        {
+            options = await Login.GoogleOptionsAsync(sub, email, GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified)), Q);
+            ready = options.MustChoose || options.Choices.Count > 0;
+        }
+        catch (Microsoft.Data.SqlClient.SqlException) { ready = false; }
+    }
+}

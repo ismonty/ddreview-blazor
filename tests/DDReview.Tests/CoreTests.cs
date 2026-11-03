@@ -1,4 +1,4 @@
-﻿using DDReview.Core.Gl;
+using DDReview.Core.Gl;
 using DDReview.Core.Security;
 using DDReview.Core.Support;
 using DDReview.Core.Tenancy;
@@ -46,7 +46,7 @@ public class ThrottleTests
 
 public class LoginServiceTests
 {
-    private sealed class FakeCentral(params CentralAccount[] accounts) : ICentralDirectory
+    internal sealed class FakeCentral(params CentralAccount[] accounts) : ICentralDirectory
     {
         public List<(int, string)> Stored = new(); public int Logged;
         public Task<IReadOnlyList<CentralAccount>> FindAccountsAsync(string u, CancellationToken ct = default) =>
@@ -54,20 +54,38 @@ public class LoginServiceTests
         public Task<CentralAccount?> GetByIdAsync(int id, CancellationToken ct = default) => Task.FromResult(accounts.FirstOrDefault(a => a.WebUserId == id));
         public Task StoreHashAsync(int id, string h, CancellationToken ct = default) { Stored.Add((id, h)); return Task.CompletedTask; }
         public Task<int> LogLoginAsync(int id, string? ua, string? ip, string? host, CancellationToken ct = default) { Logged++; return Task.FromResult(77); }
-        public Dictionary<string, int> Google = new();
+        public List<(string Sub, int Id)> Links = new();
+        public Dictionary<int, string> Names = new();
+        public HashSet<string> TopAdmins = new();
+        public List<string> Audit = new();
+        public void Link(string sub, int id) => Links.Add((sub, id));
         public Task<CentralAccount?> FindByGoogleAsync(string sub, CancellationToken ct = default) =>
-            Task.FromResult(Google.TryGetValue(sub, out var id) ? accounts.FirstOrDefault(a => a.WebUserId == id) : null);
+            Task.FromResult(Links.Where(l => l.Sub == sub).Select(l => accounts.FirstOrDefault(a => a.WebUserId == l.Id)).FirstOrDefault());
         public Task<bool> LinkGoogleAsync(int id, string sub, string? email, CancellationToken ct = default)
-        { if (Google.TryGetValue(sub, out var other) && other != id) return Task.FromResult(false); Google[sub] = id; return Task.FromResult(true); }
-        public Task<string?> GetGoogleEmailAsync(int id, CancellationToken ct = default) => Task.FromResult<string?>(Google.ContainsValue(id) ? "me@example.com" : null);
-        public Task UnlinkGoogleAsync(int id, CancellationToken ct = default) { foreach (var k in Google.Where(kv => kv.Value == id).Select(kv => kv.Key).ToList()) Google.Remove(k); return Task.CompletedTask; }
+        { Links.RemoveAll(l => l.Id == id && l.Sub != sub); if (!Links.Contains((sub, id))) Links.Add((sub, id)); return Task.FromResult(true); }
+        public Task<string?> GetGoogleEmailAsync(int id, CancellationToken ct = default) => Task.FromResult<string?>(Links.Any(l => l.Id == id) ? "me@example.com" : null);
+        public Task UnlinkGoogleAsync(int id, CancellationToken ct = default) { Links.RemoveAll(l => l.Id == id); return Task.CompletedTask; }
+        private LoginChoice Choice(CentralAccount a) => new(a.WebUserId, a.UserName, Names.GetValueOrDefault(a.WebUserId), null);
+        public Task<IReadOnlyList<LoginChoice>> ListLinkedAsync(string sub, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<LoginChoice>>(Links.Where(l => l.Sub == sub).Select(l => Choice(accounts.First(a => a.WebUserId == l.Id))).OrderBy(c => c.Label).ToList());
+        public Task<bool> IsLinkedAsync(string sub, int id, CancellationToken ct = default) => Task.FromResult(Links.Contains((sub, id)));
+        public Task<bool> IsTopAdminAsync(string sub, string? email, bool verified, CancellationToken ct = default) => Task.FromResult(TopAdmins.Contains(sub));
+        public Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<LoginChoice>>(accounts.Select(Choice).Where(c => string.IsNullOrEmpty(filter) || c.Label.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList());
+        public Task<bool> SetFriendlyNameAsync(int id, string? name, string? by, CancellationToken ct = default)
+        { if (accounts.All(a => a.WebUserId != id)) return Task.FromResult(false); if (string.IsNullOrWhiteSpace(name)) Names.Remove(id); else Names[id] = name.Trim(); return Task.FromResult(true); }
+        public List<TopAdminRow> Admins = new();
+        public Task<IReadOnlyList<TopAdminRow>> ListTopAdminsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TopAdminRow>>(Admins);
+        public Task<bool> AddTopAdminAsync(string email, string? by, CancellationToken ct = default) { Admins.Add(new TopAdminRow(Admins.Count + 1, email, false, DateTime.UtcNow, by)); return Task.FromResult(true); }
+        public Task<bool> RemoveTopAdminAsync(int id, CancellationToken ct = default) { if (Admins.Count <= 1) return Task.FromResult(false); Admins.RemoveAll(a => a.TopAdminId == id); return Task.FromResult(true); }
+        public Task AuditAsync(string action, string? sub, string? email, int? id, string? detail, string? ip, CancellationToken ct = default) { Audit.Add(action); return Task.CompletedTask; }
     }
     private static CentralAccount Acct(string pw, string? dsn = "Server=x;Database=y", string? redirect = null, string? hash = null) =>
         new(1, "Valentinis", pw, hash, dsn, "u", "p", 3, null, null, false, true, false, false, redirect);
 
     [Fact] public async Task Linked_google_account_signs_in_without_a_password()
     {
-        var c = new FakeCentral(Acct("Pass1")); c.Google["g-123"] = 1;
+        var c = new FakeCentral(Acct("Pass1")); c.Link("g-123", 1);
         var r = await new LoginService(c, new LoginThrottle(), false).SignInWithGoogleAsync("g-123", "1.2.3.4", "ua", "host");
         Assert.Equal(LoginOutcome.Success, r.Outcome); Assert.Equal(77, r.WebLoginId); Assert.Equal(1, c.Logged);
     }
@@ -81,9 +99,9 @@ public class LoginServiceTests
 
     [Fact] public async Task Google_sign_in_still_honours_missing_client_database_and_redirects()
     {
-        var c = new FakeCentral(Acct("p", dsn: null)); c.Google["g"] = 1;
+        var c = new FakeCentral(Acct("p", dsn: null)); c.Link("g", 1);
         Assert.Equal(LoginOutcome.NoClientDatabase, (await new LoginService(c, new LoginThrottle(), false).SignInWithGoogleAsync("g", null, null, null)).Outcome);
-        var c2 = new FakeCentral(Acct("p", redirect: "https://other.example/")); c2.Google["g"] = 1;
+        var c2 = new FakeCentral(Acct("p", redirect: "https://other.example/")); c2.Link("g", 1);
         Assert.Equal(LoginOutcome.Redirect, (await new LoginService(c2, new LoginThrottle(), false).SignInWithGoogleAsync("g", null, null, null)).Outcome);
     }
 
