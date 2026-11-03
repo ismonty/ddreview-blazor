@@ -65,19 +65,22 @@ public class LoginServiceTests
         { Links.RemoveAll(l => l.Id == id && l.Sub != sub); if (!Links.Contains((sub, id))) Links.Add((sub, id)); return Task.FromResult(true); }
         public Task<string?> GetGoogleEmailAsync(int id, CancellationToken ct = default) => Task.FromResult<string?>(Links.Any(l => l.Id == id) ? "me@example.com" : null);
         public Task UnlinkGoogleAsync(int id, CancellationToken ct = default) { Links.RemoveAll(l => l.Id == id); return Task.CompletedTask; }
-        private LoginChoice Choice(CentralAccount a) => new(a.WebUserId, a.UserName, Names.GetValueOrDefault(a.WebUserId), null);
+        public HashSet<int> Inactive = new();
+        private LoginChoice Choice(CentralAccount a) => new(a.WebUserId, a.UserName, Names.GetValueOrDefault(a.WebUserId), null, Inactive.Contains(a.WebUserId));
         public Task<IReadOnlyList<LoginChoice>> ListLinkedAsync(string sub, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<LoginChoice>>(Links.Where(l => l.Sub == sub).Select(l => Choice(accounts.First(a => a.WebUserId == l.Id))).OrderBy(c => c.Label).ToList());
+            Task.FromResult<IReadOnlyList<LoginChoice>>(Links.Where(l => l.Sub == sub && !Inactive.Contains(l.Id)).Select(l => Choice(accounts.First(a => a.WebUserId == l.Id))).OrderBy(c => c.Label).ToList());
         public Task<bool> IsLinkedAsync(string sub, int id, CancellationToken ct = default) => Task.FromResult(Links.Contains((sub, id)));
         public Task<bool> IsTopAdminAsync(string sub, string? email, bool verified, CancellationToken ct = default) => Task.FromResult(TopAdmins.Contains(sub));
-        public Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<LoginChoice>>(accounts.Select(Choice).Where(c => string.IsNullOrEmpty(filter) || c.Label.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList());
+        public Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, bool includeInactive = false, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<LoginChoice>>(accounts.Select(Choice).Where(c => (includeInactive || !c.Inactive) && (string.IsNullOrEmpty(filter) || c.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))).ToList());
         public Task<bool> SetFriendlyNameAsync(int id, string? name, string? by, CancellationToken ct = default)
         { if (accounts.All(a => a.WebUserId != id)) return Task.FromResult(false); if (string.IsNullOrWhiteSpace(name)) Names.Remove(id); else Names[id] = name.Trim(); return Task.FromResult(true); }
         public List<TopAdminRow> Admins = new();
         public Task<IReadOnlyList<TopAdminRow>> ListTopAdminsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TopAdminRow>>(Admins);
         public Task<bool> AddTopAdminAsync(string email, string? by, CancellationToken ct = default) { Admins.Add(new TopAdminRow(Admins.Count + 1, email, false, DateTime.UtcNow, by)); return Task.FromResult(true); }
         public Task<bool> RemoveTopAdminAsync(int id, CancellationToken ct = default) { if (Admins.Count <= 1) return Task.FromResult(false); Admins.RemoveAll(a => a.TopAdminId == id); return Task.FromResult(true); }
+        public Task<bool> IsInactiveAsync(int id, CancellationToken ct = default) => Task.FromResult(Inactive.Contains(id));
+        public Task SetInactiveAsync(int id, bool inactive, string? by, CancellationToken ct = default) { if (inactive) Inactive.Add(id); else Inactive.Remove(id); return Task.CompletedTask; }
         public Task AuditAsync(string action, string? sub, string? email, int? id, string? detail, string? ip, CancellationToken ct = default) { Audit.Add(action); return Task.CompletedTask; }
     }
     private static CentralAccount Acct(string pw, string? dsn = "Server=x;Database=y", string? redirect = null, string? hash = null) =>

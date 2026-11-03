@@ -19,6 +19,7 @@
         {
             <form method="get" action="/account/pick" class="pick-filter">
                 <input name="q" value="@Q" placeholder="Find a database" maxlength="100" aria-label="Find a database" />
+                <label class="small"><input type="checkbox" name="inactive" value="1" checked="@(Inactive == "1")" /> Show inactive</label>
                 <button type="submit" class="secondary">Find</button>
             </form>
         }
@@ -33,7 +34,7 @@
                 <ul class="pick-list">
                 @foreach (var c in options.Choices)
                 {
-                    <li><button type="submit" name="loginId" value="@c.WebUserId" class="pick-btn">@c.Label@if (c.Label != c.UserName) {<span class="muted small"> (@c.UserName)</span>}</button></li>
+                    <li><button type="submit" name="loginId" value="@c.WebUserId" class="pick-btn">@c.Label@if (c.Inactive) {<span class="muted small"> inactive</span>}@if (c.Label != c.UserName) {<span class="muted small"> (@c.UserName)</span>}</button></li>
                 }
                 </ul>
             </form>
@@ -46,6 +47,7 @@
 @code {
     [CascadingParameter] private HttpContext? Http { get; set; }
     [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "inactive")] public string? Inactive { get; set; }
     private GoogleOptions? options;
     private string? email;
     private bool ready;
@@ -59,7 +61,7 @@
         email = ext.Principal!.FindFirstValue(ClaimTypes.Email);
         try
         {
-            options = await Login.GoogleOptionsAsync(sub, email, GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified)), Q);
+            options = await Login.GoogleOptionsAsync(sub, email, GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified)), Q, Inactive == "1");
             ready = options.MustChoose || options.Choices.Count > 0;
         }
         catch (Microsoft.Data.SqlClient.SqlException) { ready = false; }

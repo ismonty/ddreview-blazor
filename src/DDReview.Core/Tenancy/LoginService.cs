@@ -49,7 +49,7 @@ public sealed class LoginService(ICentralDirectory central, LoginThrottle thrott
     }
 
     /// <summary>What a Google account may open: the logins it is linked to, or (top-level administrators) every login.</summary>
-    public async Task<GoogleOptions> GoogleOptionsAsync(string googleSubject, string? email, bool emailVerified, string? filter = null, CancellationToken ct = default)
+    public async Task<GoogleOptions> GoogleOptionsAsync(string googleSubject, string? email, bool emailVerified, string? filter = null, bool includeInactive = false, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(googleSubject) || googleSubject.Length > 100) return new GoogleOptions([], false, false);
         var linked = await central.ListLinkedAsync(googleSubject, ct);
@@ -57,7 +57,7 @@ public sealed class LoginService(ICentralDirectory central, LoginThrottle thrott
         try { top = await central.IsTopAdminAsync(googleSubject, email, emailVerified, ct); }
         catch (Microsoft.Data.SqlClient.SqlException) { top = false; }   // sql/008 not run yet: behave as before (linked logins only)
         if (!top) return new GoogleOptions(linked, false, linked.Count > 1);
-        var all = await central.ListAllLoginsAsync(filter, 200, ct);
+        var all = await central.ListAllLoginsAsync(filter, 200, includeInactive, ct);
         return new GoogleOptions(all, true, true);
     }
 
@@ -68,14 +68,13 @@ public sealed class LoginService(ICentralDirectory central, LoginThrottle thrott
     public async Task<LoginResult> SignInWithGoogleChoiceAsync(string googleSubject, string? email, bool emailVerified, int webUserId, string? ip, string? userAgent, string? hostName, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(googleSubject) || googleSubject.Length > 100) return new LoginResult(LoginOutcome.InvalidCredentials);
-        var allowed = await central.IsLinkedAsync(googleSubject, webUserId, ct);
+        var linked = await central.IsLinkedAsync(googleSubject, webUserId, ct);
         var viaTop = false;
-        if (!allowed)
-        {
-            try { viaTop = allowed = await central.IsTopAdminAsync(googleSubject, email, emailVerified, ct); }
-            catch (Microsoft.Data.SqlClient.SqlException) { allowed = false; }
-        }
-        if (!allowed) return new LoginResult(LoginOutcome.InvalidCredentials);
+        try { viaTop = await central.IsTopAdminAsync(googleSubject, email, emailVerified, ct); }
+        catch (Microsoft.Data.SqlClient.SqlException) { viaTop = false; }
+        if (!linked && !viaTop) return new LoginResult(LoginOutcome.InvalidCredentials);
+        if (!viaTop && await central.IsInactiveAsync(webUserId, ct)) return new LoginResult(LoginOutcome.InvalidCredentials);   // inactive logins are only for top-level administrators
+        viaTop &= !linked;
         var match = await central.GetByIdAsync(webUserId, ct);
         if (match is null) return new LoginResult(LoginOutcome.InvalidCredentials);
         await central.AuditAsync(viaTop ? "pick-top" : "pick", googleSubject, email, webUserId, null, ip, ct);
