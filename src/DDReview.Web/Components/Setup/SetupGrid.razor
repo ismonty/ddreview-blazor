@@ -25,6 +25,36 @@ else if (data is null) { <p class="banner bad" role="alert">This table is not in
 else if (Table.StoreColumn is not null && storeId == 0) { <p class="muted">Choose a store to see its rows.</p> }
 else
 {
+    @if (Table.SearchColumn is not null)
+    {
+        <p>
+            <label>Filter
+                <input type="text" value="@search" @onchange="e => search = e.Value?.ToString()" @onkeydown="SearchKey" placeholder="contains…" />
+            </label>
+            <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="ApplySearchAsync">Apply</button>
+            @if (!string.IsNullOrEmpty(applied)) { <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="ClearSearchAsync">Show all</button> }
+        </p>
+    }
+    @if (Table.ParentCheck is not null && storeId > 0)
+    {
+        <p>
+            <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="CheckParentsAsync">Check for parent loops</button>
+            @if (conflicts is not null && conflicts.Count == 0) { <span class="muted"> No account is its own ancestor.</span> }
+        </p>
+        @if (conflicts is { Count: > 0 })
+        {
+            <table class="setup">
+                <thead><tr><th></th><th>Account</th><th>Parent</th><th>Steps</th></tr></thead>
+                <tbody>
+                @foreach (var cf in conflicts)
+                {
+                    <tr><td class="actions"><button class="secondary" disabled="@busy" @onclick="() => ClearParentAsync(cf.AccountId)">Clear parent</button></td>
+                        <td>@cf.AccountName</td><td>@cf.ParentAccountName</td><td class="n">@cf.Depth</td></tr>
+                }
+                </tbody>
+            </table>
+        }
+    }
     <div class="setup-scroll">
     <table class="setup">
         <thead>
@@ -115,7 +145,8 @@ else
         </tbody>
     </table>
     </div>
-    @if (!data.Rows.Any() && editKey != 0) { <p class="muted">No rows yet.</p> }
+    @if (!data.Rows.Any() && editKey != 0) { <p class="muted">@(applied is { Length: > 0 } ? "Nothing matches that filter." : "No rows yet.")</p> }
+    @if (Table.TopRows > 0 && data.Rows.Count >= Table.TopRows) { <p class="muted">Showing the first @Table.TopRows rows. Use the filter to narrow the list.</p> }
     @if (editKey is null && Table.AllowAdd) { <p><button disabled="@busy" @onclick="StartAdd">Add a row</button></p> }
     @if (data.Columns.Any(c => c.Required)) { <p class="muted">* required</p> }
 }
@@ -132,6 +163,8 @@ else
     private int? confirmKey;
     private SetupRow? original;
     private Dictionary<string, string?> edit = [];
+    private string? search, applied;       // the filter box, and what the list was last loaded with
+    private IReadOnlyList<SetupGridService.ParentConflict>? conflicts;
 
     private int? StoreArg => Table.StoreColumn is null ? null : storeId;
     private IEnumerable<SetupRow?> Rows() => (editKey == 0 ? new SetupRow?[] { null } : []).Concat(data!.Rows);
@@ -154,7 +187,7 @@ else
     }
 
     private async Task ReloadAsync(SetupSituation s) =>
-        data = await Grid.LoadAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, StoreArg);
+        data = await Grid.LoadAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, StoreArg, applied);
 
     private async Task<SetupSituation?> FreshAsync()
     {
@@ -198,9 +231,26 @@ else
     private async Task StoreChangedAsync(ChangeEventArgs e)
     {
         storeId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
-        editKey = null; confirmKey = null; Say(null, true);
+        editKey = null; confirmKey = null; conflicts = null; Say(null, true);
         await RunAsync(async s => await ReloadAsync(s));
     }
+
+    private async Task SearchKey(KeyboardEventArgs e) { if (e.Key == "Enter") await ApplySearchAsync(); }
+
+    private Task ApplySearchAsync() { applied = search?.Trim(); return RunAsync(ReloadAsync); }
+
+    private Task ClearSearchAsync() { search = applied = null; return RunAsync(ReloadAsync); }
+
+    private Task CheckParentsAsync() => RunAsync(async s =>
+        conflicts = await Grid.ParentConflictsAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, storeId));
+
+    private Task ClearParentAsync(int accountId) => RunAsync(async s =>
+    {
+        var r = await Grid.ClearParentAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, storeId, accountId);
+        conflicts = await Grid.ParentConflictsAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, storeId);
+        await ReloadAsync(s);
+        Say(r.Outcome == SetupOutcome.Saved ? "Parent cleared." : r.Message, r.Ok);
+    });
 
     /// <summary>One place for the busy flag and the messages every database call needs.</summary>
     private async Task RunAsync(Func<SetupSituation, Task> work)
