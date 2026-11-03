@@ -32,7 +32,7 @@ else if (denial == CentralDenial.NotGoogle || denial == CentralDenial.NeedsVerif
 else if (denial == CentralDenial.NotTopAdmin) { <p>This page is for top-level administrators.</p> }
 else
 {
-    <p>Each row is one login in the central master. The friendly name is what people see in the "Choose a database" list. People are not linked to a database here; they link their own Google account on the Account page.</p>
+    <p>Each row is one login in the central master. The friendly name is what people see in the "Choose a database" list. Untick Active to leave a login out of that list (it still signs in by password). People are not linked to a database here; they link their own Google account on the Account page.</p>
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (notice is not null) { <p class="banner ok" role="status">@notice</p> }
 
@@ -45,7 +45,7 @@ else
     else
     {
         <table>
-            <thead><tr><th>Login</th><th>Friendly name</th><th>Linked Google account</th><th></th></tr></thead>
+            <thead><tr><th>Login</th><th>Friendly name</th><th>Linked Google account</th><th>Active</th><th></th></tr></thead>
             <tbody>
             @foreach (var l in logins)
             {
@@ -53,6 +53,7 @@ else
                     <td>@l.UserName</td>
                     <td><input value="@NameFor(l)" @onchange="e => edits[l.WebUserId] = e.Value?.ToString() ?? string.Empty" maxlength="100" aria-label="Friendly name for @l.UserName" /></td>
                     <td>@(l.GoogleEmail ?? "none")</td>
+                    <td><input type="checkbox" checked="@(!l.Inactive)" disabled="@busy" @onchange="e => ActiveAsync(l, (bool)(e.Value ?? false))" aria-label="@l.UserName is active" /></td>
                     <td>
                         <button disabled="@busy" @onclick="() => SaveAsync(l)">Save</button>
                         @if (l.GoogleEmail is not null) { <button class="secondary" disabled="@busy" @onclick="() => UnlinkAsync(l)">Unlink Google</button> }
@@ -140,6 +141,13 @@ else
         var name = edits.TryGetValue(l.WebUserId, out var v) ? v : l.FriendlyName;
         notice = await Admin.SetFriendlyNameAsync(actor!, l.WebUserId, name) ? $"Saved {l.UserName}." : "That login no longer exists.";
         edits.Remove(l.WebUserId);
+        await LoadAsync();
+    });
+
+    private Task ActiveAsync(LoginChoice l, bool active) => Run(async () =>
+    {
+        await Admin.SetInactiveAsync(actor!, l.WebUserId, !active);
+        notice = active ? $"{l.UserName} is active." : $"{l.UserName} is inactive and no longer in people's lists.";
         await LoadAsync();
     });
 

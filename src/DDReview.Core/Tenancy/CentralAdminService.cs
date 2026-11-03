@@ -29,7 +29,7 @@ public sealed class CentralAdminService(ICentralDirectory central, TimeProvider 
     }
 
     public async Task<IReadOnlyList<LoginChoice>> ListLoginsAsync(CentralActor a, string? filter, int top, CancellationToken ct = default)
-    { await Require(a, ct); return await central.ListAllLoginsAsync(filter, top, ct); }
+    { await Require(a, ct); return await central.ListAllLoginsAsync(filter, top, true, ct); }
 
     public async Task<bool> SetFriendlyNameAsync(CentralActor a, int webUserId, string? name, CancellationToken ct = default)
     {
@@ -37,6 +37,13 @@ public sealed class CentralAdminService(ICentralDirectory central, TimeProvider 
         var ok = await central.SetFriendlyNameAsync(webUserId, name, a.GoogleEmail, ct);
         if (ok) await central.AuditAsync("rename", a.GoogleSubject, a.GoogleEmail, webUserId, string.IsNullOrWhiteSpace(name) ? "(cleared)" : name.Trim(), a.ClientIp, ct);
         return ok;
+    }
+
+    public async Task SetInactiveAsync(CentralActor a, int webUserId, bool inactive, CancellationToken ct = default)
+    {
+        await Require(a, ct);
+        await central.SetInactiveAsync(webUserId, inactive, a.GoogleEmail, ct);
+        await central.AuditAsync(inactive ? "inactive" : "active", a.GoogleSubject, a.GoogleEmail, webUserId, null, a.ClientIp, ct);
     }
 
     public async Task<IReadOnlyList<TopAdminRow>> ListTopAdminsAsync(CentralActor a, CancellationToken ct = default)

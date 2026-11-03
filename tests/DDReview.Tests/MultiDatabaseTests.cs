@@ -83,6 +83,34 @@ public class MultiDatabaseTests
         Assert.True(await c.IsLinkedAsync("g", 1)); Assert.True(await c.IsLinkedAsync("g", 2));
     }
 
+    [Fact] public async Task Inactive_logins_are_left_out_of_the_list_and_cannot_be_picked()
+    {
+        var (c, s) = Make(); c.Link("g", 1); c.Link("g", 2); c.Inactive.Add(2);
+        Assert.Equal(["valentinis"], (await s.GoogleOptionsAsync("g", null, false)).Choices.Select(x => x.Label));
+        Assert.Equal(LoginOutcome.InvalidCredentials, (await s.SignInWithGoogleChoiceAsync("g", null, false, 2, null, null, null)).Outcome);
+        Assert.Equal(LoginOutcome.Success, (await s.SignInWithGoogleChoiceAsync("g", null, false, 1, null, null, null)).Outcome);
+    }
+
+    [Fact] public async Task Top_admin_can_show_and_pick_inactive_logins()
+    {
+        var (c, s) = Make(); c.TopAdmins.Add("boss"); c.Inactive.Add(3);
+        Assert.Equal(2, (await s.GoogleOptionsAsync("boss", null, true)).Choices.Count);
+        var all = (await s.GoogleOptionsAsync("boss", null, true, null, includeInactive: true)).Choices;
+        Assert.Equal(3, all.Count); Assert.True(all.Single(x => x.WebUserId == 3).Inactive);
+        Assert.Equal(LoginOutcome.Success, (await s.SignInWithGoogleChoiceAsync("boss", null, true, 3, null, null, null)).Outcome);
+    }
+
+    [Fact] public async Task Only_a_fresh_top_admin_can_change_the_active_flag()
+    {
+        var (c, _) = Make(); c.TopAdmins.Add("boss");
+        var svc = new CentralAdminService(c, new Clock());
+        await svc.SetInactiveAsync(Actor(), 2, true);
+        Assert.Contains(2, c.Inactive); Assert.Contains("inactive", c.Audit);
+        await svc.SetInactiveAsync(Actor(), 2, false);
+        Assert.DoesNotContain(2, c.Inactive);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.SetInactiveAsync(Actor("someone"), 2, true));
+    }
+
     // ---- friendly names and top-level administrators ----
     private static readonly DateTimeOffset Now = new(2026, 11, 3, 12, 0, 0, TimeSpan.Zero);
     private sealed class Clock : TimeProvider { public override DateTimeOffset GetUtcNow() => Now; }

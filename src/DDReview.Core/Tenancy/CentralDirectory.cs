@@ -25,7 +25,10 @@ public interface ICentralDirectory
     /// <summary>True for a top-level administrator. Matched by Google account id; a row added by email is tied to the id the first time that email signs in with Google saying the email is verified.</summary>
     Task<bool> IsTopAdminAsync(string googleSubject, string? email, bool emailVerified, CancellationToken ct = default);
     /// <summary>Every login (for top-level administrators), optionally filtered on user name or friendly name.</summary>
-    Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, CancellationToken ct = default);
+    Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, bool includeInactive = false, CancellationToken ct = default);
+    /// <summary>True when a login is marked inactive (sql/009). False when it is not, or when that table does not exist yet.</summary>
+    Task<bool> IsInactiveAsync(int webUserId, CancellationToken ct = default);
+    Task SetInactiveAsync(int webUserId, bool inactive, string? by, CancellationToken ct = default);
     /// <summary>Sets or (blank) clears a login's friendly name. False when the login does not exist.</summary>
     Task<bool> SetFriendlyNameAsync(int webUserId, string? friendlyName, string? by, CancellationToken ct = default);
     Task<IReadOnlyList<TopAdminRow>> ListTopAdminsAsync(CancellationToken ct = default);
@@ -37,7 +40,7 @@ public interface ICentralDirectory
 }
 
 /// <summary>A login as the "choose a database" list shows it.</summary>
-public sealed record LoginChoice(int WebUserId, string UserName, string? FriendlyName, string? GoogleEmail)
+public sealed record LoginChoice(int WebUserId, string UserName, string? FriendlyName, string? GoogleEmail, bool Inactive = false)
 {
     public string Label => string.IsNullOrWhiteSpace(FriendlyName) ? UserName : FriendlyName!;
 }
@@ -168,13 +171,15 @@ select 1", cn);
     }
 
     public async Task<IReadOnlyList<LoginChoice>> ListLinkedAsync(string googleSubject, CancellationToken ct = default) =>
-        await ChoicesAsync(@"
-select wus.WebUserID, wus.UserName, f.FriendlyName, g.GoogleEmail
+        await ChoicesAsync((join, filt, flag) => $@"
+select wus.WebUserID, wus.UserName, f.FriendlyName, g.GoogleEmail, {flag} as Inactive
 from dbo.tblWebUserGoogle g
 join dbo.tblWebUserSecurity wus on wus.WebUserID = g.WebUserID
 left join dbo.tblWebUserFriendlyName f on f.WebUserID = wus.WebUserID
-where g.GoogleSubject = @s
-order by coalesce(f.FriendlyName, wus.UserName), wus.WebUserID", c => c.Parameters.Add("@s", System.Data.SqlDbType.VarChar, 100).Value = googleSubject, ct);
+{join}
+where g.GoogleSubject = @s {(filt is null ? "" : "and " + filt)}
+order by coalesce(f.FriendlyName, wus.UserName), wus.WebUserID", includeInactive: false,
+            c => c.Parameters.Add("@s", System.Data.SqlDbType.VarChar, 100).Value = googleSubject, ct);
 
     public async Task<bool> IsLinkedAsync(string googleSubject, int webUserId, CancellationToken ct = default)
     {
@@ -204,20 +209,38 @@ else select 0", cn);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) == 1;
     }
 
-    public async Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, CancellationToken ct = default)
+    public async Task<IReadOnlyList<LoginChoice>> ListAllLoginsAsync(string? filter, int top, bool includeInactive = false, CancellationToken ct = default)
     {
         var like = string.IsNullOrWhiteSpace(filter) ? null : "%" + filter.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("[", "\\[") + "%";
-        return await ChoicesAsync($@"
-select top ({Math.Clamp(top, 1, 500)}) wus.WebUserID, wus.UserName, f.FriendlyName, g.GoogleEmail
+        return await ChoicesAsync((join, filt, flag) => $@"
+select top ({Math.Clamp(top, 1, 500)}) wus.WebUserID, wus.UserName, f.FriendlyName, g.GoogleEmail, {flag} as Inactive
 from dbo.tblWebUserSecurity wus
 left join dbo.tblWebUserFriendlyName f on f.WebUserID = wus.WebUserID
 left join dbo.tblWebUserGoogle g on g.WebUserID = wus.WebUserID
-where (@f is null or wus.UserName like @f escape '\' or f.FriendlyName like @f escape '\')
-order by coalesce(f.FriendlyName, wus.UserName), wus.WebUserID",
+{join}
+where (@f is null or wus.UserName like @f escape '\' or f.FriendlyName like @f escape '\') {(filt is null ? "" : "and " + filt)}
+order by coalesce(f.FriendlyName, wus.UserName), wus.WebUserID", includeInactive,
             c => c.Parameters.Add("@f", System.Data.SqlDbType.VarChar, 250).Value = (object?)like ?? DBNull.Value, ct);
     }
 
-    private async Task<IReadOnlyList<LoginChoice>> ChoicesAsync(string sql, Action<SqlCommand> bind, CancellationToken ct)
+    /// <summary>
+    /// Runs a login-list query. The SQL is built by <paramref name="sql"/> from three pieces: the join to the inactive table, a filter that drops inactive logins,
+    /// and the Inactive column. When sql/009 has not been run (no such table) it runs again without them, so nothing breaks before the script is run.
+    /// </summary>
+    private async Task<IReadOnlyList<LoginChoice>> ChoicesAsync(Func<string, string?, string, string> sql, bool includeInactive, Action<SqlCommand> bind, CancellationToken ct)
+    {
+        try
+        {
+            return await RunChoicesAsync(sql("left join dbo.tblWebUserInactive ina on ina.WebUserID = wus.WebUserID", includeInactive ? null : "ina.WebUserID is null",
+                "cast(case when ina.WebUserID is null then 0 else 1 end as bit)"), bind, ct);
+        }
+        catch (SqlException ex) when (ex.Number == 208)   // invalid object name: tblWebUserInactive does not exist yet
+        {
+            return await RunChoicesAsync(sql("", null, "cast(0 as bit)"), bind, ct);
+        }
+    }
+
+    private async Task<IReadOnlyList<LoginChoice>> RunChoicesAsync(string sql, Action<SqlCommand> bind, CancellationToken ct)
     {
         await using var cn = new SqlConnection(_o.CentralConnectionString);
         await cn.OpenAsync(ct);
@@ -227,8 +250,33 @@ order by coalesce(f.FriendlyName, wus.UserName), wus.WebUserID",
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new LoginChoice((int)r["WebUserID"], (string)r["UserName"],
-                r["FriendlyName"] is DBNull ? null : (string)r["FriendlyName"], r["GoogleEmail"] is DBNull ? null : (string)r["GoogleEmail"]));
+                r["FriendlyName"] is DBNull ? null : (string)r["FriendlyName"], r["GoogleEmail"] is DBNull ? null : (string)r["GoogleEmail"], (bool)r["Inactive"]));
         return list;
+    }
+
+    public async Task<bool> IsInactiveAsync(int webUserId, CancellationToken ct = default)
+    {
+        try
+        {
+            await using var cn = new SqlConnection(_o.CentralConnectionString);
+            await cn.OpenAsync(ct);
+            await using var cmd = new SqlCommand("select count(*) from dbo.tblWebUserInactive where WebUserID = @id", cn);
+            cmd.Parameters.Add("@id", System.Data.SqlDbType.Int).Value = webUserId;
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+        }
+        catch (SqlException ex) when (ex.Number == 208) { return false; }
+    }
+
+    public async Task SetInactiveAsync(int webUserId, bool inactive, string? by, CancellationToken ct = default)
+    {
+        await using var cn = new SqlConnection(_o.CentralConnectionString);
+        await cn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(inactive
+            ? "if exists (select 1 from dbo.tblWebUserSecurity where WebUserID = @id) and not exists (select 1 from dbo.tblWebUserInactive where WebUserID = @id) insert dbo.tblWebUserInactive (WebUserID, SetBy) values (@id, @by)"
+            : "delete dbo.tblWebUserInactive where WebUserID = @id", cn);
+        cmd.Parameters.Add("@id", System.Data.SqlDbType.Int).Value = webUserId;
+        cmd.Parameters.Add("@by", System.Data.SqlDbType.VarChar, 320).Value = (object?)Trunc(by, 320) ?? DBNull.Value;
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<bool> SetFriendlyNameAsync(int webUserId, string? friendlyName, string? by, CancellationToken ct = default)
