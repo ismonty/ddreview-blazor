@@ -527,6 +527,14 @@ public class PosterLaunchFileTests
         Assert.Equal(PosterAction.Register, PosterCommandLine.Parse(["a.ddposter", "--register"]).Action);
     }
 
+    [Fact] public void Command_line_picks_up_a_package_file()
+    {
+        Assert.Equal(new PosterCommand(PosterAction.Run, null, null, @"C:\Users\a\Downloads\x.ddpackage"), PosterCommandLine.Parse([@"C:\Users\a\Downloads\x.ddpackage"]));
+        Assert.Equal(new PosterCommand(PosterAction.Run, null, null, "X.DDPACKAGE"), PosterCommandLine.Parse(["X.DDPACKAGE"]));
+        Assert.Equal(new PosterCommand(PosterAction.Run, Link), PosterCommandLine.Parse(["a.ddpackage", Link]));   // a link wins
+        Assert.Equal(PosterAction.Unregister, PosterCommandLine.Parse(["a.ddpackage", "--unregister"]).Action);
+    }
+
     [Fact] public void TryRead_refuses_a_big_file_and_reads_a_good_one()
     {
         var dir = Directory.CreateTempSubdirectory();

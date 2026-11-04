@@ -23,14 +23,19 @@ static class InstanceChannel
     const int AnyProcess = -1;
 
     /// <summary>Sends a link (or, with null, just "come to the front") to the window already open. False if nobody answered.</summary>
-    public static bool Send(string? link)
+    public static bool Send(string? link) => SendMessage(link is null ? "SHOW" : "LINK " + link);
+
+    /// <summary>Hands a package file (by its path) to the window already open.</summary>
+    public static bool SendPackage(string path) => SendMessage("PACKAGE " + path);
+
+    static bool SendMessage(string message)
     {
         try
         {
             AllowSetForegroundWindow(AnyProcess);   // this process was just started by a click, so it may let the open window come to the front
             using var c = new NamedPipeClientStream(".", PipeName, PipeDirection.Out, PipeOptions.CurrentUserOnly);
             c.Connect(5000);
-            var bytes = Encoding.UTF8.GetBytes(link is null ? "SHOW" : "LINK " + link);
+            var bytes = Encoding.UTF8.GetBytes(message);
             if (bytes.Length > MaxBytes) return false;
             c.Write(bytes, 0, bytes.Length);
             c.Flush();
@@ -45,9 +50,9 @@ sealed class InstanceServer : IDisposable
 {
     readonly CancellationTokenSource _cts = new();
 
-    public void Start(Action<string> onLink, Action onShow) => _ = Task.Run(() => Loop(onLink, onShow));
+    public void Start(Action<string> onLink, Action onShow, Action<string> onPackage) => _ = Task.Run(() => Loop(onLink, onShow, onPackage));
 
-    async Task Loop(Action<string> onLink, Action onShow)
+    async Task Loop(Action<string> onLink, Action onShow, Action<string> onPackage)
     {
         while (!_cts.IsCancellationRequested)
         {
@@ -69,6 +74,7 @@ sealed class InstanceServer : IDisposable
                 var message = Encoding.UTF8.GetString(buffer, 0, n).Trim();
                 if (message == "SHOW") onShow();
                 else if (message.StartsWith("LINK ", StringComparison.Ordinal)) onLink(message[5..]);
+                else if (message.StartsWith("PACKAGE ", StringComparison.Ordinal)) onPackage(message[8..]);
             }
             catch (OperationCanceledException) when (_cts.IsCancellationRequested) { return; }
             catch (OperationCanceledException) { /* a sender that stalled: take the next one */ }

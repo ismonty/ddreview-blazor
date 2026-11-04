@@ -161,6 +161,9 @@ public sealed class PosterLinkSigner
 
     public string PublicKeyBase64 => TrustedKey.ExportPublicBase64(_key);
 
+    /// <summary>Signs bytes with the site's private key (ECDSA P-256 / SHA-256, 64-byte IEEE P1363 signature). Used for package files; links sign their own text.</summary>
+    public byte[] SignData(byte[] data) => _key.SignData(data, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+
     /// <summary>Makes a link for a request, or says why it cannot (dates before day 0, too many stores, a scope the poster does not take).</summary>
     public bool TryCreate(PostingRequest request, int webUserId, DateTimeOffset now, TimeSpan lifetime, out string link, out string error)
     {
@@ -199,6 +202,14 @@ public sealed class PosterLinkService
 
     public bool IsConfigured => _signer != null;
     public string? KeyId => _signer?.KeyId;
+
+    /// <summary>Makes the signed package file for a report (see <see cref="PosterPackage"/>).</summary>
+    public bool TryCreatePackage(PostingRequest request, IReadOnlyList<string> storeNames, int webUserId, DDReview.QuickBooks.Planning.PostingOptions options,
+        IReadOnlyList<DDReview.QuickBooks.Package.PackageRow> rows, DateTimeOffset now, out byte[] file, out string error)
+    {
+        if (_signer is null) { file = []; error = "Posting to QuickBooks from the website is not set up."; return false; }
+        return PosterPackage.TryCreate(_signer, request, storeNames, webUserId, options, rows, now, out file, out error);
+    }
 
     public bool TryCreate(PostingRequest request, int webUserId, DateTimeOffset now, out string link, out string error)
     {

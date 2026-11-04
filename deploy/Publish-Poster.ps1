@@ -84,9 +84,9 @@ try {
     $count = (& git rev-list --count HEAD) 2>$null
     if (-not $count) { $count = '0' }
     $msiVersion = $verMatch.Groups[1].Value + '.' + [math]::Min([int]$count, 65535)
-    & dotnet tool restore --nologo | Out-Host
+    & dotnet tool restore | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'dotnet tool restore failed (the WiX tool could not be installed).' }
-    & dotnet tool run wix -- build (Join-Path $repo 'installer/DDQuickBooksPoster.wxs') -d "Version=$msiVersion" -bindpath "publish=$publishDir" -arch x86 -pdbtype none -o $msi
+    & dotnet wix build (Join-Path $repo 'installer/DDQuickBooksPoster.wxs') -d "Version=$msiVersion" -bindpath "publish=$publishDir" -arch x86 -pdbtype none -o $msi
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $msi)) { throw 'wix build failed.' }
     if ($InstallerFolder) {
         New-Item -ItemType Directory -Path $InstallerFolder -Force | Out-Null

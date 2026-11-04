@@ -2,7 +2,7 @@
 <!--
   Per-user installer for DDQuickBooksPoster.exe (WiX 5). Built by deploy/Publish-Poster.ps1; see docs/QUICKBOOKS.md.
     - Installs to %LocalAppData%\DDReview\QuickBooksPoster for the current Windows user only: no administrator rights, no prompts.
-    - Adds a Start menu shortcut and registers the ddposter: link and the .ddposter file type for that user, so the website can open the program.
+    - Adds a Start menu shortcut and registers the ddposter: link and the .ddposter and .ddpackage file types for that user, so the website can open the program.
     - A newer installer upgrades the old one in place (settings live under the user's profile and are kept). Uninstalling removes all of it.
   The upgrade code below must never change: it is how Windows knows a new installer is the same product.
 -->
@@ -44,6 +44,14 @@
       </RegistryKey>
       <RegistryKey Root="HKCU" Key="Software\Classes\DDReview.QuickBooksPoster.LaunchFile">
         <RegistryValue Type="string" Value="DD Review QuickBooks launch file" />
+        <RegistryValue Key="DefaultIcon" Type="string" Value="&quot;[INSTALLFOLDER]DDQuickBooksPoster.exe&quot;,0" />
+        <RegistryValue Key="shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]DDQuickBooksPoster.exe&quot; &quot;%1&quot;" />
+      </RegistryKey>
+      <RegistryKey Root="HKCU" Key="Software\Classes\.ddpackage">
+        <RegistryValue Type="string" Value="DDReview.QuickBooksPoster.Package" />
+      </RegistryKey>
+      <RegistryKey Root="HKCU" Key="Software\Classes\DDReview.QuickBooksPoster.Package">
+        <RegistryValue Type="string" Value="DD Review QuickBooks package" />
         <RegistryValue Key="DefaultIcon" Type="string" Value="&quot;[INSTALLFOLDER]DDQuickBooksPoster.exe&quot;,0" />
         <RegistryValue Key="shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]DDQuickBooksPoster.exe&quot; &quot;%1&quot;" />
       </RegistryKey>

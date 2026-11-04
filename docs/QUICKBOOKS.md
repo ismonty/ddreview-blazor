@@ -77,6 +77,13 @@ The browser asks once whether to open the program. The poster may be on another 
 - **Website download.** Setup > "QuickBooks poster" (administrators). The site serves the newest `DDQuickBooksPoster-*.msi` from the folder in the site setting `PosterInstaller:Folder` (`-InstallerFolder` on the publish script copies it there). Nothing in the request chooses the file.
 - **Launch file.** On the General ledger page, "Download launch file" saves a small `.ddposter` text file holding the same signed link (good for the same few minutes). Double-clicking it opens the poster, which checks it exactly like a link. Use it when a browser or office policy blocks the button.
 
+### Package file (`.ddpackage`): posting without a database connection
+
+- **Website.** General ledger > "Download package" (same gate as the other buttons: a report must be shown, and an out-of-balance report is asked about first). The site runs the same export-package query the poster used to run (`fn_CashAndSalesGLandARMultiStoreSelectExportPackage2`), adds the posting settings (`LoadOptions`), checks the database's day 0, and signs everything with the link-signing key. Needs the site's client database connection to be able to run that function and the settings procedure.
+- **File.** gzip of one header line plus the payload JSON; the signature covers the payload bytes. Good for 24 hours (`PosterPackage.Lifetime`). Limits: 500,000 rows, 40 MB. Only stores the user is authorized for are included.
+- **Poster.** Double-click the file. The poster checks the signature against `DDQuickBooksPoster.keys.json`, applies the same date/scope/store limits as a link, then hides the connection box and posts from the file's rows exactly as before (Preview, then Post; compare-and-update unchanged). The file holds the report's figures: keep it private and delete it after posting.
+- **Window look.** The poster uses the website's palette (`DdTheme`), and when opened from the website or a package it shows a plain-words recap instead of the date, choice and store controls.
+
 ## Not yet (on demand)
 Vendor bills and credits (A/P), payroll, beginning balances, club minimum invoices, QuickBooks Online, Canadian tax beyond copying the old settings,
 other accounting packages. `PostingPlan` is neutral (no QuickBooks types in it), so another package can be a second writer next to `QbxmlRequests`.
