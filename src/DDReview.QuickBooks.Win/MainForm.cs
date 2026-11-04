@@ -19,7 +19,11 @@ namespace DDReview.QuickBooks.Win;
 sealed class MainForm : Form
 {
     readonly UserSettings _settings = UserSettings.Load();
-    readonly TextBox _connection = new() { Dock = DockStyle.Fill, UseSystemPasswordChar = false };
+    readonly TextBox _connection = new() { Dock = DockStyle.Fill, UseSystemPasswordChar = true };   // masked: it may hold a password
+    readonly CheckBox _showConnection = new() { Text = "Show", AutoSize = true, Anchor = AnchorStyles.Left };
+    readonly Label _recap = new() { AutoSize = true, Visible = false, Padding = new Padding(0, 0, 0, 8), ForeColor = Color.DarkBlue, MaximumSize = new Size(900, 0) };
+    SplitContainer? _middle;
+    Control[] _filters = [];
     readonly CheckedListBox _stores = new() { Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false };
     readonly DateTimePicker _start = new() { Format = DateTimePickerFormat.Short, Width = 110 };
     readonly DateTimePicker _end = new() { Format = DateTimePickerFormat.Short, Width = 110 };
@@ -80,9 +84,11 @@ sealed class MainForm : Form
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         top.Controls.Add(new Label { Text = "Database connection:", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
         top.Controls.Add(_connection, 1, 0);
-        top.Controls.Add(_loadStores, 2, 0);
+        top.Controls.Add(Row(_showConnection, _loadStores), 2, 0);
+        _showConnection.CheckedChanged += (_, _) => _connection.UseSystemPasswordChar = !_showConnection.Checked;
 
         var middle = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterDistance = 440 };
+        _middle = middle;
         var storesBox = new GroupBox { Text = "Stores", Dock = DockStyle.Fill, Padding = new Padding(6) };
         var storeButtons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true };
         var all = new Button { Text = "All", AutoSize = true };
@@ -95,9 +101,10 @@ sealed class MainForm : Form
         storesBox.Controls.Add(_linkNote);
         middle.Panel1.Controls.Add(storesBox);
 
-        var opts = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(8) };
-        opts.Controls.Add(Row(new Label { Text = "From", AutoSize = true, Anchor = AnchorStyles.Left }, _start, new Label { Text = "to", AutoSize = true }, _end));
-        opts.Controls.Add(_gl); opts.Controls.Add(_ar); opts.Controls.Add(_arAdj);
+        var opts = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(8) };
+        opts.Controls.Add(_recap);
+        _filters = [Row(new Label { Text = "From", AutoSize = true, Anchor = AnchorStyles.Left }, _start, new Label { Text = "to", AutoSize = true, Anchor = AnchorStyles.Left }, _end), _gl, _ar, _arAdj];
+        foreach (var c in _filters) opts.Controls.Add(c);
         opts.Controls.Add(Row(_debug, _debugDir, _openDebug));
         _openDebug.Click += (_, _) => OpenDebugFolder();
         middle.Panel2.Controls.Add(opts);
@@ -183,6 +190,11 @@ sealed class MainForm : Form
         _linkNote.Text = $"Opened from DD Review (user {launch.WebUserId}). Only the {r.StoreIds.Count} store(s) in the link can be used in this window. To use other stores, close this window and open the program from its icon.";
         _linkNote.Visible = true;
         string what = r.Scope switch { 1 => "general ledger", 2 => "accounts receivable", _ => "general ledger and accounts receivable" };
+        // The dates, choice and stores came from the website, so they are not shown as controls: just a plain recap (nothing here can be changed; run the report again on the website to change it).
+        _recapBase = $"From DD Review: {what}, {r.Start:MMM d, yyyy} to {r.End:MMM d, yyyy}.";
+        if (_middle != null) _middle.Panel1Collapsed = true;
+        foreach (var c in _filters) c.Visible = false;
+        UpdateRecap();
         Log($"Opened from DD Review: {r.Start:d} to {r.End:d}, {what}, {r.StoreIds.Count} store(s). Press Preview; nothing is changed in QuickBooks until you Post.");
 
         if (_connection.Text.Trim().Length == 0)
@@ -192,6 +204,19 @@ sealed class MainForm : Form
             return;
         }
         _ = LoadStoresAsync();
+    }
+
+    string _recapBase = "";
+
+    /// <summary>The plain-words recap shown instead of the date, choice and store controls when the window was opened from the website.</summary>
+    void UpdateRecap()
+    {
+        if (_link is null) { _recap.Visible = false; return; }
+        var names = _stores.CheckedItems.Cast<StoreItem>().Select(i => i.Text).ToList();
+        string stores = names.Count > 0 ? (names.Count == 1 ? "Store: " : "Stores: ") + string.Join("; ", names)
+            : $"{_linkStores.Count} store(s) in the link (names appear after you connect).";
+        _recap.Text = _recapBase + "\r\n" + stores + "\r\nTo change any of this, go back to DD Review, run the report you want and use Post to QuickBooks again. Press Preview; nothing is changed in QuickBooks until you Post.";
+        _recap.Visible = true;
     }
 
     /// <summary>First start on a computer: offers to let website links open this program. If links point at another copy (moved folder, new build), points them here again.</summary>
@@ -331,6 +356,7 @@ sealed class MainForm : Form
                 Log($"Loaded {found.Count} of the {_linkStores.Count} stores in the link.");
                 var missing = _linkStores.Except(items.Select(i => i.Id)).Order().ToList();
                 if (missing.Count > 0) Log("Not in this database, left out: " + string.Join(", ", missing));
+                UpdateRecap();
             }
             else
             {

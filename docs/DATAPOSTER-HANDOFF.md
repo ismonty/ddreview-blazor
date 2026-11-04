@@ -57,3 +57,16 @@ Design points to settle early:
 ## Resources (the owner's computer, reachable when the session is linked to it)
 `C:\EOD\ddreview-blazor` (checkout), `C:\EOD\DDReviewBlazorPort` (`DDAdminCS-ExportedCode.zip`: the Access source with the original QBXML posting logic; `QBExportPackage.csv`, `QBPostResults*`: sample package and results; schema dumps; test `.bak` files).
 Repo: private GitHub `ismonty/ddreview-blazor`, default branch `main` (staging auto-deploys from it). Commit trailers (Co-Authored-By, Claude-Session) are fine in commits; app text, README and PR text stay the owner's own.
+
+## Next project: the poster fetches its package from the website (planned, not built)
+
+Today the poster reads the export package straight from the back-end database with a SQL login whose connection string is typed into the poster and kept (now encrypted per Windows user, see `ProtectedSetting`) on every PC.
+A link's store list is therefore a convenience, not a wall: a hand-launched poster with that login can read any store the login can.
+
+Plan: the poster stops using a database login.
+1. The signed link (or launch file) already carries the stores, dates and scope. Add a one-time `jti` (random id) and keep the 10-minute lifetime.
+2. New website endpoint, e.g. `POST /poster/package`, takes the link text; the site verifies its own signature and expiry, marks the `jti` used, re-checks the web user's store permissions, runs the same query the poster runs today, and returns the package rows (JSON, over HTTPS).
+3. The poster posts the link to the site from the PC (it only needs to reach the website), reads the package from the answer, and keeps everything after that (plan, Preview, Post, QuickBooks) unchanged. `SqlPackageSource` becomes one of two package sources.
+4. The direct-database mode stays as an optional "advanced" mode for the owner's own PC; the connection box is hidden unless it is switched on.
+5. Day-0 check and the posting settings (`LoadOptions`) also move to the endpoint.
+Open questions: whether the endpoint needs the user's session as well as the link (the link alone is already a signed, short-lived grant); size limits for a year of data; how the poster reaches the site when it is only on an internal network.
