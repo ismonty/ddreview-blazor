@@ -70,6 +70,13 @@ The browser asks once whether to open the program. The poster may be on another 
 3. Add the printed `{ "kid": ..., "publicKey": ... }` entry to `deploy/poster-trusted-keys.json`, commit it, and publish the poster again so the keys file goes into the zip.
 4. On each PC: unzip, run the poster once, answer Yes to the links question (or press **Register DD Review links**).
 
+## Installing the poster (MSI) and the launch file
+
+- **Installer.** `deploy\Publish-Poster.ps1` also builds `artifacts\DDQuickBooksPoster-<date>-<commit>.msi` (WiX 5, pinned in `.config/dotnet-tools.json`, source in `installer/DDQuickBooksPoster.wxs`; WiX needs Windows, so it cannot be built or tested in the cloud).
+  It installs per Windows user under `%LocalAppData%\DDReview\QuickBooksPoster` with no administrator rights, adds a Start menu shortcut, and registers the `ddposter:` link and the `.ddposter` file type. A newer MSI upgrades in place; uninstalling removes it all. Settings (`%AppData%\DDReview`) are kept.
+- **Website download.** Setup > "QuickBooks poster" (administrators). The site serves the newest `DDQuickBooksPoster-*.msi` from the folder in the site setting `PosterInstaller:Folder` (`-InstallerFolder` on the publish script copies it there). Nothing in the request chooses the file.
+- **Launch file.** On the General ledger page, "Download launch file" saves a small `.ddposter` text file holding the same signed link (good for the same few minutes). Double-clicking it opens the poster, which checks it exactly like a link. Use it when a browser or office policy blocks the button.
+
 ## Not yet (on demand)
 Vendor bills and credits (A/P), payroll, beginning balances, club minimum invoices, QuickBooks Online, Canadian tax beyond copying the old settings,
 other accounting packages. `PostingPlan` is neutral (no QuickBooks types in it), so another package can be a second writer next to `QbxmlRequests`.

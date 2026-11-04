@@ -4,20 +4,34 @@ using Microsoft.Win32;
 namespace DDReview.QuickBooks.Win;
 
 /// <summary>
-/// Tells Windows that <c>ddposter:</c> links open this program. Written under HKCU\Software\Classes, so it is per Windows user and needs no administrator rights.
+/// Tells Windows that <c>ddposter:</c> links and <c>.ddposter</c> files open this program. Written under HKCU\Software\Classes, so it is per Windows user and needs no administrator rights.
 /// The registered command holds this program's full path; if the program is moved or a different copy is run, <see cref="GetState"/> says so and the program registers itself again.
 /// </summary>
 static class ProtocolRegistration
 {
     const string KeyPath = @"Software\Classes\" + PosterLinkRules.Scheme;
+    const string FileExtKey = @"Software\Classes\" + PosterLaunchFile.Extension;
+    const string FileProgId = "DDReview.QuickBooksPoster.LaunchFile";
+    const string FileProgKey = @"Software\Classes\" + FileProgId;
 
     public enum State { NotRegistered, RegisteredHere, RegisteredElsewhere }
 
     public static State GetState(string exePath)
     {
-        using var k = Registry.CurrentUser.OpenSubKey(KeyPath + @"\shell\open\command");
-        if (k?.GetValue(null) is not string cmd || cmd.Length == 0) return State.NotRegistered;
-        return string.Equals(cmd, ProtocolCommand.Build(exePath), StringComparison.OrdinalIgnoreCase) ? State.RegisteredHere : State.RegisteredElsewhere;
+        var want = ProtocolCommand.Build(exePath);
+        string? link = Command(KeyPath), file = Command(FileProgKey);
+        if (link is null && file is null) return State.NotRegistered;
+        using (var proto = Registry.CurrentUser.OpenSubKey(KeyPath))
+            if (proto?.GetValue("URL Protocol") is null) return State.RegisteredElsewhere;   // an installer that left this out is repaired the next time the program starts
+        bool linkHere = string.Equals(link, want, StringComparison.OrdinalIgnoreCase);
+        bool fileHere = string.Equals(file, want, StringComparison.OrdinalIgnoreCase);
+        return linkHere && fileHere ? State.RegisteredHere : State.RegisteredElsewhere;   // a half-registered copy (links but not files) is set up again
+    }
+
+    static string? Command(string key)
+    {
+        using var k = Registry.CurrentUser.OpenSubKey(key + @"\shell\open\command");
+        return k?.GetValue(null) is string c && c.Length > 0 ? c : null;
     }
 
     public static void Register(string exePath)
@@ -28,7 +42,24 @@ static class ProtocolRegistration
         root.SetValue("URL Protocol", "");
         using (var icon = root.CreateSubKey("DefaultIcon")) icon.SetValue(null, "\"" + exePath + "\",0");
         using (var cmd = root.CreateSubKey(@"shell\open\command")) cmd.SetValue(null, command);
+
+        // .ddposter files: the extension points at a program id whose open command is the same command.
+        using (var ext = Registry.CurrentUser.CreateSubKey(FileExtKey)) ext.SetValue(null, FileProgId);
+        using (var prog = Registry.CurrentUser.CreateSubKey(FileProgKey))
+        {
+            prog.SetValue(null, "DD Review QuickBooks launch file");
+            using (var icon = prog.CreateSubKey("DefaultIcon")) icon.SetValue(null, "\"" + exePath + "\",0");
+            using (var cmd = prog.CreateSubKey(@"shell\open\command")) cmd.SetValue(null, command);
+        }
     }
 
-    public static void Unregister() => Registry.CurrentUser.DeleteSubKeyTree(KeyPath, throwOnMissingSubKey: false);
+    public static void Unregister()
+    {
+        Registry.CurrentUser.DeleteSubKeyTree(KeyPath, throwOnMissingSubKey: false);
+        Registry.CurrentUser.DeleteSubKeyTree(FileProgKey, throwOnMissingSubKey: false);
+        // The extension key is removed only if it is still ours (another program may have taken .ddposter since).
+        using (var ext = Registry.CurrentUser.OpenSubKey(FileExtKey))
+            if (!string.Equals(ext?.GetValue(null) as string, FileProgId, StringComparison.Ordinal)) return;
+        Registry.CurrentUser.DeleteSubKeyTree(FileExtKey, throwOnMissingSubKey: false);
+    }
 }

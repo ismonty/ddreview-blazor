@@ -37,6 +37,8 @@ else
         {
             <button type="button" @onclick="PostToQuickBooksAsync" disabled="@(!GlPostingGate.HasData(report, busy))"
                     title="Opens the QuickBooks poster on this computer with the stores, dates and choice of the report shown below. Needs a report on the page. Nothing is posted until you Preview and Post there.">Post to QuickBooks…</button>
+            <button type="button" @onclick="DownloadLaunchFileAsync" disabled="@(!GlPostingGate.HasData(report, busy))"
+                    title="For when the button above does nothing (a browser or office setting blocks it): saves a small file; double-click it to open the poster.">Download launch file</button>
         }
     </EditForm>
 
@@ -193,25 +195,45 @@ else
     /// </summary>
     private async Task PostToQuickBooksAsync()
     {
+        var link = await MakePosterLinkAsync();
+        if (link is null) return;
+        posterMsg = "Opening the QuickBooks poster on this computer. Nothing has been posted: use Preview in the poster first. If nothing opens, use “Download launch file” instead, or start DDQuickBooksPoster.exe once and choose “Register DD Review links”.";
+        Nav.NavigateTo(link, forceLoad: true);
+    }
+
+    private async Task DownloadLaunchFileAsync()
+    {
+        var link = await MakePosterLinkAsync();
+        if (link is null || lastRun is null) return;
+        var text = DDReview.QuickBooks.Launch.PosterLaunchFile.Build(link);
+        await JS.InvokeVoidAsync("ddDownload", DDReview.QuickBooks.Launch.PosterLaunchFile.FileNameFor(lastRun.Start.ToDateTime(TimeOnly.MinValue), lastRun.End.ToDateTime(TimeOnly.MinValue)),
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)), "application/octet-stream");
+        posterMsg = "The launch file was saved. Double-click it within a few minutes to open the QuickBooks poster; nothing has been posted. If it has expired, download a new one.";
+    }
+
+    /// <summary>
+    /// The signed, short-lived link for the report shown on the page (never the filters as they are now), or null with <see cref="posterMsg"/> saying why not.
+    /// Only stores this user is authorized for go in; the link never carries a password or connection string. An out-of-balance report is asked about first.
+    /// </summary>
+    private async Task<string?> MakePosterLinkAsync()
+    {
         posterMsg = null;
-        if (ctx is null || !allowed || !PosterLinks.IsConfigured) return;
-        if (lastRun is null || !GlPostingGate.HasData(report, busy)) { posterMsg = "Run the report first; the poster opens with what is shown."; return; }
-        // What is on the page is what goes to the poster, not whatever the filters say now.
+        if (ctx is null || !allowed || !PosterLinks.IsConfigured) return null;
+        if (lastRun is null || !GlPostingGate.HasData(report, busy)) { posterMsg = "Run the report first; the poster opens with what is shown."; return null; }
         var authorized = stores.Select(s => s.StoreId).ToHashSet();
         var ids = lastRun.Stores.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(t => int.TryParse(t, out var n) ? n : 0).Where(authorized.Contains).Distinct().OrderBy(x => x).ToList();
-        if (ids.Count == 0) { posterMsg = "Pick at least one store."; return; }
+        if (ids.Count == 0) { posterMsg = "Pick at least one store."; return null; }
         var question = GlPostingGate.BalanceQuestion(report);
         if (question is not null)
         {
-            if (!await JS.InvokeAsync<bool>("confirm", question)) { posterMsg = "Nothing was sent to the poster."; return; }
+            if (!await JS.InvokeAsync<bool>("confirm", question)) { posterMsg = "Nothing was sent to the poster."; return null; }
             Logger.LogWarning("Web user {UserId} opened the poster from an out-of-balance report", ctx.WebUserId);
         }
         var request = new DDReview.QuickBooks.Sql.PostingRequest(ids, lastRun.Start.ToDateTime(TimeOnly.MinValue), lastRun.End.ToDateTime(TimeOnly.MinValue), lastRun.ArFlag);
-        if (!PosterLinks.TryCreate(request, ctx.WebUserId, DateTimeOffset.UtcNow, out var link, out var why)) { posterMsg = why; return; }
+        if (!PosterLinks.TryCreate(request, ctx.WebUserId, DateTimeOffset.UtcNow, out var link, out var why)) { posterMsg = why; return null; }
         Logger.LogInformation("QuickBooks poster link made for web user {UserId}: {StoreCount} stores, {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}, scope {Scope}", ctx.WebUserId, ids.Count, lastRun.Start, lastRun.End, lastRun.ArFlag);
-        posterMsg = "Opening the QuickBooks poster on this computer. Nothing has been posted: use Preview in the poster first. If nothing opens, start DDQuickBooksPoster.exe once and choose “Register DD Review links”.";
-        Nav.NavigateTo(link, forceLoad: true);
+        return link;
     }
 
     private async Task RunAsync()
