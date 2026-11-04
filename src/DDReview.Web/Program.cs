@@ -122,6 +122,18 @@ static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r, boo
     }
 }
 
+// The poster installer (MSI) for the Setup page. Administrators only. The file is the newest DDQuickBooksPoster-*.msi in the folder named by the site setting
+// PosterInstaller:Folder; nothing from the request picks the file.
+app.MapGet("/admin/setup/poster-installer", async (HttpContext http, UserContextService users, IConfiguration config) =>
+{
+    var ctx = await users.GetAsync(http.User, http.RequestAborted);
+    if (ctx is null || !ctx.Access.Administrator) return Results.NotFound();
+    var file = DDReview.QuickBooks.Launch.PosterInstallerLocator.FindNewest(config["PosterInstaller:Folder"]);
+    if (file is null) return Results.NotFound();
+    http.Response.Headers.CacheControl = "no-store";
+    return Results.File(new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.Read), "application/x-msi", file.Name);
+}).RequireAuthorization();
+
 // The stored submission report of a batch, drawn as SVG (thumbnails and the full page both use it). Signed-in users only, and only for
 // stores their General Ledger access covers.
 app.MapGet("/gl/submission-image/{batchId:int}", async (int batchId, HttpContext http, UserContextService users, DDReview.Core.Gl.SubmissionReportService reports) =>

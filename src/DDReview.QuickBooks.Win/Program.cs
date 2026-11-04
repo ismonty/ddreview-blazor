@@ -5,7 +5,7 @@ namespace DDReview.QuickBooks.Win;
 static class Program
 {
     /// <summary>
-    /// Normal start, or start from a "Post to QuickBooks" link on the website (<c>ddposter:</c> link as the one argument), or <c>--register</c> / <c>--unregister</c>
+    /// Normal start, or start from a "Post to QuickBooks" link on the website (<c>ddposter:</c> link or a <c>.ddposter</c> file as the one argument), or <c>--register</c> / <c>--unregister</c>
     /// to set up the links without opening a window. Only one window runs per Windows session: a second start passes its link to the first and exits.
     /// </summary>
     [STAThread]
@@ -24,10 +24,22 @@ static class Program
             catch (Exception) { return 1; }
         }
 
+        // A .ddposter file that was double-clicked: its link is read here and then handled exactly like a link from the website.
+        string? link = command.Link;
+        if (command.File is not null)
+        {
+            if (PosterLaunchFile.TryRead(command.File, out var fromFile, out var why)) link = fromFile;
+            else
+            {
+                MessageBox.Show(why + "\r\n\r\nNothing was changed.", "Post to QuickBooks", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return 0;
+            }
+        }
+
         using var mutex = new Mutex(true, InstanceChannel.MutexName, out bool first);
         if (!first)
         {
-            if (!InstanceChannel.Send(command.Link))
+            if (!InstanceChannel.Send(link))
                 MessageBox.Show("The program is already open but did not answer. Close it (Task Manager, if it is stuck) and try again.", "Post to QuickBooks", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return 0;
         }
@@ -35,7 +47,7 @@ static class Program
         try
         {
             ApplicationConfiguration.Initialize();
-            var form = new MainForm(command.Link);
+            var form = new MainForm(link);
             using var server = new InstanceServer();
             // Load, not Shown: the pipe must already be listening while the first-run question is on screen, or a click then would be told "no answer".
             form.Load += (_, _) => server.Start(

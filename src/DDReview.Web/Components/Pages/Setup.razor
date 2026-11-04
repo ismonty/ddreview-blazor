@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @using DDReview.Core.Admin
 @using DDReview.Web.Components.Setup
+@inject IConfiguration Config
 
 <PageTitle>MontySoft DD Review™</PageTitle>
 <h1>Setup</h1>
@@ -21,6 +22,23 @@
             </li>
         }
         </ul>
+    }
+
+    @if (s.Decision.Allowed && s.Decision.IsAdministrator)
+    {
+        var installer = DDReview.QuickBooks.Launch.PosterInstallerLocator.FindNewest(Config["PosterInstaller:Folder"]);
+        <h2>QuickBooks poster</h2>
+        @if (installer is null)
+        {
+            <p class="muted">No installer has been published yet. Run <code>deploy\Publish-Poster.ps1</code> and copy the .msi into the folder named by the site setting <code>PosterInstaller:Folder</code>.</p>
+        }
+        else
+        {
+            <p><a href="/admin/setup/poster-installer" download>Download the QuickBooks poster installer</a>
+                <span class="muted">(@installer.Name, @((installer.Bytes / 1048576.0).ToString("0.#")) MB, built @installer.Built.ToString("MMM d, yyyy h:mm tt"))</span></p>
+            <p class="muted">Run it on the PC that has QuickBooks. It installs for that Windows user only (no administrator rights), adds a Start menu shortcut, and lets the Post to QuickBooks button on the General ledger page open the poster.
+                Windows may warn about an unknown publisher until the installer is signed: choose More info, then Run anyway.</p>
+        }
     }
 
     @if (s.Decision.CanManageAccess)

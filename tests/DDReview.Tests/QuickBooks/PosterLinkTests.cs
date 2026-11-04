@@ -492,3 +492,93 @@ public class PosterLinkTests : IDisposable
         Assert.Equal(new DateTime(2005, 1, 2), PosterLinkRules.EffectiveEarliest(new DateTime(2005, 1, 2, 13, 30, 0)));
     }
 }
+
+public class PosterLaunchFileTests
+{
+    const string Link = "ddposter://run?v=1&start=2026-10-26&end=2026-10-31&scope=3&stores=1&exp=1&kid=staging1&uid=5&sig=abc";
+
+    [Fact] public void Build_then_extract_returns_the_same_link()
+    {
+        Assert.True(PosterLaunchFile.TryExtract(PosterLaunchFile.Build(Link), out var l, out _));
+        Assert.Equal(Link, l);
+    }
+
+    [Fact] public void A_byte_order_mark_and_unix_line_ends_are_fine()
+    {
+        Assert.True(PosterLaunchFile.TryExtract("\uFEFF# note\n" + Link + "\n", out var l, out _));
+        Assert.Equal(Link, l);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   \r\n")]
+    [InlineData("# only a comment")]
+    [InlineData("hello world")]
+    [InlineData("https://example.com/x")]
+    public void Anything_but_a_link_is_refused(string text) => Assert.False(PosterLaunchFile.TryExtract(text, out _, out var why) || why.Length == 0);
+
+    [Fact] public void Two_content_lines_are_refused() => Assert.False(PosterLaunchFile.TryExtract(Link + "\r\n" + Link, out _, out _));
+
+    [Fact] public void Command_line_picks_up_a_launch_file()
+    {
+        Assert.Equal(new PosterCommand(PosterAction.Run, null, @"C:\Users\a\Downloads\x.ddposter"), PosterCommandLine.Parse([@"C:\Users\a\Downloads\x.ddposter"]));
+        Assert.Equal(new PosterCommand(PosterAction.Run, null, "X.DDPOSTER"), PosterCommandLine.Parse(["X.DDPOSTER"]));
+        Assert.Equal(new PosterCommand(PosterAction.Run, Link), PosterCommandLine.Parse(["a.ddposter", Link]));   // a link wins
+        Assert.Equal(PosterAction.Register, PosterCommandLine.Parse(["a.ddposter", "--register"]).Action);
+    }
+
+    [Fact] public void TryRead_refuses_a_big_file_and_reads_a_good_one()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var good = Path.Combine(dir.FullName, "a.ddposter"); File.WriteAllText(good, PosterLaunchFile.Build(Link));
+            Assert.True(PosterLaunchFile.TryRead(good, out var l, out _)); Assert.Equal(Link, l);
+            var big = Path.Combine(dir.FullName, "b.ddposter"); File.WriteAllText(big, new string('x', PosterLaunchFile.MaxBytes + 1));
+            Assert.False(PosterLaunchFile.TryRead(big, out _, out _));
+            Assert.False(PosterLaunchFile.TryRead(Path.Combine(dir.FullName, "missing.ddposter"), out _, out _));
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [Fact] public void A_file_made_from_a_real_signed_link_verifies()
+    {
+        var signer = PosterLinkSigner.FromPrivateBase64(Convert.ToBase64String(System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKey()), "k1");
+        var now = DateTimeOffset.UtcNow;
+        Assert.True(signer.TryCreate(new DDReview.QuickBooks.Sql.PostingRequest([1, 2], now.Date.AddDays(-5), now.Date.AddDays(-1), 3), 7, now, TimeSpan.FromMinutes(10), out var link, out _));
+        Assert.True(PosterLaunchFile.TryExtract(PosterLaunchFile.Build(link), out var back, out _));
+        var trusted = new[] { TrustedKey.FromPublicBase64("k1", signer.PublicKeyBase64) };
+        Assert.True(PosterLink.TryParse(back, trusted, now, out var v, out _));
+        Assert.Equal(7, v.WebUserId);
+    }
+}
+
+public class PosterInstallerLocatorTests
+{
+    [Fact] public void No_folder_or_a_missing_folder_finds_nothing()
+    {
+        Assert.Null(PosterInstallerLocator.FindNewest(null));
+        Assert.Null(PosterInstallerLocator.FindNewest(""));
+        Assert.Null(PosterInstallerLocator.FindNewest(Path.Combine(Path.GetTempPath(), "dd-nope-" + Guid.NewGuid().ToString("N"))));
+    }
+
+    [Fact] public void The_newest_matching_msi_wins_and_other_files_are_ignored()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            void Make(string name, DateTime when, string body = "x") { var p = Path.Combine(dir.FullName, name); File.WriteAllText(p, body); File.SetLastWriteTimeUtc(p, when); }
+            Make("DDQuickBooksPoster-old.msi", new DateTime(2026, 1, 1));
+            Make("DDQuickBooksPoster-new.msi", new DateTime(2026, 6, 1));
+            Make("Other-newest.msi", new DateTime(2026, 9, 1));
+            Make("DDQuickBooksPoster-newest.zip", new DateTime(2026, 9, 1));
+            Make("DDQuickBooksPoster-empty.msi", new DateTime(2026, 9, 1), "");
+            Directory.CreateDirectory(Path.Combine(dir.FullName, "sub"));
+            File.WriteAllText(Path.Combine(dir.FullName, "sub", "DDQuickBooksPoster-deep.msi"), "x");
+            var f = PosterInstallerLocator.FindNewest(dir.FullName);
+            Assert.NotNull(f);
+            Assert.Equal("DDQuickBooksPoster-new.msi", f!.Name);
+        }
+        finally { dir.Delete(true); }
+    }
+}
