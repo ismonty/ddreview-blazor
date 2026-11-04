@@ -36,10 +36,12 @@ static class Program
             }
         }
 
+        string? package = command.Package is null ? null : Path.GetFullPath(command.Package);
+
         using var mutex = new Mutex(true, InstanceChannel.MutexName, out bool first);
         if (!first)
         {
-            if (!InstanceChannel.Send(link))
+            if (!(package is not null ? InstanceChannel.SendPackage(package) : InstanceChannel.Send(link)))
                 MessageBox.Show("The program is already open but did not answer. Close it (Task Manager, if it is stuck) and try again.", "Post to QuickBooks", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return 0;
         }
@@ -47,12 +49,13 @@ static class Program
         try
         {
             ApplicationConfiguration.Initialize();
-            var form = new MainForm(link);
+            var form = new MainForm(link, package);
             using var server = new InstanceServer();
             // Load, not Shown: the pipe must already be listening while the first-run question is on screen, or a click then would be told "no answer".
             form.Load += (_, _) => server.Start(
                 link => { try { form.BeginInvoke(() => form.ApplyLink(link)); } catch (InvalidOperationException) { /* window is closing */ } },
-                () => { try { form.BeginInvoke(form.BringForward); } catch (InvalidOperationException) { } });
+                () => { try { form.BeginInvoke(form.BringForward); } catch (InvalidOperationException) { } },
+                path => { try { form.BeginInvoke(() => form.ApplyPackage(path)); } catch (InvalidOperationException) { /* window is closing */ } });
             Application.Run(form);
         }
         finally { mutex.ReleaseMutex(); }

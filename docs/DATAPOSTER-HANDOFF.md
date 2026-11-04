@@ -58,7 +58,7 @@ Design points to settle early:
 `C:\EOD\ddreview-blazor` (checkout), `C:\EOD\DDReviewBlazorPort` (`DDAdminCS-ExportedCode.zip`: the Access source with the original QBXML posting logic; `QBExportPackage.csv`, `QBPostResults*`: sample package and results; schema dumps; test `.bak` files).
 Repo: private GitHub `ismonty/ddreview-blazor`, default branch `main` (staging auto-deploys from it). Commit trailers (Co-Authored-By, Claude-Session) are fine in commits; app text, README and PR text stay the owner's own.
 
-## Next project: the poster fetches its package from the website (planned, not built)
+## Next project: the poster fetches its package from the website (first step built: the signed .ddpackage file, see docs/QUICKBOOKS.md; the live fetch below is not)
 
 Today the poster reads the export package straight from the back-end database with a SQL login whose connection string is typed into the poster and kept (now encrypted per Windows user, see `ProtectedSetting`) on every PC.
 A link's store list is therefore a convenience, not a wall: a hand-launched poster with that login can read any store the login can.

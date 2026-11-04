@@ -39,6 +39,8 @@ else
                     title="Opens the QuickBooks poster on this computer with the stores, dates and choice of the report shown below. Needs a report on the page. Nothing is posted until you Preview and Post there.">Post to QuickBooks…</button>
             <button type="button" @onclick="DownloadLaunchFileAsync" disabled="@(!GlPostingGate.HasData(report, busy))"
                     title="For when the button above does nothing (a browser or office setting blocks it): saves a small file; double-click it to open the poster.">Download launch file</button>
+            <button type="button" @onclick="DownloadPackageAsync" disabled="@(!GlPostingGate.HasData(report, busy) || packageBusy)"
+                    title="Saves everything the poster needs, signed by this site, in one file. Double-click it to open the poster: it then needs no database connection. Good for one day.">@(packageBusy ? "Preparing…" : "Download package")</button>
         }
     </EditForm>
 
@@ -217,6 +219,51 @@ else
     /// </summary>
     private async Task<string?> MakePosterLinkAsync()
     {
+        var request = await PrepareRequestAsync();
+        if (request is null || ctx is null) return null;
+        if (!PosterLinks.TryCreate(request, ctx.WebUserId, DateTimeOffset.UtcNow, out var link, out var why)) { posterMsg = why; return null; }
+        Logger.LogInformation("QuickBooks poster link made for web user {UserId}: {StoreCount} stores, {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}, scope {Scope}", ctx.WebUserId, request.StoreIds.Count, request.Start, request.End, request.Scope);
+        return link;
+    }
+
+    private bool packageBusy;
+
+    /// <summary>
+    /// Builds the signed package file for the report on the page: the same export-package query the poster used to run itself, plus the posting settings, signed by this site.
+    /// The poster then needs no database connection. Nothing is posted by downloading it.
+    /// </summary>
+    private async Task DownloadPackageAsync()
+    {
+        if (packageBusy) return;
+        var request = await PrepareRequestAsync();
+        if (request is null || ctx is null) return;
+        packageBusy = true; posterMsg = null; StateHasChanged();
+        try
+        {
+            var cs = ctx.ClientConnectionString;
+            var names = request.StoreIds.Select(id => stores.FirstOrDefault(s => s.StoreId == id)).Select(s => s is null ? "" : s.StoreNumber + "  " + s.StoreName).ToList();
+            var (rows, options, dayZero) = await Task.Run(() => (DDReview.QuickBooks.Sql.SqlPackageSource.Read(cs, request), DDReview.QuickBooks.Sql.SqlPackageSource.LoadOptions(cs), DDReview.QuickBooks.Sql.SqlPackageSource.ReadDayZero(cs)));
+            var earliest = DDReview.QuickBooks.Launch.PosterLinkRules.EffectiveEarliest(dayZero);
+            if (request.Start < earliest) { posterMsg = $"This database does not accept dates before {earliest:yyyy-MM-dd} (its day 0). Change the From date and run the report again."; return; }
+            if (!PosterLinks.TryCreatePackage(request, names, ctx.WebUserId, options, rows, DateTimeOffset.UtcNow, out var file, out var why)) { posterMsg = why; return; }
+            Logger.LogInformation("QuickBooks poster package made for web user {UserId}: {StoreCount} stores, {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}, scope {Scope}, {Rows} rows, {Bytes} bytes", ctx.WebUserId, request.StoreIds.Count, request.Start, request.End, request.Scope, rows.Count, file.Length);
+            await JS.InvokeVoidAsync("ddDownload", DDReview.QuickBooks.Launch.PosterPackage.FileNameFor(request.Start, request.End), Convert.ToBase64String(file), "application/octet-stream");
+            posterMsg = "The package was saved. Double-click it to open the QuickBooks poster; nothing has been posted. It is good for one day and holds this report's figures, so keep it to yourself and delete it when you are done.";
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or InvalidOperationException or TimeoutException)
+        {
+            Logger.LogWarning(ex, "Could not build the poster package");
+            posterMsg = "The package could not be built: " + ex.Message;
+        }
+        finally { packageBusy = false; }
+    }
+
+    /// <summary>
+    /// The request for the report shown on the page (never the filters as they are now), or null with <see cref="posterMsg"/> saying why not.
+    /// Only stores this user is authorized for are included. An out-of-balance report is asked about first.
+    /// </summary>
+    private async Task<DDReview.QuickBooks.Sql.PostingRequest?> PrepareRequestAsync()
+    {
         posterMsg = null;
         if (ctx is null || !allowed || !PosterLinks.IsConfigured) return null;
         if (lastRun is null || !GlPostingGate.HasData(report, busy)) { posterMsg = "Run the report first; the poster opens with what is shown."; return null; }
@@ -228,12 +275,9 @@ else
         if (question is not null)
         {
             if (!await JS.InvokeAsync<bool>("confirm", question)) { posterMsg = "Nothing was sent to the poster."; return null; }
-            Logger.LogWarning("Web user {UserId} opened the poster from an out-of-balance report", ctx.WebUserId);
+            Logger.LogWarning("Web user {UserId} used the poster from an out-of-balance report", ctx.WebUserId);
         }
-        var request = new DDReview.QuickBooks.Sql.PostingRequest(ids, lastRun.Start.ToDateTime(TimeOnly.MinValue), lastRun.End.ToDateTime(TimeOnly.MinValue), lastRun.ArFlag);
-        if (!PosterLinks.TryCreate(request, ctx.WebUserId, DateTimeOffset.UtcNow, out var link, out var why)) { posterMsg = why; return null; }
-        Logger.LogInformation("QuickBooks poster link made for web user {UserId}: {StoreCount} stores, {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}, scope {Scope}", ctx.WebUserId, ids.Count, lastRun.Start, lastRun.End, lastRun.ArFlag);
-        return link;
+        return new DDReview.QuickBooks.Sql.PostingRequest(ids, lastRun.Start.ToDateTime(TimeOnly.MinValue), lastRun.End.ToDateTime(TimeOnly.MinValue), lastRun.ArFlag);
     }
 
     private async Task RunAsync()

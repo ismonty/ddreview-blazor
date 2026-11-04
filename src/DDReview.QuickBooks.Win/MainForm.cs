@@ -3,6 +3,7 @@ using System.Xml.Linq;
 using DDReview.QuickBooks;
 using DDReview.QuickBooks.Launch;
 using DDReview.QuickBooks.Model;
+using DDReview.QuickBooks.Package;
 using DDReview.QuickBooks.Planning;
 using DDReview.QuickBooks.Posting;
 using DDReview.QuickBooks.Qbxml;
@@ -47,6 +48,9 @@ sealed class MainForm : Form
     readonly IReadOnlyList<TrustedKey> _trusted;
     readonly List<string> _keyProblems;
     readonly string? _launchLink;
+    readonly string? _launchPackage;
+    PackageContents? _package;             // a signed package file from the website: the rows come from it and no database connection is used
+    Control? _top;
     VerifiedLaunch? _link;                 // the verified link this window was opened from; while set, only its stores can be used here
     HashSet<int> _linkStores = [];
     bool _running;
@@ -57,9 +61,10 @@ sealed class MainForm : Form
 
     sealed record StoreItem(int Id, string Text) { public override string ToString() => Text; }
 
-    public MainForm(string? launchLink = null)
+    public MainForm(string? launchLink = null, string? launchPackage = null)
     {
         _launchLink = launchLink;
+        _launchPackage = launchPackage;
         _trusted = TrustedKeyFile.Load(Path.Combine(AppContext.BaseDirectory, TrustedKeyFile.FileName), out _keyProblems);
 
         Text = "Post to QuickBooks  " + VersionText();
@@ -87,6 +92,7 @@ sealed class MainForm : Form
         top.Controls.Add(Row(_showConnection, _loadStores), 2, 0);
         _showConnection.CheckedChanged += (_, _) => _connection.UseSystemPasswordChar = !_showConnection.Checked;
 
+        _top = top;
         var middle = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterDistance = 440 };
         _middle = middle;
         var storesBox = new GroupBox { Text = "Stores", Dock = DockStyle.Fill, Padding = new Padding(6) };
@@ -124,6 +130,10 @@ sealed class MainForm : Form
         root.Controls.Add(_log, 0, 3);
         root.Controls.Add(_status, 0, 4);
         Controls.Add(root);
+        DdTheme.Apply(this, _preview, _post, _loadStores);
+        _recap.ForeColor = DdTheme.Link; _linkNote.ForeColor = DdTheme.Link;
+        _status.ForeColor = DdTheme.Muted;
+        Controls.Add(DdTheme.Banner("Post to QuickBooks"));   // after the fill panel (so it docks across the top) and after Apply (which would repaint its labels)
 
         _loadStores.Click += async (_, _) => await LoadStoresAsync();
         _preview.Click += async (_, _) => await RunAsync(commit: false);
@@ -135,7 +145,8 @@ sealed class MainForm : Form
         Shown += (_, _) =>
         {
             CheckLinkRegistration();
-            if (_launchLink != null) ApplyLink(_launchLink);
+            if (_launchPackage != null) ApplyPackage(_launchPackage);
+            else if (_launchLink != null) ApplyLink(_launchLink);
         };
 
         Log("This program posts the general ledger and accounts receivable from your DD database into QuickBooks Desktop.");
@@ -177,6 +188,7 @@ sealed class MainForm : Form
             return;
         }
 
+        _package = null; if (_top != null) _top.Visible = true;     // a link replaces a package: the connection is needed again
         var r = launch.Request;
         _link = launch;
         _linkStores = r.StoreIds.ToHashSet();
@@ -204,6 +216,47 @@ sealed class MainForm : Form
             return;
         }
         _ = LoadStoresAsync();
+    }
+
+    /// <summary>
+    /// A package file from the website (a double-click, or passed on by a second start). It is untrusted until its signature, expiry and limits check out.
+    /// A good one carries the rows and settings, so Preview and Post need no database connection; the person still presses Preview, and Post still needs a Preview and a Yes.
+    /// </summary>
+    public void ApplyPackage(string path)
+    {
+        BringForward();
+        if (_running)
+        {
+            Log("A package arrived while a run was in progress and was ignored.");
+            MessageBox.Show(this, "A run is in progress. Wait for it to finish (or press Cancel), then open the package again.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (!PosterPackage.TryOpenFile(path, _trusted, DateTimeOffset.UtcNow, out var contents, out var problem) || contents is null)
+        {
+            Log("The package was not used: " + problem.Message);
+            if (problem.Problem == PosterLinkProblem.UnknownKey) foreach (var p in _keyProblems) Log("  " + p);
+            MessageBox.Show(this, problem.Message + "\r\n\r\nNothing was changed.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var r = contents.Launch.Request;
+        _package = contents;
+        _link = contents.Launch;
+        _linkStores = r.StoreIds.ToHashSet();
+        _plan = null; _planFor = null;
+        _stores.Items.Clear();
+        for (int i = 0; i < r.StoreIds.Count; i++)
+            _stores.Items.Add(new StoreItem(r.StoreIds[i], contents.StoreNames.Count == r.StoreIds.Count && contents.StoreNames[i].Length > 0 ? contents.StoreNames[i] : "Store " + r.StoreIds[i]), true);
+        _linkNote.Visible = false;
+        string what = r.Scope switch { 1 => "general ledger", 2 => "accounts receivable", _ => "general ledger and accounts receivable" };
+        _recapBase = $"From a DD Review package made {contents.Created.ToLocalTime():MMM d, yyyy h:mm tt}: {what}, {r.Start:MMM d, yyyy} to {r.End:MMM d, yyyy}.";
+        if (_top != null) _top.Visible = false;             // no database connection is used in this mode
+        if (_middle != null) _middle.Panel1Collapsed = true;
+        foreach (var c in _filters) c.Visible = false;
+        UpdateRecap();
+        Busy(false);
+        _preview.Enabled = true;
+        Log($"Opened a DD Review package: {r.Start:d} to {r.End:d}, {what}, {r.StoreIds.Count} store(s), {contents.Rows.Count:N0} rows. Press Preview; nothing is changed in QuickBooks until you Post. No database connection is needed.");
     }
 
     string _recapBase = "";
@@ -372,6 +425,7 @@ sealed class MainForm : Form
 
     PostingRequest? BuildRequest()
     {
+        if (_package != null) return _package.Launch.Request;   // a package carries its own stores, dates and choice
         var ids = _stores.CheckedItems.Cast<StoreItem>().Select(s => s.Id).ToList();
         if (ids.Count == 0) { MessageBox.Show(this, "Check at least one store.", Text); return null; }
         if (_link != null && ids.Any(id => !_linkStores.Contains(id))) { MessageBox.Show(this, "A store that is not in the DD Review link is checked. Close this window and open the program from its icon to use other stores.", Text); return null; }
@@ -395,7 +449,14 @@ sealed class MainForm : Form
     {
         var req = BuildRequest();
         if (req == null) return;
+        if (_package != null && DateTimeOffset.UtcNow > _package.Launch.Expires + PosterLinkRules.ClockSkew)
+        {
+            Log("This package has expired (packages last one day). Download a new one from the website.");
+            MessageBox.Show(this, "This package has expired (packages last one day). Download a new one from the website.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
         var cs = _connection.Text.Trim();
+        var package = _package;
         var debug = DebugFolder();
         _cts = new CancellationTokenSource();
         var cancel = _cts.Token;
@@ -406,12 +467,18 @@ sealed class MainForm : Form
             Log(commit ? "Posting to QuickBooks..." : "Previewing (nothing will be changed)...");
             var result = await StaRunner.Run(() =>
             {
-                // Day 0: nothing earlier than the database's own day 0 (never earlier than 2003-09-29) is posted.
-                var earliest = PosterLinkRules.EffectiveEarliest(SqlPackageSource.ReadDayZero(cs));
-                if (req.Start < earliest) throw new InvalidOperationException($"This database does not accept dates before {earliest:yyyy-MM-dd} (its day 0). Change the From date.");
-                var rows = SqlPackageSource.Read(cs, req);
+                List<PackageRow> rows; PostingOptions options;
+                if (package != null) { rows = [.. package.Rows]; options = package.Options; }   // the website already checked day 0 and read the settings
+                else
+                {
+                    // Day 0: nothing earlier than the database's own day 0 (never earlier than 2003-09-29) is posted.
+                    var earliest = PosterLinkRules.EffectiveEarliest(SqlPackageSource.ReadDayZero(cs));
+                    if (req.Start < earliest) throw new InvalidOperationException($"This database does not accept dates before {earliest:yyyy-MM-dd} (its day 0). Change the From date.");
+                    rows = SqlPackageSource.Read(cs, req);
+                    options = rows.Count == 0 ? new PostingOptions() : SqlPackageSource.LoadOptions(cs);
+                }
                 if (rows.Count == 0) return (Plan: (PostingPlan?)null, Report: (PostingReport?)null);
-                var plan = PlanBuilder.Build(rows, SqlPackageSource.LoadOptions(cs));
+                var plan = PlanBuilder.Build(rows, options);
                 if (debug != null)
                 {
                     Directory.CreateDirectory(debug);
