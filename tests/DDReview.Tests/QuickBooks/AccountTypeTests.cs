@@ -20,6 +20,7 @@ public class AccountTypeTests
     [InlineData("Accounts Receivable (A/R)", "AccountsReceivable")]
     [InlineData("AccountsReceivable", "AccountsReceivable")]
     [InlineData("Credit Card", "CreditCard")]
+    [InlineData("CreditCardAccount", "CreditCard")]
     [InlineData("Cost of Goods Sold", "CostOfGoodsSold")]
     [InlineData("Long Term Liability", "LongTermLiability")]
     [InlineData("  expense ", "Expense")]

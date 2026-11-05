@@ -28,7 +28,7 @@ public static class QbAccountTypes
         Alias("OtherCurrentAsset", "Other Current Assets");
         Alias("FixedAsset", "Fixed Assets");
         Alias("OtherAsset", "Other Assets", "Long Term Asset", "Long Term Assets");
-        Alias("CreditCard", "Credit Cards");
+        Alias("CreditCard", "Credit Cards", "Credit Card Account", "CreditCardAccount");   // the Setup page suggests "CreditCardAccount"
         Alias("OtherCurrentLiability", "Other Current Liabilities");
         Alias("LongTermLiability", "Long Term Liabilities");
         Alias("CostOfGoodsSold", "COGS", "Cost of Goods");
