@@ -72,3 +72,21 @@ public class ReceiptTypeViewTests
         foreach (var kv in ReceiptTypeView.Copyable) Assert.All(kv.Value, f => Assert.Contains(f, ReceiptTypeView.Groups.First(g => g.Id == kv.Key).Fields));
     }
 }
+
+public class QuickBooksTypeChoiceTests
+{
+    // what the drop-down offers, and what the export must say for each
+    static readonly (string Label, string Export)[] Map =
+    [
+        ("Bank", "Bank"), ("Accounts Receivable (A/R)", "AccountsReceivable"), ("Other Current Assets", "OtherCurrentAsset"), ("Fixed Assets", "FixedAsset"),
+        ("Other Assets", "OtherAsset"), ("Accounts Payable (A/P)", "AccountsPayable"), ("Credit Card", "CreditCard"),
+        ("Other Current Liabilities", "OtherCurrentLiability"), ("Long-Term Liabilities", "LongTermLiability"), ("Equity", "Equity"), ("Income", "Income"),
+        ("Other Income", "OtherIncome"), ("Cost of Goods Sold", "CostOfGoodsSold"), ("Expenses", "Expense"), ("Other Expense", "OtherExpense"),
+    ];
+
+    [Fact] public void The_dropdown_holds_exactly_these_in_this_order() =>
+        Assert.Equal(Map.Select(m => m.Label), DDReview.Core.Admin.SetupTables.QuickBooksTypes);
+
+    [Fact] public void Each_choice_exports_as_the_QuickBooks_name() =>
+        Assert.All(Map, m => Assert.Equal(m.Export, DDReview.QuickBooks.Qbxml.QbAccountTypes.Normalize(m.Label)));
+}

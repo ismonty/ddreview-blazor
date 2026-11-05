@@ -162,9 +162,7 @@
 
 @code {
     private static SetupTable Table => SetupTables.ReceiptTypes;
-    private static readonly string[] QbTypeNames =
-        ["Accounts Payable", "Accounts Receivable", "Bank", "Cost Of Goods Sold", "Credit Card", "Equity", "Expense", "Fixed Asset", "Income",
-         "Long Term Liability", "Non Posting", "Other Asset", "Other Current Asset", "Other Current Liability", "Other Expense", "Other Income"];
+    private static string[] QbTypeNames => SetupTables.QuickBooksTypes;
 
     private IReadOnlyList<StoreInfo> stores = [];
     private int storeId, copyFrom;
@@ -335,6 +333,17 @@
             __b.OpenElement(6, "option"); __b.AddAttribute(7, "value", ""); __b.AddContent(8, c.Nullable ? "(none)" : "Choose…"); __b.CloseElement();
             foreach (var item in data!.Lookups.GetValueOrDefault(c.Def.Lookup) ?? [])
             { __b.OpenElement(9, "option"); __b.AddAttribute(10, "value", item.Value.ToString()); __b.AddContent(11, item.Text); __b.CloseElement(); }
+            __b.CloseElement();
+        }
+        else if (c.Def.Strict && c.Def.Suggestions is not null)
+        {
+            var cur = edit.GetValueOrDefault(name)?.Trim();
+            __b.OpenElement(40, "select"); __b.AddAttribute(41, "value", edit.GetValueOrDefault(name));
+            __b.AddAttribute(42, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => Set(name, e)));
+            __b.OpenElement(43, "option"); __b.AddAttribute(44, "value", ""); __b.AddContent(45, "(none)"); __b.CloseElement();
+            if (!string.IsNullOrEmpty(cur) && !c.Def.Suggestions.Contains(cur))
+            { __b.OpenElement(46, "option"); __b.AddAttribute(47, "value", cur); __b.AddContent(48, cur + " (not a QuickBooks type: choose one)"); __b.CloseElement(); }
+            foreach (var sg in c.Def.Suggestions) { __b.OpenElement(49, "option"); __b.AddAttribute(50, "value", sg); __b.AddContent(51, sg); __b.CloseElement(); }
             __b.CloseElement();
         }
         else if (c.Def.Kind == SetupKind.Bool && c.Nullable)

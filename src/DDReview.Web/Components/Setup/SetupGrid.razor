@@ -107,6 +107,15 @@ else
                         {
                             <input type="date" value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()" />
                         }
+                        else if (c.Def.Strict && c.Def.Suggestions is not null)
+                        {
+                            var cur = edit[name]?.Trim();
+                            <select value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()">
+                                <option value="">(none)</option>
+                                @if (!string.IsNullOrEmpty(cur) && !c.Def.Suggestions.Contains(cur)) { <option value="@cur">@cur (not a QuickBooks type: choose one)</option> }
+                                @foreach (var sg in c.Def.Suggestions) { <option value="@sg">@sg</option> }
+                            </select>
+                        }
                         else
                         {
                             <input type="text" value="@edit[name]" @onchange="e => edit[name] = e.Value?.ToString()"

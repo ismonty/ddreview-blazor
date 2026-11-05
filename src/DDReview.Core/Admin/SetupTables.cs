@@ -11,7 +11,7 @@ public enum SetupKind { Text, Int, Decimal, Bool, Date }
 /// <param name="ReadOnly">Shown so the row can be recognised (a store's name), never changed here.</param>
 /// <param name="LookupParent">Another column of the same row that narrows this list (sale types follow the main type): only items whose parent matches are offered.</param>
 public sealed record SetupColumn(string Name, string Label, SetupKind Kind = SetupKind.Text, string? Lookup = null,
-    string[]? Suggestions = null, string? Help = null, string? LookupParent = null, string? BlankText = null, bool ReadOnly = false);
+    string[]? Suggestions = null, string? Help = null, string? LookupParent = null, string? BlankText = null, bool ReadOnly = false, bool Strict = false);
 
 public sealed record SetupOrder(string Column, bool Descending = false);
 
@@ -101,12 +101,11 @@ public static class SetupLookups
 /// <summary>The Setup tables that are built, one declaration per old DDAdminCS form (see docs/ADMIN-SETUP-PLAN.md).</summary>
 public static class SetupTables
 {
-    /// <summary>Account types QuickBooks accepts, as the old forms and the QuickBooks code name them. Only suggestions; the field stays free text.</summary>
-    private static readonly string[] QuickBooksTypes =
+    /// <summary>The QuickBooks account types offered in the drop-downs, as people say them. Each one is turned into the name QuickBooks takes in the export by QbAccountTypes.Normalize (in the QuickBooks project).</summary>
+    public static readonly string[] QuickBooksTypes =
     [
-        "Accounts Payable", "Accounts Receivable", "Bank", "Checking or Savings", "Cost Of Goods Sold", "Credit Card", "CreditCardAccount",
-        "Equity", "Expense", "Fixed Asset", "Income", "Long Term Liability", "Other Asset", "Other Current Asset", "Other Current Liability",
-        "Other Expense", "Other Income",
+        "Bank", "Accounts Receivable (A/R)", "Other Current Assets", "Fixed Assets", "Other Assets", "Accounts Payable (A/P)", "Credit Card",
+        "Other Current Liabilities", "Long-Term Liabilities", "Equity", "Income", "Other Income", "Cost of Goods Sold", "Expenses", "Other Expense",
     ];
 
     private const string FlagHelp = "1 posts as a debit, -1 as a credit.";
@@ -118,12 +117,12 @@ public static class SetupTables
         new("InterClassSameClassAccount", "Same-class account"),
         new("InterClassSameClassDistReference", "Same-class reference"),
         new("InterClassSameClassDebitCreditFlag", "Same-class debit/credit", SetupKind.Int, Help: FlagHelp),
-        new("InterClassSameClassDefaultQuickBooksType", "Same-class QuickBooks type", Suggestions: QuickBooksTypes),
+        new("InterClassSameClassDefaultQuickBooksType", "Same-class QuickBooks type", Suggestions: QuickBooksTypes, Strict: true),
         new("OtherAccountClassID", "Other class", SetupKind.Int, SetupLookups.AccountClasses),
         new("InterClassOtherClassAccount", "Other-class account"),
         new("InterClassOtherClassDistReference", "Other-class reference"),
         new("InterClassOtherClassDebitCreditFlag", "Other-class debit/credit", SetupKind.Int, Help: FlagHelp),
-        new("InterClassOtherClassDefaultQuickBooksType", "Other-class QuickBooks type", Suggestions: QuickBooksTypes),
+        new("InterClassOtherClassDefaultQuickBooksType", "Other-class QuickBooks type", Suggestions: QuickBooksTypes, Strict: true),
     ], Order: [new("AccountClass")],
     Help: "The classes that journal lines are split by, and the accounts that balance one class against another.");
 
@@ -152,8 +151,8 @@ public static class SetupTables
         };
         if (royalty)
         {
-            cols.Add(new("DebitQuickBooksType", "Debit QuickBooks type", Suggestions: QuickBooksTypes));
-            cols.Add(new("CreditQuickBooksType", "Credit QuickBooks type", Suggestions: QuickBooksTypes));
+            cols.Add(new("DebitQuickBooksType", "Debit QuickBooks type", Suggestions: QuickBooksTypes, Strict: true));
+            cols.Add(new("CreditQuickBooksType", "Credit QuickBooks type", Suggestions: QuickBooksTypes, Strict: true));
             cols.Add(new("RoyaltyPeriodStartDate", "Period start", SetupKind.Date));
             cols.Add(new("RoyaltyPeriodEndDate", "Period end", SetupKind.Date));
             cols.Add(new("RoyaltyPeriodSalesExcluded", "Sales excluded", SetupKind.Decimal));
@@ -195,7 +194,7 @@ public static class SetupTables
         new("Exclude", "Exclude", SetupKind.Bool),
         new("UseTaxApplies", "Use tax applies", SetupKind.Bool),
         new("ExemptTaxTypeID", "Exempt tax type", SetupKind.Int, SetupLookups.TaxTypes),
-        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes),
+        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes, Strict: true),
         new("AccountReportTitleID", "Report title", SetupKind.Int, SetupLookups.ReportTitles),
         new("SalesRedirectCreditAccountID", "Sales redirect to", SetupKind.Int, SetupLookups.CreditAccounts),
         new("SalesRedirectCreditAccount", "Sales redirect account"),
@@ -260,7 +259,7 @@ public static class SetupTables
         new("ARAccountClassID", "A/R class", SetupKind.Int, SetupLookups.AccountClasses),
         new("ARCustomerName", "A/R customer name"),
         new("PostARDetailInGL", "Post A/R detail in G/L", SetupKind.Bool),
-        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes),
+        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes, Strict: true),
         new("Label", "Label"),
         new("Sorter", "Sort", SetupKind.Int),
         new("ReceiptPostedAsDiscount", "Posted as discount", SetupKind.Bool),
@@ -320,7 +319,7 @@ public static class SetupTables
         new("DistReference", "Reference"),
         new("AccountClassID", "Class", SetupKind.Int, SetupLookups.AccountClasses),
         new("TipsShortfall", "Tips shortfall", SetupKind.Bool),
-        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes),
+        new("DefaultQuickBooksType", "QuickBooks type", Suggestions: QuickBooksTypes, Strict: true),
         new("AdjustmentFactor", "Adjustment factor", SetupKind.Decimal),
         .. AdjustmentColumns("AdjustmentDebit"),
         .. AdjustmentColumns("AdjustmentCredit"),

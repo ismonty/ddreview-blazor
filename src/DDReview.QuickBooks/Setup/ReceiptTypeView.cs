@@ -1,3 +1,5 @@
+using DDReview.QuickBooks.Qbxml;
+
 namespace DDReview.QuickBooks.Setup;
 
 public enum ReceiptKind { Cards, GiftCards, Discounts, HouseCharges, Other }
@@ -71,25 +73,12 @@ public static class ReceiptTypeView
         {
             var type = Text(v, "DefaultQuickBooksType");
             if (type.Length == 0 || type == "0") list.Add("No QuickBooks type");
-            else if (!IsQuickBooksType(type)) list.Add($"QuickBooks type \"{type}\" is not one QuickBooks accepts");
+            else if (QbAccountTypes.Normalize(type) is null) list.Add($"QuickBooks type \"{type}\" is not one QuickBooks accepts");
         }
         if (decimal.TryParse(Text(v, "DiscountPercent"), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var pct) && pct != 0 && Text(v, "DiscountDebitAcct").Length == 0)
             list.Add("Discount % but no discount account");
         if (On(v, "PostARDetailInGL") && Text(v, "ARAccount").Length == 0) list.Add("A/R detail is on but there is no A/R account");
         return list;
-    }
-
-    static readonly HashSet<string> QbTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "AccountsPayable","AccountsReceivable","Bank","CostOfGoodsSold","CreditCard","Equity","Expense","FixedAsset","Income",
-        "LongTermLiability","NonPosting","OtherAsset","OtherCurrentAsset","OtherCurrentLiability","OtherExpense","OtherIncome",
-    };
-
-    /// <summary>The 16 names qbXML accepts, matched ignoring case, spaces and a trailing "s" ("Other Current Assets" is taken).</summary>
-    public static bool IsQuickBooksType(string? type)
-    {
-        var t = (type ?? "").Replace(" ", "").Trim();
-        return QbTypes.Contains(t) || (t.EndsWith('s') && QbTypes.Contains(t[..^1]));
     }
 
     /// <summary>The lines a "review changes" step shows: only fields that really differ, old then new, in the page's own words.</summary>
