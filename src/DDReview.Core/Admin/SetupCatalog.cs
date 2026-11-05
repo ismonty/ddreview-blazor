@@ -11,6 +11,8 @@ public static class SetupCatalog
     public const string GlSection = "G/L Setup";
     public const string ArSection = "A/R Setup";
     public const string StoreSection = "Stores and global";
+    /// <summary>The tile editor for receipt types (the grid for the same table stays at its table route as the classic view).</summary>
+    public const string ReceiptTypesRoute = "/admin/setup/receipt-types";
 
     // The order follows the old button columns (top to bottom).
     public static IReadOnlyList<SetupEntry> All { get; } =
@@ -20,7 +22,8 @@ public static class SetupCatalog
         new(SetupArea.GlSetup, GlSection, "Royalty/Fee Rates/Accts", "tblTaxRates", SetupTables.RoyaltyFeeRates.Route),
         new(SetupArea.GlSetup, GlSection, "Sales Accounts", "tblAccountsCredit", SetupTables.SalesAccounts.Route),
         new(SetupArea.GlSetup, GlSection, "Sales Account Mapping", "tblAccountsSalesMapping", SetupTables.SalesMapping.Route),
-        new(SetupArea.GlSetup, GlSection, "Receipt Account Mapping", "tblReceiptTypes", SetupTables.ReceiptTypes.Route),
+        new(SetupArea.GlSetup, GlSection, "Receipt Account Mapping", "tblReceiptTypes", ReceiptTypesRoute),
+        new(SetupArea.GlSetup, GlSection, "Receipt Account Mapping (classic grid)", "tblReceiptTypes", SetupTables.ReceiptTypes.Route),
         new(SetupArea.GlSetup, GlSection, "Receipt Adjustments", "tblReceiptTypeAdjustments", SetupTables.ReceiptAdjustments.Route),
         new(SetupArea.GlSetup, GlSection, "Paid Outs", "tblPayouts", SetupTables.Payouts.Route),
         new(SetupArea.GlSetup, GlSection, "Gift Cards", "tblGiftCardTypes", SetupTables.GiftCards.Route),
