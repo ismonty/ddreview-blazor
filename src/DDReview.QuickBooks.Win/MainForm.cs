@@ -522,6 +522,7 @@ sealed class MainForm : Form
             foreach (var i in l) Log("  " + i.What);
             Log("");
         }
+        List("Please check (not failures):", r.Warnings.Distinct().Select(w => new StepResult(w, StepOutcome.Unchanged)));
         List(r.Committed ? "Transactions Added" : "Transactions To Add", r.Added);
         List(r.Committed ? "Transactions Modified" : "Transactions To Modify", r.Modified);
         List("Transactions Unchanged", r.Unchanged);
