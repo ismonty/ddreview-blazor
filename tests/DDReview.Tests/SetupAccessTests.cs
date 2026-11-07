@@ -231,7 +231,7 @@ public class BatchResubmissionScriptTests
     {
         var sql = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "010").ReadSql();
         Assert.Contains("BatchSubmitted = PostingDate", sql);
-        Assert.Contains("BatchTransmissionStatus = 4", sql);
+        Assert.Contains("BatchSubmissionStatus = 4", sql);
         Assert.Contains("where BatchID = @BatchID", sql);
     }
 

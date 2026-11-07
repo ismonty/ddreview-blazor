@@ -6,7 +6,7 @@ namespace DDReview.Core.Gl;
 
 /// <summary>
 /// "Request Batch Resubmission" on the General Ledger Review: runs dbo.usp_DDReviewRequestBatchResubmission (sql/010), which sets the batch's
-/// BatchSubmitted to its PostingDate and BatchTransmissionStatus to 4 so the submission function returns it for more work.
+/// BatchSubmitted to its PostingDate and BatchSubmissionStatus to 4 so the submission function returns it for more work.
 /// The store check and the audit row are here, in one transaction with the change.
 /// </summary>
 public sealed class BatchResubmissionService
@@ -23,12 +23,12 @@ public sealed class BatchResubmissionService
         await GlAdjustmentService.EnsureBatchAllowedAsync(cn, tx, batchId, allowedStoresCsv, ct);
 
         object before;
-        await using (var read = new SqlCommand("select PostingDate, BatchSubmitted, BatchTransmissionStatus from dbo.tblCashAndSalesBatches where BatchID = @b", cn, tx))
+        await using (var read = new SqlCommand("select PostingDate, BatchSubmitted, BatchSubmissionStatus from dbo.tblCashAndSalesBatches where BatchID = @b", cn, tx))
         {
             read.Parameters.Add("@b", System.Data.SqlDbType.Int).Value = batchId;
             await using var r = await read.ExecuteReaderAsync(ct);
             if (!await r.ReadAsync(ct)) throw new GlAdjustmentException("That batch does not exist.");
-            before = new { PostingDate = r["PostingDate"] as DateTime?, BatchSubmitted = r["BatchSubmitted"] as DateTime?, BatchTransmissionStatus = r["BatchTransmissionStatus"] is DBNull ? (int?)null : Convert.ToInt32(r["BatchTransmissionStatus"]) };
+            before = new { PostingDate = r["PostingDate"] as DateTime?, BatchSubmitted = r["BatchSubmitted"] as DateTime?, BatchSubmissionStatus = r["BatchSubmissionStatus"] is DBNull ? (int?)null : Convert.ToInt32(r["BatchSubmissionStatus"]) };
         }
 
         try
@@ -49,7 +49,7 @@ public sealed class BatchResubmissionService
         try
         {
             await SetupAudit.WriteAsync(cn, tx, actor, AuditArea, "tblCashAndSalesBatches", batchId.ToString(), "resubmit",
-                JsonSerializer.Serialize(before), JsonSerializer.Serialize(new { BatchSubmitted = "PostingDate", BatchTransmissionStatus = 4 }), ct);
+                JsonSerializer.Serialize(before), JsonSerializer.Serialize(new { BatchSubmitted = "PostingDate", BatchSubmissionStatus = 4 }), ct);
         }
         catch (SqlException ex) when (ex.Number is 208 or 229 or 230)
         {
