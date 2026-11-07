@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -21,6 +21,7 @@
     <EmbeddedResource Include="..\..\sql\002_client_drill_pair_type.sql" LogicalName="ClientScripts/002_client_drill_pair_type.sql" />
     <EmbeddedResource Include="..\..\sql\004_client_grant_procedure.sql" LogicalName="ClientScripts/004_client_grant_procedure.sql" />
     <EmbeddedResource Include="..\..\sql\007_client_admin_access.sql" LogicalName="ClientScripts/007_client_admin_access.sql" />
+    <EmbeddedResource Include="..\..\sql\010_client_batch_resubmission.sql" LogicalName="ClientScripts/010_client_batch_resubmission.sql" />
   </ItemGroup>
 
 </Project>

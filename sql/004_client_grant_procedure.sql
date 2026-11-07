@@ -33,6 +33,9 @@ begin
         insert @todo (Stmt) values (N'grant select, insert, update on dbo.tblDDReviewAdminAccess to ' + @q + N';');
     if object_id(N'dbo.tblDDReviewAdminAudit', N'U') is not null
         insert @todo (Stmt) values (N'grant select, insert on dbo.tblDDReviewAdminAudit to ' + @q + N';');
+    -- General Ledger Review > Request Batch Resubmission (sql/010).
+    if object_id(N'dbo.usp_DDReviewRequestBatchResubmission', N'P') is not null
+        insert @todo (Stmt) values (N'grant execute on object::dbo.usp_DDReviewRequestBatchResubmission to ' + @q + N';');
     -- insert @todo (Stmt) values (N'grant select on dbo.SomeTable to ' + @q + N';');
     -- =====================================================================================
 

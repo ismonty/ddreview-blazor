@@ -29,6 +29,7 @@ builder.Services.AddSingleton<ClientAccessService>();
 builder.Services.AddSingleton<GlService>();
 builder.Services.AddSingleton<GlTaxVarianceService>();
 builder.Services.AddSingleton<GlAdjustmentService>();
+builder.Services.AddSingleton<BatchResubmissionService>();
 builder.Services.AddSingleton<DDReview.Core.Gl.SubmissionReportService>();
 builder.Services.AddSingleton<DDReview.Core.Updater.ClientUpdater>();
 builder.Services.AddSingleton<DDReview.Core.Sales.SalesService>();

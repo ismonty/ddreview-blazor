@@ -171,7 +171,7 @@ public class SetupMiscTests
 
     [Fact] public void Access_script_creates_both_tables_with_a_live_grant_index_and_is_registered_last()
     {
-        Assert.Equal(["002", "004", "007"], ClientScripts.All.Select(s => s.Id));
+        Assert.Equal(["002", "004", "007", "010"], ClientScripts.All.Select(s => s.Id));
         var sql = ClientScripts.All.Single(s => s.Id == "007").ReadSql();
         Assert.Contains("create table dbo.tblDDReviewAdminAccess", sql);
         Assert.Contains("create table dbo.tblDDReviewAdminAudit", sql);
@@ -222,5 +222,22 @@ public class GoogleChallengeTests
     {
         var url = Base + "&login_prompt=1";
         Assert.EndsWith("&prompt=select_account", DDReview.Core.Security.GoogleChallenge.WithDefaultPrompt(url));
+    }
+}
+
+public class BatchResubmissionScriptTests
+{
+    [Fact] public void Script_010_sets_the_submitted_date_to_the_posting_date_and_status_4_for_one_batch()
+    {
+        var sql = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "010").ReadSql();
+        Assert.Contains("BatchSubmitted = PostingDate", sql);
+        Assert.Contains("BatchTransmissionStatus = 4", sql);
+        Assert.Contains("where BatchID = @BatchID", sql);
+    }
+
+    [Fact] public void Grant_procedure_gives_the_web_login_execute_on_the_resubmission_procedure()
+    {
+        var sql = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "004").ReadSql();
+        Assert.Contains("grant execute on object::dbo.usp_DDReviewRequestBatchResubmission", sql);
     }
 }
