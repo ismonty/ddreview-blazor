@@ -15,7 +15,7 @@
         <AntiforgeryToken />
         <label>User name or email<input name="userName" autocomplete="username" maxlength="250" required autofocus /></label>
         <label>Password<input name="password" type="password" autocomplete="current-password" maxlength="200" required /></label>
-        <button type="submit">Sign in</button>
+        <button type="submit">Sign In</button>
     </form>
     @if (GoogleStatus.Enabled)
     {
@@ -23,7 +23,7 @@
             <AntiforgeryToken />
             <input type="hidden" name="mode" value="signin" />
             <p class="muted">or</p>
-            <button type="submit" class="secondary">Sign in with Google</button>
+            <button type="submit" class="secondary">Sign In with Google</button>
         </form>
         <p class="muted small google-out">Shared computer? <a href="https://accounts.google.com/Logout" target="_blank" rel="noopener" title="Signs every Google account out of this browser, so the next Google sign-in asks for the email and password">Sign Out of Google</a></p>
     }

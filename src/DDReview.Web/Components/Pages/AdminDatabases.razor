@@ -12,7 +12,7 @@
 @inject NavigationManager Nav
 
 <PageTitle>MontySoft DD Review™</PageTitle>
-<h1>Databases and friendly names</h1>
+<h1>Databases and Friendly Names</h1>
 
 @if (!loaded) { <p class="muted">Loading…</p> }
 else if (denial == CentralDenial.NotGoogle || denial == CentralDenial.NeedsVerification)
@@ -71,7 +71,7 @@ else
         @if (logins.Count >= 200) { <p class="muted small">Showing the first 200. Type part of a name to narrow the list.</p> }
     }
 
-    <h2>Top-level administrators</h2>
+    <h2>Top-Level Administrators</h2>
     <p>They can open any login (with that login's own access) and edit friendly names. Add the Google email address; it is tied to the person's Google account the first time they sign in with it.</p>
     @if (admins is not null)
     {

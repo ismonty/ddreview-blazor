@@ -6,7 +6,7 @@
 @inject SetupAccessService Access
 
 <PageTitle>MontySoft DD Review™</PageTitle>
-<h1>Who may use Setup</h1>
+<h1>Who May Use Setup</h1>
 
 <SetupGate RequireManager="true" Context="s">
     <p>Administrators can always use every part of Setup. For everyone else, choose which parts they may use. They still have to confirm with Google each time, like you.</p>
@@ -41,7 +41,7 @@
             </tbody>
         </table>
 
-        <h2>Recent changes</h2>
+        <h2>Recent Changes</h2>
         @if (audit is null || audit.Count == 0) { <p class="muted">Nothing yet.</p> }
         else
         {

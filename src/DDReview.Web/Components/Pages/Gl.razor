@@ -13,7 +13,7 @@
 @using DDReview.Web.Components.Home
 
 <PageTitle>MontySoft DD Review™</PageTitle>
-<h1>General ledger review</h1>
+<h1>General Ledger Review</h1>
 
 @if (ctx is null) { <p>Loading…</p> }
 else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
@@ -29,6 +29,7 @@ else
                 <option value="detail">Detail with balance check</option>
                 <option value="totals">Totals by account and reference</option>
                 <option value="both">Totals at the top, detail below</option>
+                <option value="batches">Batch subtotals, with submission reports</option>
             </select>
         </label>
         <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
@@ -38,9 +39,9 @@ else
             <button type="button" @onclick="PostToQuickBooksAsync" disabled="@(!GlPostingGate.HasData(report, busy))"
                     title="Opens the QuickBooks poster on this computer with the stores, dates and choice of the report shown below. Needs a report on the page. Nothing is posted until you Preview and Post there.">Post to QuickBooks…</button>
             <button type="button" @onclick="DownloadLaunchFileAsync" disabled="@(!GlPostingGate.HasData(report, busy))"
-                    title="For when the button above does nothing (a browser or office setting blocks it): saves a small file; double-click it to open the poster.">Download launch file</button>
+                    title="For when the button above does nothing (a browser or office setting blocks it): saves a small file; double-click it to open the poster.">Download Launch File</button>
             <button type="button" @onclick="DownloadPackageAsync" disabled="@(!GlPostingGate.HasData(report, busy) || packageBusy)"
-                    title="Saves everything the poster needs, signed by this site, in one file. Double-click it to open the poster: it then needs no database connection. Good for one day.">@(packageBusy ? "Preparing…" : "Download package")</button>
+                    title="Saves everything the poster needs, signed by this site, in one file. Double-click it to open the poster: it then needs no database connection. Good for one day.">@(packageBusy ? "Preparing…" : "Download Package")</button>
         }
     </EditForm>
 
@@ -58,9 +59,16 @@ else
         }
         @if (report.OutOfBalance.Any())
         {
-            <h2>Batches out of balance</h2>
-            <table><thead><tr><th>Batch</th><th>Date</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Difference</th></tr></thead>
-            <tbody>@foreach (var b in report.OutOfBalance) {<tr><td>@b.BatchId</td><td>@b.PostingDate.ToString("d")</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td class="n">@b.Difference.ToString("N2")</td></tr>}</tbody></table>
+            <h2>Batches Out of Balance</h2>
+            <table><thead><tr><th>Batch</th><th>Date</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Difference</th><th></th></tr></thead>
+            <tbody>@foreach (var b in report.OutOfBalance) {<tr><td>@b.BatchId</td><td>@b.PostingDate.ToString("d")</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td class="n">@b.Difference.ToString("N2")</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody></table>
+        }
+        @if (showBatches)
+        {
+            <h2>Batch Subtotals</h2>
+            <table><thead><tr><th>Batch</th><th>Date</th><th>Store</th><th class="n">Debit</th><th class="n">Credit</th><th>Balance</th><th></th></tr></thead>
+            <tbody>@foreach (var b in report.Batches) {<tr class="@(b.HasSuspense ? "suspense" : null)"><td>@b.BatchId</td><td>@b.PostingDate.ToString("d")</td><td>@(batchStores.GetValueOrDefault(b.BatchId))</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td>@BalanceNote(b.Debit, b.Credit)</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody>
+            <tbody class="gl-grand"><tr class="total"><td colspan="3">Grand total @BalanceNote(report.TotalDebit, report.TotalCredit)</td><td class="n">@report.TotalDebit.ToString("N2")</td><td class="n">@report.TotalCredit.ToString("N2")</td><td colspan="2"></td></tr></tbody></table>
         }
     }
     @if (totalLines is not null)
@@ -82,7 +90,7 @@ else
             var dd = day.Sum(l => l.Debit); var dc = day.Sum(l => l.Credit);
             <tbody class="gl-day">
                 @foreach (var l in day) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}
-                <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc) <button type="button" class="cell sub-link" @onclick="() => ShowDayAsync(day.Key)">Submission report</button></td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
+                <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc) <button type="button" class="cell sub-link" @onclick="() => ShowDayAsync(day.Key)">Submission Report</button></td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
                 <tr class="gl-gap"><td colspan="7"></td></tr>
             </tbody>
         }
@@ -139,7 +147,7 @@ else
                             </button>
                         }
                     </div>
-                    @if (subs.Count > subsShown) { <p><button type="button" @onclick="() => subsShown += 48">Show more (@(subs.Count - subsShown) left)</button></p> }
+                    @if (subs.Count > subsShown) { <p><button type="button" @onclick="() => subsShown += 48">Show More (@(subs.Count - subsShown) left)</button></p> }
                     @if (subs.Count >= SubmissionReportService.MaxListed) { <p class="muted">Showing the first @SubmissionReportService.MaxListed reports; narrow the stores or dates to see the rest.</p> }
                 }
             </div>
@@ -159,6 +167,8 @@ else
     private readonly HashSet<int> selected = [];
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
     private string mode = "detail";
+    private bool showBatches;
+    private Dictionary<int, string> batchStores = new();
     private bool busy;
     private IReadOnlyList<GlTotalLine>? totalLines;
     private int arFlag = 3;
@@ -283,7 +293,7 @@ else
     private async Task RunAsync()
     {
         if (ctx is null || busy) return;
-        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false;
+        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false;
         if (selected.Count == 0) { error = "Pick at least one store."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
         busy = true;
@@ -298,11 +308,18 @@ else
                 totalLines = GlTotals.Group(lines);
                 report = new GlBalanceReport(totalLines.Sum(l => l.Debit), totalLines.Sum(l => l.Credit), []);
             }
-            else if (mode is "detail" or "both")
+            else if (mode is "detail" or "both" or "batches")
             {
-                detailLines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
-                report = GlBalance.Compute(detailLines);
-                if (mode == "both") totalLines = GlTotals.Group(detailLines);
+                var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
+                report = GlBalance.Compute(lines);
+                if (mode == "batches")
+                {
+                    showBatches = true;
+                    batchStores = lines.Where(l => l.StoreName is not null).GroupBy(l => l.BatchId)
+                        .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(l => (l.StoreNumber is int n ? n + " – " : "") + l.StoreName).Distinct()));
+                }
+                else detailLines = lines;
+                if (mode == "both") totalLines = GlTotals.Group(lines);
             }
             else
             {
@@ -325,13 +342,22 @@ else
     private Task ShowDayAsync(DateTime day) =>
         OpenSubsAsync(DateOnly.FromDateTime(day), DateOnly.FromDateTime(day), "Submission reports, " + day.ToString("dddd, MMMM d, yyyy"));
 
-    private async Task OpenSubsAsync(DateOnly from, DateOnly to, string title)
+    /// <summary>The submission report of one batch: that day's reports, narrowed to the batch.</summary>
+    private Task ShowBatchAsync(BatchBalance b) =>
+        OpenSubsAsync(DateOnly.FromDateTime(b.PostingDate), DateOnly.FromDateTime(b.PostingDate), "Submission Report, Batch " + b.BatchId + ", " + b.PostingDate.ToString("ddd MMM d, yyyy"), b.BatchId);
+
+    private async Task OpenSubsAsync(DateOnly from, DateOnly to, string title, int? batchId = null)
     {
         if (ctx is null || lastRun is null || subsBusy) return;
         subsBusy = true; subsError = null; subs = null; subsViewing = null; subsShown = 48; subsTitle = title; subsOpen = true;
         try
         {
             subs = await SubmissionSvc.ListAsync(ctx.ClientConnectionString, lastRun.Stores, SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit), from, to);
+            if (batchId is int only)
+            {
+                subs = subs.Where(x => x.BatchId == only).ToList();
+                if (subs.Count == 0) subsError = "There is no submission report for batch " + only + " (days with no sales and no receipts are left out).";
+            }
             if (subs.Count == 1) subsViewing = 0;   // one report for that day: open it straight away
         }
         catch (Microsoft.Data.SqlClient.SqlException) { subsError = "Submission reports are not available in this database."; }
