@@ -294,3 +294,36 @@ public class AdjustSeedTests
         Assert.Equal(7, s.BatchId); Assert.Equal("1000 Cash", s.Account); Assert.Equal((short)-1, s.DebitCreditFlag);
     }
 }
+
+public class GlFinancialsTests
+{
+    static DDReview.Core.Gl.GlLine L(string acct, string? type, decimal d, decimal c) =>
+        new(1, new DateTime(2026, 7, 1), acct, null, null, null, d, c, null, null, false, null, null, null, null, false, null, false, null, null, type, null, null, null);
+
+    [Theory]
+    [InlineData("Bank", DDReview.Core.Gl.GlSection.BalanceSheet)]
+    [InlineData("Other Current Asset", DDReview.Core.Gl.GlSection.BalanceSheet)]
+    [InlineData("Credit Card", DDReview.Core.Gl.GlSection.BalanceSheet)]
+    [InlineData("Accounts Receivable (A/R)", DDReview.Core.Gl.GlSection.BalanceSheet)]
+    [InlineData("OtherCurrentLiability", DDReview.Core.Gl.GlSection.BalanceSheet)]
+    [InlineData("Equity", DDReview.Core.Gl.GlSection.BalanceSheet)]
+    [InlineData("Income", DDReview.Core.Gl.GlSection.ProfitAndLoss)]
+    [InlineData("Cost of Goods Sold", DDReview.Core.Gl.GlSection.ProfitAndLoss)]
+    [InlineData("Expense", DDReview.Core.Gl.GlSection.ProfitAndLoss)]
+    [InlineData("Other Income", DDReview.Core.Gl.GlSection.ProfitAndLoss)]
+    [InlineData("0", DDReview.Core.Gl.GlSection.Unclassified)]
+    [InlineData(null, DDReview.Core.Gl.GlSection.Unclassified)]
+    public void Types_file_under_the_right_statement(string? type, DDReview.Core.Gl.GlSection expected) =>
+        Assert.Equal(expected, DDReview.Core.Gl.GlFinancialsBuilder.SectionOf(type));
+
+    [Fact] public void Accounts_are_added_up_and_split_into_statements_with_a_delta_and_net_income()
+    {
+        var f = DDReview.Core.Gl.GlFinancialsBuilder.Build([
+            L("Bank Deposit", "Bank", 1000m, 0), L("bank deposit ", "Bank", 500m, 0), L("Food Sales", "Income", 0, 1200m),
+            L("Sales Tax Payable", "Other Current Liability", 0, 100m), L("Cash Over/Short", "Expense", 20m, 0), L("Mystery", null, 0, 220m)]);
+        Assert.Equal(2, f.BalanceSheet.Count);
+        Assert.Equal(1500m, f.BalanceSheetDebit); Assert.Equal(100m, f.BalanceSheetCredit); Assert.Equal(1400m, f.BalanceSheetDelta);
+        Assert.Equal(1180m, f.NetIncome);                       // 1200 income less 20 expense
+        Assert.Single(f.Unclassified); Assert.Equal(-220m, f.UnclassifiedNet);
+    }
+}
