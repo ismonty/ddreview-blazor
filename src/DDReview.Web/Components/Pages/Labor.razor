@@ -21,7 +21,7 @@ else
     <EditForm Model="this" OnSubmit="RunAsync" FormName="labor" class="filters">
         <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
         <MultiSelect Caption="Group by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<LaborDimensions>(t.Key), t.On)" />
-        <label>From <input type="date" @bind="start" /></label>
+        <label>From <input type="date" @bind="start" @bind:after="StartChanged" /></label>
         <label>To <input type="date" @bind="end" /></label>
         <label>Show
             <select @bind="mode">
@@ -98,6 +98,8 @@ else
 }
 
 @code {
+    // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
+    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
     private string FilterLabel(string k) { var n = FilterText.Names(result, Cat, k); return n.Length == 0 ? k : k + ": " + n; }
 
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
