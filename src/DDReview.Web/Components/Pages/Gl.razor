@@ -175,7 +175,7 @@ else
     @if (adjust is { } ak && lastRun is not null && ctx is not null)
     {
         <GlAdjustPanel Kind="ak" ConnectionString="@ctx.ClientConnectionString" Request="@(new GlRequest(lastRun.Stores, lastRun.Start, lastRun.End, lastRun.ArFlag))"
-                       Actor="@AdjustActor()" Seed="@adjustSeed" AllowedStores="@SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit)" OnClosed="AdjustClosedAsync" />
+                       Actor="@AdjustActor()" Seed="@adjustSeed" BatchDifferences="@BatchDifferences()" AllowedStores="@SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit)" OnClosed="AdjustClosedAsync" />
     }
     @if (subsOpen)
     {
@@ -493,6 +493,10 @@ else
         adjustSeed = new AdjustSeed(l.BatchId, l.Account, l.DistReference, l.AccountClass, l.DebitCreditFlag ?? 0);
         adjust = AdjustKind.Gl;
     }
+
+    /// <summary>How far each batch of the last run was off (debits less credits), so Adjust GL can offer the number that puts it right.</summary>
+    private IReadOnlyDictionary<int, decimal> BatchDifferences() =>
+        report?.Batches.ToDictionary(b => b.BatchId, b => b.Debit - b.Credit) ?? new Dictionary<int, decimal>();
 
     private SetupActor AdjustActor() => new(ctx!.WebUserId, ctx.Access.ClientWebUserId, ctx.UserName, ctx.Access.Administrator, false, null, null, null);
 
