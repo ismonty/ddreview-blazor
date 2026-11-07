@@ -14,6 +14,12 @@ public static class DateRules
 
     public static DateOnly EndFor(DateOnly from) => DateOnly.FromDateTime(EndFor(from.ToDateTime(TimeOnly.MinValue)));
 
+    /// <summary>The From date after the To date was changed: when the new end falls before the start, the start becomes that end date (a one-day range).</summary>
+    public static DateTime StartFor(DateTime from, DateTime end) =>
+        end.Year < 1900 || end.Year > 9000 || from.Year < 1900 ? from : (end < from ? end : from);
+
+    public static DateOnly StartFor(DateOnly from, DateOnly end) => DateOnly.FromDateTime(StartFor(from.ToDateTime(TimeOnly.MinValue), end.ToDateTime(TimeOnly.MinValue)));
+
     /// <summary>The usual distance of a compare date from the start date: the same weekday a year earlier.</summary>
     public const int DefaultCompareOffsetDays = 364;
 
