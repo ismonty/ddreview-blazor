@@ -58,6 +58,10 @@ public static class ClientScripts
                                when charindex('-- PATCH: an Adjust GL line carries its own QuickBooks type', object_definition(object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelect', 'TF'))) > 0 then 1
                                else 0 end as int) as Present,
                      cast(1 as int) as Usable"),
+        // Adds a NEW function beside the old one (the old one stays as the fallback); the app calls the new one when it is there.
+        new("012", "General Ledger: set-based function dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor (no cursors; the old function is untouched)", "ClientScripts/012_client_gl_blazor_function.sql",
+            @"select cast(case when object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor', 'IF') is not null then 1 else 0 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 

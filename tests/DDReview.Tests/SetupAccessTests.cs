@@ -171,7 +171,7 @@ public class SetupMiscTests
 
     [Fact] public void Access_script_creates_both_tables_with_a_live_grant_index_and_is_registered_last()
     {
-        Assert.Equal(["002", "004", "007", "010", "011"], ClientScripts.All.Select(s => s.Id));
+        Assert.Equal(["002", "004", "007", "010", "011", "012"], ClientScripts.All.Select(s => s.Id));
         var sql = ClientScripts.All.Single(s => s.Id == "007").ReadSql();
         Assert.Contains("create table dbo.tblDDReviewAdminAccess", sql);
         Assert.Contains("create table dbo.tblDDReviewAdminAudit", sql);
@@ -251,5 +251,26 @@ public class AdjustTypeScriptTests
         Assert.Contains("DefaultQuickBooksType = adj.DefaultAccountType", sql);
         Assert.Contains("nothing was changed", sql);
         Assert.Contains("Already applied", sql);
+    }
+}
+
+public class GlBlazorFunctionTests
+{
+    [Fact] public void Detail_query_prefers_the_set_based_function_in_legacy_order_and_keeps_the_old_one_as_fallback()
+    {
+        var q = DDReview.Core.Gl.GlService.DetailSql;
+        Assert.Contains("fn_CashAndSalesGLandARMultiStoreSelectBlazor(@stores", q);
+        Assert.Contains("order by RowSeq option (recompile)", q);
+        Assert.Contains("dbo.fn_CashAndSalesGLandARMultiStoreSelect(@stores", q);
+    }
+
+    [Fact] public void Script_012_is_one_inline_function_with_no_cursors_and_no_table_variables()
+    {
+        var sql = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "012").ReadSql();
+        Assert.Contains("RETURNS TABLE", sql);
+        Assert.DoesNotContain("declare cur", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("cursor", sql.Replace("no cursors", ""), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("@table", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("RowSeq", sql);
     }
 }

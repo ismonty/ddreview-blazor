@@ -23,6 +23,7 @@
     <EmbeddedResource Include="..\..\sql\007_client_admin_access.sql" LogicalName="ClientScripts/007_client_admin_access.sql" />
     <EmbeddedResource Include="..\..\sql\010_client_batch_resubmission.sql" LogicalName="ClientScripts/010_client_batch_resubmission.sql" />
     <EmbeddedResource Include="..\..\sql\011_client_adjust_gl_quickbooks_type.sql" LogicalName="ClientScripts/011_client_adjust_gl_quickbooks_type.sql" />
+    <EmbeddedResource Include="..\..\sql\012_client_gl_blazor_function.sql" LogicalName="ClientScripts/012_client_gl_blazor_function.sql" />
   </ItemGroup>
 
 </Project>

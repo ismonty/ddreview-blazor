@@ -72,9 +72,10 @@ else
         @if (showBatches)
         {
             <h2>Batch Subtotals</h2>
+            @TopLine("Grand Total", report.TotalDebit, report.TotalCredit)
             <table><thead><tr><th>Batch</th><th>Date</th><th>Store</th><th class="n">Debit</th><th class="n">Credit</th><th>Balance</th><th></th></tr></thead>
             <tbody>@foreach (var b in report.Batches) {<tr class="@(b.HasSuspense ? "suspense" : null)"><td><button type="button" class="cell sub-link" title="Show only this batch's ledger lines" @onclick="() => FocusBatch(b.BatchId)">@b.BatchId</button></td><td>@b.PostingDate.ToString("d")</td><td>@(batchStores.GetValueOrDefault(b.BatchId))</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td>@BalanceNote(b.Debit, b.Credit)</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody>
-            <tbody class="gl-grand"><tr class="total"><td colspan="3">Grand total @BalanceNote(report.TotalDebit, report.TotalCredit)</td><td class="n">@report.TotalDebit.ToString("N2")</td><td class="n">@report.TotalCredit.ToString("N2")</td><td colspan="2"></td></tr></tbody></table>
+            <tbody class="gl-grand"><tr class="total"><td colspan="3">Grand Total @BalanceNote(report.TotalDebit, report.TotalCredit)@QueryNote()</td><td class="n">@report.TotalDebit.ToString("N2")</td><td class="n">@report.TotalCredit.ToString("N2")</td><td colspan="2"></td></tr></tbody></table>
         }
     }
     @if (taxChecking) { <p class="muted" role="status">Checking tax rates…</p> }
@@ -98,9 +99,10 @@ else
         var td = totalLines.Sum(l => l.Debit); var tc = totalLines.Sum(l => l.Credit);
         <h2>Totals, @start.ToString("d") – @end.ToString("d")</h2>
         <p class="muted">Date and batch ignored: lines with the same account, A/R account and reference are added together.</p>
+        @TopLine("Total", td, tc)
         <table><thead><tr><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         <tbody>@foreach (var l in totalLines) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.Account</td><td>@l.ARAccount</td><td>@l.Reference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
-        <tbody class="gl-grand"><tr class="total"><td colspan="3">Total @start.ToString("d") – @end.ToString("d") @BalanceNote(td, tc)</td><td class="n">@td.ToString("N2")</td><td class="n">@tc.ToString("N2")</td></tr></tbody></table>
+        <tbody class="gl-grand"><tr class="total"><td colspan="3">Total @start.ToString("d") – @end.ToString("d") @BalanceNote(td, tc)@QueryNote()</td><td class="n">@td.ToString("N2")</td><td class="n">@tc.ToString("N2")</td></tr></tbody></table>
     }
     @if (financials is { } fin)
     {
@@ -132,6 +134,7 @@ else
             }
             @if (resubmitMessage is not null) { <p class="@(resubmitFailed ? "error" : "muted")" role="status">@resubmitMessage</p> }
         }
+        @TopLine(focusBatch is int ? "Batch Subtotal" : "Grand Total", shown.Sum(l => l.Debit), shown.Sum(l => l.Credit), focusBatch is not int)
         <table><thead><tr><th>Batch</th><th>Date</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         @{ var shown = detailLines.Where(l => l.Debit != 0 || l.Credit != 0).ToList(); }
         @foreach (var day in shown.GroupBy(l => l.PostingDate.Date).OrderBy(g => g.Key))
@@ -155,16 +158,18 @@ else
         }
         @{ var gd = shown.Sum(l => l.Debit); var gc = shown.Sum(l => l.Credit); }
         <tbody class="gl-grand">
-            <tr class="total"><td colspan="5">@(focusBatch is int ? "Batch subtotal" : "Grand total") @BalanceNote(gd, gc)</td><td class="n">@gd.ToString("N2")</td><td class="n">@gc.ToString("N2")</td></tr>
+            <tr class="total"><td colspan="5">@(focusBatch is int ? "Batch Subtotal" : "Grand Total") @BalanceNote(gd, gc)@(focusBatch is int ? null : QueryNote())</td><td class="n">@gd.ToString("N2")</td><td class="n">@gc.ToString("N2")</td></tr>
         </tbody></table>
     }
     @if (summaryLines is not null)
     {
         <h2>@summaryLines.Count(l => l.Debit != 0 || l.Credit != 0) rows</h2>
+        @{ var top = summaryLines.Where(l => l.TotalLine == 0).ToList(); }
+        @TopLine("Grand Total", top.Sum(l => l.Debit), top.Sum(l => l.Credit))
         <table><thead><tr><th>Store</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@StoreNameOf(l.StoreId, l.StoreNumber, l.StoreName)</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
         @{ var sr = summaryLines.Where(l => l.TotalLine == 0).ToList(); var sd = sr.Sum(l => l.Debit); var sc = sr.Sum(l => l.Credit); }
-        <tbody class="gl-grand"><tr class="total"><td colspan="4">Grand total @BalanceNote(sd, sc)</td><td class="n">@sd.ToString("N2")</td><td class="n">@sc.ToString("N2")</td></tr></tbody></table>
+        <tbody class="gl-grand"><tr class="total"><td colspan="4">Grand Total @BalanceNote(sd, sc)@QueryNote()</td><td class="n">@sd.ToString("N2")</td><td class="n">@sc.ToString("N2")</td></tr></tbody></table>
     }
     @if (lastRun is not null)
     {
@@ -237,8 +242,15 @@ else
     // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
     private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
     private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
+    private TimeSpan? queryTime;
+    /// <summary>"· 1.42 s" after the Grand Total label: how long the database took to answer (the query only, not the page drawing).</summary>
+    private MarkupString QueryNote() => queryTime is TimeSpan t ? new MarkupString($" <span class=\"query-time\">· Query {(t.TotalSeconds < 10 ? t.TotalSeconds.ToString("0.00") : t.TotalSeconds.ToString("0.0"))} s</span>") : default;
+
+    /// <summary>The same Grand Total / Total line as at the bottom, shown above the lines too: label, balanced or not, both sums, query time.</summary>
+    private RenderFragment TopLine(string label, decimal debit, decimal credit, bool withTime = true) => @<p class="gl-topline @(debit == credit ? null : "bad")"><strong>@label</strong> @BalanceNote(debit, credit) · Debit @debit.ToString("N2") · Credit @credit.ToString("N2")@(withTime ? QueryNote() : default)</p>;
+
     private static string BalanceNote(decimal debit, decimal credit) =>
-        debit == credit ? "(balanced)" : "(OUT OF BALANCE by " + (debit - credit).ToString("N2") + ")";
+        debit == credit ? "(Balanced)" : "(Out Of Balance By " + (debit - credit).ToString("N2") + ")";
 
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
 
@@ -393,7 +405,7 @@ else
     private async Task RunAsync()
     {
         if (ctx is null || busy) return;
-        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; financials = null; batchStores = new(); focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
+        error = null; queryTime = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; financials = null; batchStores = new(); focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
         if (selected.Count == 0) { error = "Pick at least one store."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
         busy = true;
@@ -402,15 +414,16 @@ else
             // Only stores this user is authorized for can be sent to SQL: selected ids are re-checked against the access list.
             var ids = selected.Where(stores.Select(s => s.StoreId).ToHashSet().Contains).OrderBy(x => x);
             var req = new GlRequest(string.Join(",", ids), DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), arFlag);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             if (mode == "totals")
             {
-                var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
+                var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req); queryTime = sw.Elapsed;
                 totalLines = GlTotals.Group(lines);
                 report = new GlBalanceReport(totalLines.Sum(l => l.Debit), totalLines.Sum(l => l.Credit), []);
             }
             else if (mode is "detail" or "both" or "batches" or "financials")
             {
-                var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
+                var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req); queryTime = sw.Elapsed;
                 report = GlBalance.Compute(lines);
                 keptLines = lines; runMode = mode;
                 batchStores = lines.Where(l => l.StoreName is not null).GroupBy(l => l.BatchId)
@@ -422,7 +435,7 @@ else
             }
             else
             {
-                summaryLines = await GlSvc.GetSummaryAsync(ctx.ClientConnectionString, req);
+                summaryLines = await GlSvc.GetSummaryAsync(ctx.ClientConnectionString, req); queryTime = sw.Elapsed;
                 var rows = summaryLines.Where(l => l.TotalLine == 0).ToList();
                 var d = rows.Sum(l => l.Debit); var c = rows.Sum(l => l.Credit);
                 report = new GlBalanceReport(d, c, []);
