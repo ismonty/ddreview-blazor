@@ -3,7 +3,7 @@
 @using DDReview.Core.Home
 <div class="datebar">
     <label>Starting Date <input type="date" @bind="start" @bind:after="StartChanged" /></label>
-    <label>Ending Date <input type="date" @bind="end" /></label>
+    <label>Ending Date <input type="date" @bind="end" @bind:after="EndChanged" /></label>
     @if (ShowCompare) { <label>Compare Date <input type="date" @bind="compare" @bind:after="CompareChanged" /></label> }
     @if (ShowScope)
     {
@@ -42,6 +42,11 @@
     private void StartChanged()
     {
         end = DDReview.Core.DateRules.EndFor(start);                    // the 1st of a month: the month's last day; otherwise six days later
+        compare = DDReview.Core.DateRules.CompareFor(start, compareOffset);
+    }
+    private void EndChanged()
+    {
+        start = DDReview.Core.DateRules.StartFor(start, end);           // an end before the start pulls the start back to it
         compare = DDReview.Core.DateRules.CompareFor(start, compareOffset);
     }
     private void CompareChanged() { if (compare.Year >= 1900 && start.Year >= 1900) compareOffset = (int)(start - compare).TotalDays; }

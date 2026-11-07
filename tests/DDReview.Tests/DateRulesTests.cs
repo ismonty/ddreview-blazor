@@ -28,3 +28,18 @@ public class DateRulesTests
     [Fact] public void DateOnly_overload_matches() =>
         Assert.Equal(new DateOnly(2026, 11, 30), DateRules.EndFor(new DateOnly(2026, 11, 1)));
 }
+
+public class DateRulesStartForTests
+{
+    [Fact] public void An_end_before_the_start_pulls_the_start_back_to_the_end() =>
+        Assert.Equal(new DateTime(2026, 7, 3), DDReview.Core.DateRules.StartFor(new DateTime(2026, 7, 10), new DateTime(2026, 7, 3)));
+    [Fact] public void An_end_on_or_after_the_start_leaves_the_start_alone()
+    {
+        Assert.Equal(new DateTime(2026, 7, 10), DDReview.Core.DateRules.StartFor(new DateTime(2026, 7, 10), new DateTime(2026, 7, 10)));
+        Assert.Equal(new DateTime(2026, 7, 10), DDReview.Core.DateRules.StartFor(new DateTime(2026, 7, 10), new DateTime(2026, 7, 31)));
+    }
+    [Fact] public void A_cleared_date_changes_nothing() =>
+        Assert.Equal(new DateTime(2026, 7, 10), DDReview.Core.DateRules.StartFor(new DateTime(2026, 7, 10), default));
+    [Fact] public void DateOnly_version_matches() =>
+        Assert.Equal(new DateOnly(2026, 6, 30), DDReview.Core.DateRules.StartFor(new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 30)));
+}
