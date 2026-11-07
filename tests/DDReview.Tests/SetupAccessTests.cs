@@ -171,7 +171,7 @@ public class SetupMiscTests
 
     [Fact] public void Access_script_creates_both_tables_with_a_live_grant_index_and_is_registered_last()
     {
-        Assert.Equal(["002", "004", "007", "010"], ClientScripts.All.Select(s => s.Id));
+        Assert.Equal(["002", "004", "007", "010", "011"], ClientScripts.All.Select(s => s.Id));
         var sql = ClientScripts.All.Single(s => s.Id == "007").ReadSql();
         Assert.Contains("create table dbo.tblDDReviewAdminAccess", sql);
         Assert.Contains("create table dbo.tblDDReviewAdminAudit", sql);
@@ -239,5 +239,17 @@ public class BatchResubmissionScriptTests
     {
         var sql = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "004").ReadSql();
         Assert.Contains("grant execute on object::dbo.usp_DDReviewRequestBatchResubmission", sql);
+    }
+}
+
+public class AdjustTypeScriptTests
+{
+    [Fact] public void Script_011_patches_the_function_text_in_place_and_only_when_the_place_is_found_once()
+    {
+        var sql = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "011").ReadSql();
+        Assert.Contains("object_definition(@fnId)", sql);
+        Assert.Contains("DefaultQuickBooksType = adj.DefaultAccountType", sql);
+        Assert.Contains("nothing was changed", sql);
+        Assert.Contains("Already applied", sql);
     }
 }

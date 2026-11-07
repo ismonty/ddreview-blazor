@@ -4,7 +4,7 @@ namespace DDReview.Core.Updater;
 
 /// <summary>
 /// One change DD Review needs in a CLIENT database. The script itself is a file in /sql (embedded here, so there is one copy),
-/// and <see cref="CheckSql"/> says whether it is already in place. Scripts only ADD objects; nothing existing is altered.
+/// and <see cref="CheckSql"/> says whether it is already in place. Scripts add objects; nothing is removed. The one exception, 011, adds a step to an existing function.
 /// </summary>
 public sealed record ClientScript(string Id, string Title, string ResourceName, string CheckSql, string? GrantHint = null)
 {
@@ -50,6 +50,14 @@ public static class ClientScripts
             @"select cast(case when object_id('dbo.usp_DDReviewRequestBatchResubmission', 'P') is not null then 1 else 0 end as int) as Present,
                      cast(case when has_perms_by_name('dbo.usp_DDReviewRequestBatchResubmission', 'OBJECT', 'EXECUTE') = 1 then 1 else 0 end as int) as Usable",
             "exec dbo.usp_DDReviewGrantAccess @UserName = N'{user}', @Execute = 1;  "),
+        // The one script that AMENDS something that exists: it adds a block to this database's own copy of the GL function (see the script's header).
+        // A database without that function, or where its text cannot be read, counts as nothing to do.
+        new("011", "General Ledger: an Adjust GL line keeps its own QuickBooks type (adds one step to fn_CashAndSalesGLandARMultiStoreSelect)", "ClientScripts/011_client_adjust_gl_quickbooks_type.sql",
+            @"select cast(case when object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelect', 'TF') is null then 1
+                               when object_definition(object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelect', 'TF')) is null then 1
+                               when charindex('-- PATCH: an Adjust GL line carries its own QuickBooks type', object_definition(object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelect', 'TF'))) > 0 then 1
+                               else 0 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 
