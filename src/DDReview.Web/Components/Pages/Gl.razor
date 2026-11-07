@@ -136,7 +136,6 @@ else
         }
         @TopLine(focusBatch is int ? "Batch Subtotal" : "Grand Total", shown.Sum(l => l.Debit), shown.Sum(l => l.Credit), focusBatch is not int)
         <table><thead><tr><th>Batch</th><th>Date</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
-        @{ var shown = detailLines.Where(l => l.Debit != 0 || l.Credit != 0).ToList(); }
         @foreach (var day in shown.GroupBy(l => l.PostingDate.Date).OrderBy(g => g.Key))
         {
             var dd = day.Sum(l => l.Debit); var dc = day.Sum(l => l.Credit);
@@ -164,7 +163,6 @@ else
     @if (summaryLines is not null)
     {
         <h2>@summaryLines.Count(l => l.Debit != 0 || l.Credit != 0) rows</h2>
-        @{ var top = summaryLines.Where(l => l.TotalLine == 0).ToList(); }
         @TopLine("Grand Total", top.Sum(l => l.Debit), top.Sum(l => l.Credit))
         <table><thead><tr><th>Store</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@StoreNameOf(l.StoreId, l.StoreNumber, l.StoreName)</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
@@ -242,6 +240,11 @@ else
     // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
     private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
     private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
+    // The lines that carry an amount, worked out once per result (a code block inside the markup would not compile next to TopLine).
+    private IReadOnlyList<GlLine>? shownFor; private List<GlLine> shownCache = [];
+    private List<GlLine> shown { get { if (!ReferenceEquals(shownFor, detailLines)) { shownFor = detailLines; shownCache = (detailLines ?? []).Where(l => l.Debit != 0 || l.Credit != 0).ToList(); } return shownCache; } }
+    private IReadOnlyList<GlSummaryLine>? topFor; private List<GlSummaryLine> topCache = [];
+    private List<GlSummaryLine> top { get { if (!ReferenceEquals(topFor, summaryLines)) { topFor = summaryLines; topCache = (summaryLines ?? []).Where(l => l.TotalLine == 0).ToList(); } return topCache; } }
     private TimeSpan? queryTime;
     /// <summary>"· 1.42 s" after the Grand Total label: how long the database took to answer (the query only, not the page drawing).</summary>
     private MarkupString QueryNote() => queryTime is TimeSpan t ? new MarkupString($" <span class=\"query-time\">· Query {(t.TotalSeconds < 10 ? t.TotalSeconds.ToString("0.00") : t.TotalSeconds.ToString("0.0"))} s</span>") : default;
