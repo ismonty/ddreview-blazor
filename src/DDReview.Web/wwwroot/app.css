@@ -263,3 +263,11 @@ table.setup input[type=text], table.setup input[type=date], table.setup select {
 .adj-edit input, .adj-edit select { max-width: 14rem; }
 .adj-acct { cursor: pointer; }
 tr.picked td { background: #fff7d6; }
+/* Adjust Sales / Adjust GL: each adjustment is a block of labelled fields that wraps, so the window never runs wider than the screen. */
+table.adj, table.adj tbody { display: block; width: 100%; }
+table.adj thead { display: none; }
+table.adj tr { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-end; border: 1px solid var(--edge, #ccc); border-radius: 6px; padding: .5rem .6rem; margin-bottom: .6rem; }
+table.adj td { display: block; padding: 0; border: 0; }
+table.adj td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--muted, #666); }
+table.adj td.n { text-align: left; }
+.adj-edit input, .adj-edit select { max-width: 100%; }
