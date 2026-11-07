@@ -5,7 +5,12 @@ namespace DDReview.Core.Admin;
 /// <summary>The audit trail: every change made through the Setup pages writes one row, inside the same transaction as the change.</summary>
 public static class SetupAudit
 {
-    public static async Task WriteAsync(SqlConnection cn, SqlTransaction? tx, SetupActor actor, SetupArea area, string table, string? key,
+    public static Task WriteAsync(SqlConnection cn, SqlTransaction? tx, SetupActor actor, SetupArea area, string table, string? key,
+        string action, string? oldJson, string? newJson, CancellationToken ct = default) =>
+        WriteAsync(cn, tx, actor, area.ToString(), table, key, action, oldJson, newJson, ct);
+
+    /// <summary>For changes that are not Setup pages (the General Ledger Review's adjustments): the area is a plain label.</summary>
+    public static async Task WriteAsync(SqlConnection cn, SqlTransaction? tx, SetupActor actor, string area, string table, string? key,
         string action, string? oldJson, string? newJson, CancellationToken ct = default)
     {
         await using var cmd = new SqlCommand(@"
@@ -15,7 +20,7 @@ values (@c, @w, @u, @e, @a, @t, @k, @x, @o, @n, @ip)", cn, tx);
         cmd.Parameters.Add("@w", System.Data.SqlDbType.Int).Value = actor.ClientWebUserId;
         cmd.Parameters.Add("@u", System.Data.SqlDbType.VarChar, 50).Value = Cut(actor.UserName, 50) ?? (object)DBNull.Value;
         cmd.Parameters.Add("@e", System.Data.SqlDbType.VarChar, 320).Value = Cut(actor.GoogleEmail, 320) ?? (object)DBNull.Value;
-        cmd.Parameters.Add("@a", System.Data.SqlDbType.VarChar, 30).Value = area.ToString();
+        cmd.Parameters.Add("@a", System.Data.SqlDbType.VarChar, 30).Value = Cut(area, 30)!;
         cmd.Parameters.Add("@t", System.Data.SqlDbType.VarChar, 128).Value = Cut(table, 128)!;
         cmd.Parameters.Add("@k", System.Data.SqlDbType.VarChar, 200).Value = Cut(key, 200) ?? (object)DBNull.Value;
         cmd.Parameters.Add("@x", System.Data.SqlDbType.VarChar, 10).Value = Cut(action, 10)!;

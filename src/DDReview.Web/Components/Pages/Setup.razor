@@ -27,7 +27,7 @@
     @if (s.Decision.Allowed && s.Decision.IsAdministrator)
     {
         var installer = DDReview.QuickBooks.Launch.PosterInstallerLocator.FindNewest(Config["PosterInstaller:Folder"]);
-        <h2>QuickBooks poster</h2>
+        <h2>QuickBooks Poster</h2>
         @if (installer is null)
         {
             <p class="muted">No installer has been published yet. Run <code>deploy\Publish-Poster.ps1</code> and copy the .msi into the folder named by the site setting <code>PosterInstaller:Folder</code>.</p>
@@ -43,7 +43,7 @@
 
     @if (s.Decision.CanManageAccess)
     {
-        <h2>Who may use Setup</h2>
+        <h2>Who May Use Setup</h2>
         <p><a href="/admin/setup/access">Allow or remove people, and see what was changed</a></p>
     }
 </SetupGate>

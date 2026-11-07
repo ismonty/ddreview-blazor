@@ -1,0 +1,218 @@
+@using DDReview.Core.Admin
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@inject GlAdjustmentService Svc
+
+@* The Adjust Sales and Adjust GL windows over the General Ledger Review. All rules (store access, validation, audit) are in GlAdjustmentService; this only collects the typing. *@
+<div class="sub-overlay" role="dialog" aria-label="@Title">
+    <div class="sub-panel">
+        <div class="sub-bar">
+            <strong>@Title</strong>
+            <span class="sub-bar-buttons"><button type="button" @onclick="CloseAsync">Close</button></span>
+        </div>
+        <p class="muted">@(Kind == AdjustKind.Sales
+            ? "Adjust Sales changes a sales amount before the sales tax is worked out, so the tax and the totals follow it."
+            : "Adjust GL adds a ledger line after the sales tax is worked out. Sales and tax are not changed.")
+            @(Kind == AdjustKind.Sales ? "Each line takes the amount from the sales account chosen and puts it into the offset account." : "") The report is run again when you close this window.</p>
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        @if (data is null && error is null) { <p>Loading…</p> }
+        else if (data is not null && data.Batches.Count == 0) { <p class="muted">There are no batches for these stores and dates.</p> }
+        else if (data is not null)
+        {
+            <table class="adj">
+                @if (Kind == AdjustKind.Gl)
+                {
+                    <thead><tr><th>Batch</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th><th>Reference</th><th class="n">Sort</th><th>Bank Rec Account</th><th>Class</th><th>Vendor</th><th class="n">Flag</th><th>Type</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var r in data.Gl)
+                    {
+                        @if (draft is not null && draft.ItemId == r.ItemId) { @GlEditor() }
+                        else
+                        {
+                            <tr>
+                                <td>@BatchLabel(r.BatchId)</td><td>@r.Account</td><td class="n">@(r.Debit is > 0 ? r.Debit.Value.ToString("N2") : "")</td><td class="n">@(r.Credit is > 0 ? r.Credit.Value.ToString("N2") : "")</td>
+                                <td>@r.DistReference</td><td class="n">@r.Sorter</td><td>@r.BankRecAccount</td><td>@ClassName(r.AccountClassId)</td><td>@r.Vendor</td><td class="n">@r.DebitCreditFlag</td><td>@r.DefaultAccountType</td>
+                                <td class="nowrap">@RowButtons(r.ItemId, () => EditGl(r), () => RemoveGlAsync(r))</td>
+                            </tr>
+                        }
+                    }
+                    @if (draft is not null && draft.ItemId == 0) { @GlEditor() }
+                    </tbody>
+                }
+                else
+                {
+                    <thead><tr><th>Batch</th><th>Sales Account</th><th class="n">Sales Amount</th><th>Offset Account</th><th>Offset Class</th><th>Offset Reference</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var r in data.Sales)
+                    {
+                        @if (draft is not null && draft.ItemId == r.ItemId) { @SalesEditor() }
+                        else
+                        {
+                            <tr>
+                                <td>@BatchLabel(r.BatchId)</td><td>@CreditName(r.CreditAccountId)</td><td class="n">@r.SalesAmount?.ToString("N2")</td><td>@r.OffsetAccount</td><td>@ClassName(r.OffsetAccountClassId)</td><td>@r.OffsetDistReference</td>
+                                <td class="nowrap">@RowButtons(r.ItemId, () => EditSales(r), () => RemoveSalesAsync(r))</td>
+                            </tr>
+                        }
+                    }
+                    @if (draft is not null && draft.ItemId == 0) { @SalesEditor() }
+                    </tbody>
+                }
+            </table>
+            @if (draft is null) { <p><button type="button" @onclick="StartAdd" disabled="@busy">Add an Adjustment</button></p> }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AdjustKind Kind { get; set; }
+    [Parameter, EditorRequired] public string ConnectionString { get; set; } = "";
+    [Parameter, EditorRequired] public GlRequest Request { get; set; } = default!;
+    [Parameter, EditorRequired] public SetupActor Actor { get; set; } = default!;
+    /// <summary>null = every store; otherwise the stores this person may see (the same rule as the General Ledger Review itself).</summary>
+    [Parameter] public string? AllowedStores { get; set; }
+    /// <summary>Called when the window closes; true when anything was saved, so the report should be run again.</summary>
+    [Parameter] public EventCallback<bool> OnClosed { get; set; }
+    /// <summary>A ledger line the person double-clicked (Adjust GL only): the add form opens already filled in from it.</summary>
+    [Parameter] public AdjustSeed? Seed { get; set; }
+
+    private sealed class Draft
+    {
+        public int ItemId; public int BatchId; public int ClassId; public int CreditAccountId; public short Flag;
+        public string Account = "", Debit = "", Credit = "", Reference = "", Sort = "", BankRec = "", Vendor = "", Type = "", Amount = "";
+    }
+
+    private AdjustData? data;
+    private Draft? draft;
+    private string? error;
+    private bool busy, changed;
+    private GlAdjustRow? origGl;
+    private SalesAdjustRow? origSales;
+
+    private string Title => Kind == AdjustKind.Gl ? "Adjust GL" : "Adjust Sales";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        if (Seed is { } seed && Kind == AdjustKind.Gl && data is { Batches.Count: > 0 })
+        {
+            StartAdd();
+            var d = draft!;
+            if (data.Batches.Any(b => b.BatchId == seed.BatchId)) d.BatchId = seed.BatchId;
+            d.Account = seed.Account?.Trim() ?? ""; d.Reference = seed.DistReference?.Trim() ?? ""; d.Flag = seed.DebitCreditFlag;
+            var cls = data.Classes.FirstOrDefault(c => string.Equals(c.Name, seed.AccountClass?.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (cls is not null) d.ClassId = cls.Id;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        try { data = await Svc.LoadAsync(ConnectionString, Request, AllowedStores); }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The adjustments are not available in this database."; }
+        catch (Exception ex) { error = "The adjustments could not be loaded: " + ex.Message; }
+    }
+
+    private string BatchLabel(int id) => data?.Batches.FirstOrDefault(b => b.BatchId == id)?.Label ?? ("Batch " + id);
+    private string ClassName(int id) => data?.Classes.FirstOrDefault(c => c.Id == id)?.Name ?? id.ToString();
+    private string CreditName(int id) => data?.CreditAccounts.FirstOrDefault(c => c.CreditAccountId == id)?.Label ?? id.ToString();
+    private IEnumerable<CreditAccountChoice> CreditsFor(int batchId)
+    {
+        var store = data?.Batches.FirstOrDefault(b => b.BatchId == batchId)?.StoreId;
+        return data!.CreditAccounts.Where(c => c.StoreId == store);
+    }
+
+    private void StartAdd()
+    {
+        error = null; origGl = null; origSales = null;
+        draft = new Draft { ItemId = 0, BatchId = data!.Batches[0].BatchId, ClassId = data.Classes.FirstOrDefault()?.Id ?? 0 };
+    }
+
+    private void EditGl(GlAdjustRow r)
+    {
+        error = null; origGl = r; origSales = null;
+        draft = new Draft { ItemId = r.ItemId, BatchId = r.BatchId, Account = r.Account ?? "", Debit = r.Debit is > 0 ? r.Debit.Value.ToString("0.00") : "", Credit = r.Credit is > 0 ? r.Credit.Value.ToString("0.00") : "",
+            Reference = r.DistReference ?? "", Sort = r.Sorter?.ToString() ?? "", BankRec = r.BankRecAccount ?? "", ClassId = r.AccountClassId, Vendor = r.Vendor ?? "", Flag = r.DebitCreditFlag, Type = r.DefaultAccountType ?? "" };
+    }
+
+    private void EditSales(SalesAdjustRow r)
+    {
+        error = null; origSales = r; origGl = null;
+        draft = new Draft { ItemId = r.ItemId, BatchId = r.BatchId, CreditAccountId = r.CreditAccountId, Amount = r.SalesAmount?.ToString("0.00") ?? "", Account = r.OffsetAccount ?? "", ClassId = r.OffsetAccountClassId, Reference = r.OffsetDistReference ?? "" };
+    }
+
+    private void Cancel() { draft = null; origGl = null; origSales = null; error = null; }
+
+    private async Task Run(Func<Task> work)
+    {
+        busy = true; error = null;
+        try { await work(); changed = true; draft = null; origGl = null; origSales = null; await ReloadAsync(); }
+        catch (GlAdjustmentException ex) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The change could not be saved."; }
+        busy = false;
+    }
+
+    private Task SaveAsync() => Run(async () =>
+    {
+        var d = draft!;
+        if (Kind == AdjustKind.Gl)
+        {
+            if (!AdjustValidation.TryMoney(d.Debit, out var debit) || !AdjustValidation.TryMoney(d.Credit, out var credit)) throw new GlAdjustmentException("Enter amounts as numbers with at most two decimals.");
+            int? sorter = null;
+            if (!string.IsNullOrWhiteSpace(d.Sort)) { if (!int.TryParse(d.Sort, out var n)) throw new GlAdjustmentException("The sort number must be a whole number."); sorter = n; }
+            var row = new GlAdjustRow(d.ItemId, d.BatchId, d.Account, debit, credit, d.Reference, sorter, d.BankRec, d.ClassId, d.Vendor, d.Flag, d.Type);
+            if (origGl is null) await Svc.AddAsync(ConnectionString, Actor, AllowedStores, row);
+            else await Svc.ChangeAsync(ConnectionString, Actor, AllowedStores, origGl, row);
+        }
+        else
+        {
+            if (!AdjustValidation.TryMoney(d.Amount, out var amount)) throw new GlAdjustmentException("Enter the amount as a number with at most two decimals.");
+            var row = new SalesAdjustRow(d.ItemId, d.BatchId, d.CreditAccountId, amount, d.Account, d.ClassId, d.Reference);
+            if (origSales is null) await Svc.AddAsync(ConnectionString, Actor, AllowedStores, row);
+            else await Svc.ChangeAsync(ConnectionString, Actor, AllowedStores, origSales, row);
+        }
+    });
+
+    private Task RemoveGlAsync(GlAdjustRow r) => Run(() => Svc.RemoveAsync(ConnectionString, Actor, AllowedStores, r));
+    private Task RemoveSalesAsync(SalesAdjustRow r) => Run(() => Svc.RemoveAsync(ConnectionString, Actor, AllowedStores, r));
+
+    private int? confirmId;
+    private RenderFragment RowButtons(int itemId, Action edit, Func<Task> remove) => @<text>
+        @if (confirmId == itemId)
+        {
+            <span>Delete this line?</span>
+            <button type="button" disabled="@busy" @onclick="async () => { confirmId = null; await remove(); }">Yes</button>
+            <button type="button" class="secondary" @onclick="() => confirmId = null">No</button>
+        }
+        else if (draft is null)
+        {
+            <button type="button" class="secondary" @onclick="edit">Edit</button>
+            <button type="button" class="secondary" @onclick="() => confirmId = itemId">Delete</button>
+        }
+    </text>;
+
+    private RenderFragment GlEditor() => @<tr class="adj-edit">
+        <td><select @bind="draft!.BatchId">@foreach (var b in data!.Batches) {<option value="@b.BatchId">@b.Label</option>}</select></td>
+        <td><input @bind="draft!.Account" maxlength="100" aria-label="Account" /></td>
+        <td class="n"><input @bind="draft!.Debit" inputmode="decimal" size="9" aria-label="Debit" /></td>
+        <td class="n"><input @bind="draft!.Credit" inputmode="decimal" size="9" aria-label="Credit" /></td>
+        <td><input @bind="draft!.Reference" maxlength="100" aria-label="Reference" /></td>
+        <td class="n"><input @bind="draft!.Sort" inputmode="numeric" size="5" aria-label="Sort" /></td>
+        <td><input @bind="draft!.BankRec" maxlength="50" aria-label="Bank rec account" /></td>
+        <td><select @bind="draft!.ClassId">@foreach (var c in data!.Classes) {<option value="@c.Id">@c.Name</option>}</select></td>
+        <td><input @bind="draft!.Vendor" maxlength="50" aria-label="Vendor" /></td>
+        <td class="n"><input type="number" @bind="draft!.Flag" size="3" aria-label="Debit credit flag" title="Same meaning as in the ledger lines; leave 0 unless you know you need another value." /></td>
+        <td><input @bind="draft!.Type" maxlength="50" aria-label="Account type" /></td>
+        <td class="nowrap"><button type="button" disabled="@busy" @onclick="SaveAsync">Save</button> <button type="button" class="secondary" @onclick="Cancel">Cancel</button></td>
+    </tr>;
+
+    private RenderFragment SalesEditor() => @<tr class="adj-edit">
+        <td><select @bind="draft!.BatchId">@foreach (var b in data!.Batches) {<option value="@b.BatchId">@b.Label</option>}</select></td>
+        <td><select @bind="draft!.CreditAccountId"><option value="0">Choose…</option>@foreach (var c in CreditsFor(draft!.BatchId)) {<option value="@c.CreditAccountId">@c.Label</option>}</select></td>
+        <td class="n"><input @bind="draft!.Amount" inputmode="decimal" size="10" aria-label="Sales amount" /></td>
+        <td><input @bind="draft!.Account" maxlength="100" aria-label="Offset account" /></td>
+        <td><select @bind="draft!.ClassId">@foreach (var c in data!.Classes) {<option value="@c.Id">@c.Name</option>}</select></td>
+        <td><input @bind="draft!.Reference" maxlength="100" aria-label="Offset reference" /></td>
+        <td class="nowrap"><button type="button" disabled="@busy" @onclick="SaveAsync">Save</button> <button type="button" class="secondary" @onclick="Cancel">Cancel</button></td>
+    </tr>;
+
+    private Task CloseAsync() => OnClosed.InvokeAsync(changed);
+}

@@ -220,3 +220,77 @@ public class DatabaseGroupTests
         Assert.Null((await s.GoogleOptionsAsync("g", null, true)).Databases);
     }
 }
+
+public class TaxVarianceTests
+{
+    private static DDReview.Core.Gl.TaxVarianceLine L(string store, decimal amount, decimal variance) =>
+        new(new DateTime(2026, 11, 1), store, null, null, null, null, "Burger", 7, false, 8.25m, 7m, null, null, 1m, amount, variance);
+
+    [Fact] public void Summary_adds_up_sales_variance_and_counts_stores()
+    {
+        var s = DDReview.Core.Gl.TaxVariance.Summarize([L("A", 100m, 1.25m), L("A", 50m, 0.625m), L("B", 10m, 0.125m)]);
+        Assert.Equal(3, s.Lines); Assert.Equal(160m, s.Sales); Assert.Equal(2.0m, s.Variance); Assert.Equal(2, s.Stores);
+    }
+
+    [Fact] public void No_variances_summarizes_to_zero()
+    {
+        var s = DDReview.Core.Gl.TaxVariance.Summarize([]);
+        Assert.Equal(0, s.Lines); Assert.Equal(0m, s.Variance);
+    }
+}
+
+public class AdjustValidationTests
+{
+    private static DDReview.Core.Gl.GlAdjustRow Gl(decimal? debit = 10m, decimal? credit = null, string? account = "1000 Cash", int cls = 1, int batch = 5) =>
+        new(0, batch, account, debit, credit, "ref", null, null, cls, null, 0, null);
+    private static DDReview.Core.Gl.SalesAdjustRow Sales(decimal? amount = -5m, string? offset = "4000 Sales", int ca = 3, int cls = 1) =>
+        new(0, 5, ca, amount, offset, cls, null);
+
+    [Fact] public void A_good_gl_line_passes() => Assert.Null(DDReview.Core.Gl.AdjustValidation.Check(Gl()));
+
+    [Theory]
+    [InlineData(null, null, "1000", "Enter a debit or a credit.")]
+    [InlineData(0, 0, "1000", "Enter a debit or a credit.")]
+    [InlineData(5, 5, "1000", "Enter a debit or a credit, not both.")]
+    [InlineData(-5, null, "1000", "Debit and credit cannot be negative. Use the other column instead.")]
+    [InlineData(5, null, " ", "Enter the account.")]
+    public void Bad_gl_lines_say_why(int? debit, int? credit, string account, string expected) =>
+        Assert.Equal(expected, DDReview.Core.Gl.AdjustValidation.Check(Gl(debit, credit, account)));
+
+    [Fact] public void Gl_line_needs_a_batch_and_a_class()
+    {
+        Assert.Equal("Choose the batch.", DDReview.Core.Gl.AdjustValidation.Check(Gl(batch: 0)));
+        Assert.Equal("Choose the class.", DDReview.Core.Gl.AdjustValidation.Check(Gl(cls: 0)));
+    }
+
+    [Fact] public void Sales_adjustment_may_be_negative_but_not_zero_and_needs_an_offset()
+    {
+        Assert.Null(DDReview.Core.Gl.AdjustValidation.Check(Sales()));
+        Assert.Null(DDReview.Core.Gl.AdjustValidation.Check(Sales(amount: 12.5m)));
+        Assert.NotNull(DDReview.Core.Gl.AdjustValidation.Check(Sales(amount: 0m)));
+        Assert.NotNull(DDReview.Core.Gl.AdjustValidation.Check(Sales(amount: null)));
+        Assert.Equal("Enter the offset account.", DDReview.Core.Gl.AdjustValidation.Check(Sales(offset: "")));
+        Assert.Equal("Choose the sales account.", DDReview.Core.Gl.AdjustValidation.Check(Sales(ca: 0)));
+    }
+
+    [Theory]
+    [InlineData("12.50", true, 12.5)] [InlineData("1,234.5", true, 1234.5)] [InlineData("-3", true, -3.0)] [InlineData("", true, null)]
+    [InlineData("1.234", false, null)] [InlineData("abc", false, null)] [InlineData("99999999999", false, null)]
+    public void Money_parsing(string text, bool ok, double? expected)
+    {
+        Assert.Equal(ok, DDReview.Core.Gl.AdjustValidation.TryMoney(text, out var v));
+        Assert.Equal(expected is null ? null : (decimal?)Convert.ToDecimal(expected), v);
+    }
+
+    [Fact] public void Batch_label_names_store_date_and_batch() =>
+        Assert.Equal("Main St, Sun Nov 1, 2026 (batch 7)", new DDReview.Core.Gl.AdjustBatch(7, 1, "Main St", new DateTime(2026, 11, 1)).Label);
+}
+
+public class AdjustSeedTests
+{
+    [Fact] public void Seed_carries_the_double_clicked_lines_account_reference_class_and_flag()
+    {
+        var s = new DDReview.Core.Gl.AdjustSeed(7, "1000 Cash", "Cash over/short", "Main", -1);
+        Assert.Equal(7, s.BatchId); Assert.Equal("1000 Cash", s.Account); Assert.Equal((short)-1, s.DebitCreditFlag);
+    }
+}

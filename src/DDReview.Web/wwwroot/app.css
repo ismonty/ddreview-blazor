@@ -257,3 +257,8 @@ table.setup input[type=text], table.setup input[type=date], table.setup select {
 .rt-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; }
 .rt-review { border: 1px dashed var(--edge, #4b7391); border-radius: 8px; padding: .4rem .8rem; }
 @media (max-width: 900px) { .rt-layout.with-panel { grid-template-columns: 1fr; } .rt-panel { position: static; max-height: none; } }
+
+/* Adjust Sales / Adjust GL windows */
+.adj .nowrap { white-space: nowrap; }
+.adj-edit input, .adj-edit select { max-width: 14rem; }
+.adj-acct { cursor: pointer; }
