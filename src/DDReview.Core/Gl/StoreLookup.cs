@@ -13,7 +13,7 @@ public static class StoreLookup
     public static string NameSql(bool hasReportName, string alias = "")
     {
         var a = alias.Length == 0 ? "" : alias + ".";
-        return hasReportName ? $"isnull({a}StoreReportName, isnull({a}StoreName, {a}StoreGCode))" : $"isnull({a}StoreName, {a}StoreGCode)";
+        return hasReportName ? $"isnull(nullif(ltrim(rtrim({a}StoreReportName)), ''), isnull({a}StoreName, {a}StoreGCode))" : $"isnull({a}StoreName, {a}StoreGCode)";
     }
 
     /// <summary>Whether this client database has tblStores.StoreReportName (the old site adds it on first use; very old databases may lack it).</summary>

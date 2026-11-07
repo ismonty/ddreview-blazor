@@ -138,7 +138,7 @@ else
     {
         <h2>@summaryLines.Count(l => l.Debit != 0 || l.Credit != 0) rows</h2>
         <table><thead><tr><th>Store</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
-        <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@StoreNameOf(l.StoreId, l.StoreName)</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
+        <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@StoreNameOf(l.StoreId, l.StoreNumber, l.StoreName)</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
         @{ var sr = summaryLines.Where(l => l.TotalLine == 0).ToList(); var sd = sr.Sum(l => l.Debit); var sc = sr.Sum(l => l.Credit); }
         <tbody class="gl-grand"><tr class="total"><td colspan="4">Grand total @BalanceNote(sd, sc)</td><td class="n">@sd.ToString("N2")</td><td class="n">@sc.ToString("N2")</td></tr></tbody></table>
     }
@@ -210,8 +210,10 @@ else
     private IReadOnlyList<StoreInfo> stores = [];
 
     /// <summary>The store's report name when it has one (the store list is loaded that way), otherwise whatever name the ledger line carried.</summary>
-    private string? StoreNameOf(int? storeId, string? lineName) =>
-        storeId is int id && stores.FirstOrDefault(x => x.StoreId == id) is { } st ? st.StoreName : lineName;
+    private string? StoreNameOf(int? storeId, int? storeNumber, string? lineName) =>
+        (storeId is int id && stores.FirstOrDefault(x => x.StoreId == id) is { } st) ? st.StoreName
+        : (storeNumber is int sn && stores.FirstOrDefault(x => x.StoreNumber == sn) is { } st2) ? st2.StoreName
+        : lineName;
     private readonly HashSet<int> selected = [];
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
     private IReadOnlyList<TaxVarianceLine>? taxLines;
@@ -371,7 +373,7 @@ else
                 report = GlBalance.Compute(lines);
                 keptLines = lines; runMode = mode;
                 batchStores = lines.Where(l => l.StoreName is not null).GroupBy(l => l.BatchId)
-                    .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(l => (l.StoreNumber is int n ? n + " – " : "") + StoreNameOf(l.StoreId, l.StoreName)).Distinct()));
+                    .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(l => (l.StoreNumber is int n ? n + " – " : "") + StoreNameOf(l.StoreId, l.StoreNumber, l.StoreName)).Distinct()));
                 if (mode == "batches") showBatches = true;
                 else detailLines = lines;
                 if (mode == "both") totalLines = GlTotals.Group(lines);
