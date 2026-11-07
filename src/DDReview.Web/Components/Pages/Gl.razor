@@ -5,6 +5,7 @@
 @inject UserContextService Users
 @inject GlService GlSvc
 @inject GlAdjustmentService AdjustSvc
+@inject BatchResubmissionService ResubmitSvc
 @using DDReview.Web.Components.Gl
 @using DDReview.Core.Admin
 @inject GlTaxVarianceService TaxSvc
@@ -106,7 +107,15 @@ else
         @if (focusBatch is int fbn)
         {
             <p class="sub-actions"><button type="button" @onclick="ShowAllLines">Show All Lines</button>
-                <button type="button" @onclick="() => SeedBatch(fbn)" title="Adds a ledger line to this batch after the sales tax is worked out">Adjust GL</button></p>
+                <button type="button" @onclick="() => SeedBatch(fbn)" title="Adds a ledger line to this batch after the sales tax is worked out">Adjust GL</button>
+                <button type="button" @onclick="() => { resubmitConfirm = true; resubmitMessage = null; }" disabled="@(resubmitConfirm || resubmitBusy)" title="Sends this batch back so the submission process picks it up for more work">Request Batch Resubmission</button></p>
+            @if (resubmitConfirm)
+            {
+                <p class="banner" role="alert">Request resubmission of batch @fbn? It will be returned for more work.
+                    <button type="button" @onclick="() => ResubmitAsync(fbn)" disabled="@resubmitBusy">@(resubmitBusy ? "Requesting…" : "Yes, Request Resubmission")</button>
+                    <button type="button" class="secondary" @onclick="() => resubmitConfirm = false" disabled="@resubmitBusy">Cancel</button></p>
+            }
+            @if (resubmitMessage is not null) { <p class="@(resubmitFailed ? "error" : "muted")" role="status">@resubmitMessage</p> }
         }
         <table><thead><tr><th>Batch</th><th>Date</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         @{ var shown = detailLines.Where(l => l.Debit != 0 || l.Credit != 0).ToList(); }
@@ -117,7 +126,7 @@ else
                 @foreach (var bg in day.GroupBy(x => new { x.StoreNumber, x.BatchId }).OrderBy(g => g.Key.StoreNumber ?? int.MaxValue).ThenBy(g => g.Key.BatchId))   /* each batch together; lines keep their own order */
                 {
                     var bd = bg.Sum(x => x.Debit); var bc = bg.Sum(x => x.Credit);
-                    <tr class="batch-head"><td colspan="6">Batch @bg.Key.BatchId@(batchStores.TryGetValue(bg.Key.BatchId, out var sn) ? " — " + sn : "")</td><td class="jump"><a href="@Nav.ToAbsoluteUri("gl#gl-top")" class="jump-btn" title="Jump to the top" aria-label="Jump to the top">▲</a> <a href="@Nav.ToAbsoluteUri("gl#gl-bottom")" class="jump-btn" title="Jump to the bottom" aria-label="Jump to the bottom">▼</a></td></tr>
+                    <tr class="batch-head"><td colspan="6"><button type="button" class="cell sub-link" title="Show only this batch's ledger lines (to adjust it or request resubmission)" @onclick="() => FocusBatch(bg.Key.BatchId)">Batch @bg.Key.BatchId</button>@(batchStores.TryGetValue(bg.Key.BatchId, out var sn) ? " — " + sn : "")</td><td class="jump"><a href="@Nav.ToAbsoluteUri("gl#gl-top")" class="jump-btn" title="Jump to the top" aria-label="Jump to the top">▲</a> <a href="@Nav.ToAbsoluteUri("gl#gl-bottom")" class="jump-btn" title="Jump to the bottom" aria-label="Jump to the bottom">▼</a></td></tr>
                     @foreach (var l in bg)
                     {
                         <tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td class="adj-acct" title="Double-click to add an Adjust GL line for this account" @ondblclick="() => SeedAdjust(l)">@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>
@@ -240,6 +249,8 @@ else
     private AdjustSeed? adjustSeed;
     private IReadOnlyList<GlLine>? keptLines;   // every line of the last run, so a batch can be picked out of it
     private int? focusBatch;
+    private bool resubmitConfirm, resubmitBusy, resubmitFailed;
+    private string? resubmitMessage;
     private string runMode = "";
     private int adjGlCount, adjSalesCount;
     private string subsTitle = "";
@@ -401,14 +412,29 @@ else
     private void FocusBatch(int batchId)
     {
         if (keptLines is null) return;
+        if (focusBatch != batchId) { resubmitConfirm = false; resubmitMessage = null; }
         focusBatch = batchId;
         detailLines = keptLines.Where(l => l.BatchId == batchId).ToList();
     }
 
     private void ShowAllLines()
     {
-        focusBatch = null;
+        focusBatch = null; resubmitConfirm = false; resubmitMessage = null;
         detailLines = runMode == "batches" ? null : keptLines;
+    }
+
+    private async Task ResubmitAsync(int batchId)
+    {
+        if (ctx is null || resubmitBusy) return;
+        resubmitBusy = true; resubmitFailed = false;
+        try
+        {
+            await ResubmitSvc.RequestAsync(ctx.ClientConnectionString, AdjustActor(), SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit), batchId);
+            resubmitMessage = "Batch " + batchId + " was sent back for more work.";
+        }
+        catch (GlAdjustmentException ex) { resubmitFailed = true; resubmitMessage = ex.Message; }
+        catch (Exception ex) { resubmitFailed = true; resubmitMessage = "The request could not be made: " + ex.Message; }
+        finally { resubmitBusy = false; resubmitConfirm = false; }
     }
 
     private void SeedBatch(int batchId)

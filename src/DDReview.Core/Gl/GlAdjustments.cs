@@ -276,7 +276,7 @@ where ItemID = @id and {SameSales()}", cn, tx);
         return id;
     }
 
-    private static async Task EnsureBatchAllowedAsync(SqlConnection cn, SqlTransaction tx, int batchId, string? allowedStoresCsv, CancellationToken ct)
+    internal static async Task EnsureBatchAllowedAsync(SqlConnection cn, SqlTransaction tx, int batchId, string? allowedStoresCsv, CancellationToken ct)
     {
         await using var cmd = new SqlCommand("select StoreID from dbo.tblCashAndSalesBatches where BatchID = @b", cn, tx);
         cmd.Parameters.Add("@b", System.Data.SqlDbType.Int).Value = batchId;

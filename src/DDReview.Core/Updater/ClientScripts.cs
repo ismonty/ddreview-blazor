@@ -34,7 +34,8 @@ public static class ClientScripts
         new("004", "Grant procedure (dbo.usp_DDReviewGrantAccess): every permission the web login needs, in one place", "ClientScripts/004_client_grant_procedure.sql",
             @"select cast(case when object_id('dbo.usp_DDReviewGrantAccess', 'P') is null then 0
                                when object_definition(object_id('dbo.usp_DDReviewGrantAccess', 'P')) is not null
-                                and charindex('tblDDReviewAdminAccess', object_definition(object_id('dbo.usp_DDReviewGrantAccess', 'P'))) = 0 then 0
+                                and (charindex('tblDDReviewAdminAccess', object_definition(object_id('dbo.usp_DDReviewGrantAccess', 'P'))) = 0
+                                 or charindex('usp_DDReviewRequestBatchResubmission', object_definition(object_id('dbo.usp_DDReviewGrantAccess', 'P'))) = 0) then 0
                                else 1 end as int) as Present,
                      cast(case when object_id('dbo.usp_DDReviewGrantAccess', 'P') is not null then 1 else 0 end as int) as Usable"),
         new("007", "Setup pages: who may use them (dbo.tblDDReviewAdminAccess) and the change audit trail (dbo.tblDDReviewAdminAudit)", "ClientScripts/007_client_admin_access.sql",
@@ -44,6 +45,10 @@ public static class ClientScripts
                                 and has_perms_by_name('dbo.tblDDReviewAdminAccess', 'OBJECT', 'UPDATE') = 1
                                 and has_perms_by_name('dbo.tblDDReviewAdminAudit', 'OBJECT', 'SELECT') = 1
                                 and has_perms_by_name('dbo.tblDDReviewAdminAudit', 'OBJECT', 'INSERT') = 1 then 1 else 0 end as int) as Usable",
+            "exec dbo.usp_DDReviewGrantAccess @UserName = N'{user}', @Execute = 1;  "),
+        new("010", "General Ledger Review: Request Batch Resubmission (dbo.usp_DDReviewRequestBatchResubmission)", "ClientScripts/010_client_batch_resubmission.sql",
+            @"select cast(case when object_id('dbo.usp_DDReviewRequestBatchResubmission', 'P') is not null then 1 else 0 end as int) as Present,
+                     cast(case when has_perms_by_name('dbo.usp_DDReviewRequestBatchResubmission', 'OBJECT', 'EXECUTE') = 1 then 1 else 0 end as int) as Usable",
             "exec dbo.usp_DDReviewGrantAccess @UserName = N'{user}', @Execute = 1;  "),
     ];
 }
