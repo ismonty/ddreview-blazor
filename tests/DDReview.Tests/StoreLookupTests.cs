@@ -9,7 +9,7 @@ public class StoreLookupTests
     public void Store_names_prefer_the_report_name_like_the_old_pages()
     {
         var sql = StoreLookup.ListSql(true, "");
-        Assert.Contains("isnull(StoreReportName, isnull(StoreName, StoreGCode)) as StoreName", sql);
+        Assert.Contains("isnull(nullif(ltrim(rtrim(StoreReportName)), ''), isnull(StoreName, StoreGCode)) as StoreName", sql);
         Assert.Contains("order by StoreNumber", sql);
     }
 
