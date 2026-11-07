@@ -220,3 +220,21 @@ public class DatabaseGroupTests
         Assert.Null((await s.GoogleOptionsAsync("g", null, true)).Databases);
     }
 }
+
+public class TaxVarianceTests
+{
+    private static DDReview.Core.Gl.TaxVarianceLine L(string store, decimal amount, decimal variance) =>
+        new(new DateTime(2026, 11, 1), store, null, null, null, null, "Burger", 7, false, 8.25m, 7m, null, null, 1m, amount, variance);
+
+    [Fact] public void Summary_adds_up_sales_variance_and_counts_stores()
+    {
+        var s = DDReview.Core.Gl.TaxVariance.Summarize([L("A", 100m, 1.25m), L("A", 50m, 0.625m), L("B", 10m, 0.125m)]);
+        Assert.Equal(3, s.Lines); Assert.Equal(160m, s.Sales); Assert.Equal(2.0m, s.Variance); Assert.Equal(2, s.Stores);
+    }
+
+    [Fact] public void No_variances_summarizes_to_zero()
+    {
+        var s = DDReview.Core.Gl.TaxVariance.Summarize([]);
+        Assert.Equal(0, s.Lines); Assert.Equal(0m, s.Variance);
+    }
+}
