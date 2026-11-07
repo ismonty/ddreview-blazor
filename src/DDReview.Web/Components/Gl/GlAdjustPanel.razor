@@ -22,7 +22,7 @@
             <table class="adj">
                 @if (Kind == AdjustKind.Gl)
                 {
-                    <thead><tr><th>Batch</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th><th>Reference</th><th class="n">Sort</th><th>Bank Rec Account</th><th>Class</th><th>Vendor</th><th>Debit/Credit Flag</th><th>Type</th><th></th></tr></thead>
+                    <thead><tr><th>Batch</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th><th>Reference</th><th class="n">Sort</th><th>Bank Rec Account</th><th>Class</th><th>Vendor</th><th>Debit/Credit Flag</th><th>QuickBooks Type</th><th></th></tr></thead>
                     <tbody>
                     @foreach (var r in data.Gl)
                     {
@@ -31,7 +31,7 @@
                         {
                             <tr>
                                 <td data-label="Batch">@BatchLabel(r.BatchId)</td><td data-label="Account">@r.Account</td><td class="n" data-label="Debit">@(r.Debit is > 0 ? r.Debit.Value.ToString("N2") : "")</td><td class="n" data-label="Credit">@(r.Credit is > 0 ? r.Credit.Value.ToString("N2") : "")</td>
-                                <td data-label="Reference">@r.DistReference</td><td class="n" data-label="Sort">@r.Sorter</td><td data-label="Bank Rec Account">@r.BankRecAccount</td><td data-label="Class">@ClassName(r.AccountClassId)</td><td data-label="Vendor">@r.Vendor</td><td data-label="Debit/Credit Flag">@(r.DebitCreditFlag == 1 ? "Debit" : r.DebitCreditFlag == -1 ? "Credit" : r.DebitCreditFlag.ToString())</td><td data-label="Type">@r.DefaultAccountType</td>
+                                <td data-label="Reference">@r.DistReference</td><td class="n" data-label="Sort">@r.Sorter</td><td data-label="Bank Rec Account">@r.BankRecAccount</td><td data-label="Class">@ClassName(r.AccountClassId)</td><td data-label="Vendor">@r.Vendor</td><td data-label="Debit/Credit Flag">@(r.DebitCreditFlag == 1 ? "Debit" : r.DebitCreditFlag == -1 ? "Credit" : r.DebitCreditFlag.ToString())</td><td data-label="QuickBooks Type">@r.DefaultAccountType</td>
                                 <td class="nowrap">@RowButtons(r.ItemId, () => EditGl(r), () => RemoveGlAsync(r))</td>
                             </tr>
                         }
@@ -200,7 +200,9 @@
         <td data-label="Class"><select @bind="draft!.ClassId">@foreach (var c in data!.Classes) {<option value="@c.Id">@c.Name</option>}</select></td>
         <td data-label="Vendor"><input @bind="draft!.Vendor" maxlength="50" aria-label="Vendor" /></td>
         <td data-label="Debit/Credit Flag"><select @bind="draft!.Flag" aria-label="Debit/Credit Flag"><option value="0">(none)</option><option value="1">Debit</option><option value="-1">Credit</option></select></td>
-        <td data-label="Type"><input @bind="draft!.Type" maxlength="50" aria-label="Account type" /></td>
+        <td data-label="QuickBooks Type"><select @bind="draft!.Type" aria-label="QuickBooks type"><option value="">(none)</option>
+            @if (draft!.Type.Length > 0 && !SetupTables.QuickBooksTypes.Contains(draft.Type)) {<option value="@draft.Type">@draft.Type</option>}
+            @foreach (var t in SetupTables.QuickBooksTypes) {<option value="@t">@t</option>}</select></td>
         <td class="nowrap"><button type="button" disabled="@busy" @onclick="SaveAsync">Save</button> <button type="button" class="secondary" @onclick="Cancel">Cancel</button></td>
     </tr>;
 
