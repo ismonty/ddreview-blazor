@@ -115,7 +115,8 @@ else
             lastHeaderBatch = null;
             var dd = day.Sum(l => l.Debit); var dc = day.Sum(l => l.Credit);
             <tbody class="gl-day">
-                @foreach (var l in day) {
+                @foreach (var l in day.OrderBy(x => x.StoreNumber ?? int.MaxValue).ThenBy(x => x.BatchId))   /* stable: each batch together, lines keep their own order */
+                {
                     @if (l.BatchId != lastHeaderBatch)
                     {
                         lastHeaderBatch = l.BatchId;
