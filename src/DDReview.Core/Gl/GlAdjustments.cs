@@ -23,8 +23,11 @@ public sealed record SalesAdjustRow(int ItemId, int BatchId, int CreditAccountId
 public sealed record NamedId(int Id, string Name);
 public sealed record CreditAccountChoice(int CreditAccountId, int StoreId, string Label);
 
+/// <summary>A store's over/short account: its receipt type 999 row in tblReceiptTypes, with the G/L information to copy into an Adjust GL line.</summary>
+public sealed record OverShortAccount(int StoreId, string Account, string? DistReference, int AccountClassId, string QuickBooksType);
+
 public sealed record AdjustData(IReadOnlyList<AdjustBatch> Batches, IReadOnlyList<GlAdjustRow> Gl, IReadOnlyList<SalesAdjustRow> Sales,
-    IReadOnlyList<NamedId> Classes, IReadOnlyList<CreditAccountChoice> CreditAccounts);
+    IReadOnlyList<NamedId> Classes, IReadOnlyList<CreditAccountChoice> CreditAccounts, IReadOnlyList<OverShortAccount>? OverShort = null);
 
 public enum AdjustKind { Gl, Sales }
 
@@ -177,8 +180,26 @@ order by rtrim(ac.DistReference), ac.CreditAccount", cn) { CommandTimeout = 60 }
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) credits.Add(new CreditAccountChoice(Convert.ToInt32(r["CreditAccountID"]), Convert.ToInt32(r["StoreID"]), r["Label"] as string ?? ""));
         }
-        return new AdjustData(batches, gl, sales, classes, credits);
+
+        // Every store has an over/short receipt type, ReceiptTypeID 999; its debit account, reference, class and QuickBooks type are what an over/short adjustment posts to.
+        var overShort = new List<OverShortAccount>();
+        if (storeIds.Count > 0)
+        {
+            await using var cmd = new SqlCommand($@"
+select StoreID, ReceiptDebitAcct, DistReference, AccountClassID, DefaultQuickBooksType
+from dbo.tblReceiptTypes
+where ReceiptTypeID = 999 and StoreID in ({string.Join(",", storeIds)}) and ReceiptDebitAcct is not null", cn) { CommandTimeout = 60 };
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                overShort.Add(new OverShortAccount(Convert.ToInt32(r["StoreID"]), ((string)r["ReceiptDebitAcct"]).Trim(), (r["DistReference"] as string)?.Trim(),
+                    r["AccountClassID"] is DBNull ? 0 : Convert.ToInt32(r["AccountClassID"]), OverShortType(r["DefaultQuickBooksType"] as string)));
+        }
+        return new AdjustData(batches, gl, sales, classes, credits, overShort);
     }
+
+    /// <summary>The QuickBooks type for an over/short account: the one set on the receipt type, otherwise Expense (as the ledger function does for type 999).</summary>
+    public static string OverShortType(string? configured) =>
+        string.IsNullOrWhiteSpace(configured) || configured.Trim() == "0" ? "Expense" : configured.Trim();
 
     // ---- changes ----
 

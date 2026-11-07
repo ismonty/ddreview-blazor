@@ -58,7 +58,11 @@
                     </tbody>
                 }
             </table>
-            @if (draft is null) { <p><button type="button" @onclick="StartAdd" disabled="@busy">Add an Adjustment</button></p> }
+            @if (draft is null || draft.ItemId == 0)
+            {
+                <p>@if (draft is null) { <button type="button" @onclick="StartAdd" disabled="@busy">Add an Adjustment</button> }
+                   @if (Kind == AdjustKind.Gl) { <button type="button" class="secondary" @onclick="AddOverShort" disabled="@busy" title="Starts a line for this store's over/short account (receipt type 999); you enter the amount">Add Over/Short</button> }</p>
+            }
         }
     </div>
 </div>
@@ -124,6 +128,22 @@
     {
         error = null; origGl = null; origSales = null;
         draft = new Draft { ItemId = 0, BatchId = data!.Batches[0].BatchId, ClassId = data.Classes.FirstOrDefault()?.Id ?? 0 };
+    }
+
+    /// <summary>Starts (or fills) a new line from the over/short account of the batch's store: account, reference, class and QuickBooks type from receipt type 999. The amount is left for the person.</summary>
+    private void AddOverShort()
+    {
+        if (data is null || data.Batches.Count == 0) return;
+        var batchId = draft is { ItemId: 0 } ? draft.BatchId : (Seed?.BatchId is int sb && data.Batches.Any(b => b.BatchId == sb) ? sb : data.Batches[0].BatchId);
+        if (draft is not { ItemId: 0 }) StartAdd();
+        var d = draft!;
+        d.BatchId = batchId;
+        var store = data.Batches.First(b => b.BatchId == batchId);
+        var os = data.OverShort?.FirstOrDefault(o => o.StoreId == store.StoreId);
+        if (os is null) { error = $"{store.StoreName} has no over/short receipt type (ID 999) with a debit account, so there is nothing to copy. Add one in Receipt Account Mapping."; return; }
+        error = null;
+        d.Account = os.Account; d.Reference = os.DistReference ?? ""; d.Type = os.QuickBooksType; d.Flag = 1;
+        if (os.AccountClassId != 0 && data.Classes.Any(c => c.Id == os.AccountClassId)) d.ClassId = os.AccountClassId;
     }
 
     private void EditGl(GlAdjustRow r)
