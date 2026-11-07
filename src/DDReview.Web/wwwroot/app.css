@@ -262,7 +262,9 @@ table.setup input[type=text], table.setup input[type=date], table.setup select {
 .adj .nowrap { white-space: nowrap; }
 .adj-edit input, .adj-edit select { max-width: 14rem; }
 .adj-acct { cursor: pointer; }
-tr.picked td { background: #fff7d6; }
+tr.picked td { background: #fff7d6; color: #000; }
+tr.picked td .sub-link { color: #000; }
+tr.batch-head td { font-weight: 600; background: var(--panel, rgba(255,255,255,.06)); }
 /* Adjust Sales / Adjust GL: each adjustment is a block of labelled fields that wraps, so the window never runs wider than the screen. */
 table.adj, table.adj tbody { display: block; width: 100%; }
 table.adj thead { display: none; }
