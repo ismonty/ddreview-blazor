@@ -1,0 +1,379 @@
+﻿@page "/admin/setup/sales-accounts"
+@attribute [Authorize]
+@using DDReview.Core.Admin
+@using DDReview.Core.Gl
+@using DDReview.QuickBooks.Setup
+@using DDReview.Web.Components.Setup
+@inject SetupAccessService Access
+@inject SetupGridService Grid
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Sales Accounts</h1>
+<p><a href="/admin/setup">&larr; Setup</a> · <a href="@SetupTables.SalesAccounts.Route">Classic grid</a></p>
+
+<SetupGate Area="Table.Area">
+    @if (msg is not null) { <p class="banner @(msgOk ? "ok" : "bad")" role="@(msgOk ? "status" : "alert")">@msg</p> }
+    <p class="muted">@Table.Help</p>
+    <p>
+        <label>Store
+            <select value="@storeId" @onchange="StoreChangedAsync" disabled="@busy">
+                <option value="0">Choose a store…</option>
+                @foreach (var st in stores) { <option value="@st.StoreId">@st.StoreName</option> }
+            </select>
+        </label>
+    </p>
+
+    @if (!loaded) { <p class="muted">Loading…</p> }
+    else if (data is null) { <p class="banner bad" role="alert">This table is not in your database, or this login may not read it.</p> }
+    else if (storeId == 0) { <p class="muted">Choose a store to see its sales accounts.</p> }
+    else
+    {
+        <div class="rt-bar">
+            <input type="search" placeholder="Search account, reference, QuickBooks type…" value="@search" @oninput="e => search = e.Value?.ToString()" />
+            <div class="rt-seg" role="group" aria-label="Show">
+                @foreach (var f in new[] { ("all", "All"), ("on", "Not excluded"), ("attn", "Needs attention") })
+                {
+                    <button class="@(filter == f.Item1 ? "on" : "secondary")" @onclick="() => filter = f.Item1">@f.Item2@(f.Item1 == "attn" ? $" ({AttentionCount})" : "")</button>
+                }
+            </div>
+            <div class="rt-seg" role="group" aria-label="View">
+                <button class="@(tiles ? "on" : "secondary")" @onclick="() => tiles = true">Tiles</button>
+                <button class="@(!tiles ? "on" : "secondary")" @onclick="() => tiles = false">List</button>
+            </div>
+        </div>
+
+        @if (selected.Count > 0)
+        {
+            <div class="rt-bulk">
+                <strong>@selected.Count selected</strong>
+                <label>QuickBooks type
+                    <select value="@bulkType" @onchange="e => bulkType = e.Value?.ToString()">
+                        <option value="">Choose…</option>
+                        @foreach (var t in QbTypeNames) { <option value="@t">@t</option> }
+                    </select>
+                </label>
+                <button disabled="@(busy || string.IsNullOrEmpty(bulkType))" @onclick="ApplyBulkAsync">Set on Selected</button>
+                <button class="secondary" @onclick="() => selected.Clear()">Clear Selection</button>
+            </div>
+        }
+
+        <div class="rt-layout @(editing is not null ? "with-panel" : null)">
+            <div class="rt-main">
+            @foreach (var grp in Grouped())
+            {
+                <h2 class="rt-head">@SalesAccountView.Title(grp.Key) <span class="muted">(@grp.Value.Count)</span></h2>
+                @if (tiles)
+                {
+                    <div class="rt-tiles">
+                    @foreach (var r in grp.Value)
+                    {
+                        var warn = SalesAccountView.Attention(r.Values);
+                        <div class="rt-tile @(SalesAccountView.IsEnabled(r.Values) ? null : "off") @(warn.Count > 0 ? "warn" : null) @(editing?.Key == r.Key ? "current" : null)">
+                            <label class="rt-pick" title="Select for a bulk change"><input type="checkbox" checked="@selected.Contains(r.Key)" @onchange="e => Pick(r.Key, e.Value is true)" /></label>
+                            <button class="rt-open" @onclick="() => Open(r)">
+                                <span class="rt-name">@NameOf(r)</span>
+                                <span class="rt-acct">@Text(r, "DistReference", "(no reference)")</span>
+                                <span class="rt-meta">@Text(r, "DefaultQuickBooksType", "no QB type")@(SalesAccountView.IsEnabled(r.Values) ? "" : " · excluded")</span>
+                                @foreach (var w in warn) { <span class="rt-warn">⚠ @w</span> }
+                            </button>
+                        </div>
+                    }
+                    </div>
+                }
+                else
+                {
+                    <table class="setup rt-list">
+                        <thead><tr><th></th><th>Credit account</th><th>Reference</th><th>QB type</th><th>Included</th><th>Check</th></tr></thead>
+                        <tbody>
+                        @foreach (var r in grp.Value)
+                        {
+                            var warn = SalesAccountView.Attention(r.Values);
+                            <tr class="@(editing?.Key == r.Key ? "editing" : null)">
+                                <td class="actions"><input type="checkbox" checked="@selected.Contains(r.Key)" @onchange="e => Pick(r.Key, e.Value is true)" /> <button class="secondary" @onclick="() => Open(r)">Edit</button></td>
+                                <td>@NameOf(r)</td><td>@Text(r, "DistReference", "")</td><td>@Text(r, "DefaultQuickBooksType", "")</td>
+                                <td>@(SalesAccountView.IsEnabled(r.Values) ? "✓" : "")</td><td class="rt-warn">@string.Join("; ", warn)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            }
+            @if (!Grouped().Any()) { <p class="muted">Nothing matches.</p> }
+            </div>
+
+            @if (editing is not null)
+            {
+                <aside class="rt-panel" aria-label="Edit sales account">
+                    <h2>@NameOf(editing)</h2>
+                    @foreach (var w in SalesAccountView.Attention(DraftValues())) { <p class="rt-warn">⚠ @w</p> }
+                    <div class="rt-actions">
+                        @if (Table.Fills is { Count: > 0 }) { <button class="secondary" disabled="@busy" @onclick="FillEmpty" title="Propose empty account fields from this account's name">Fill Empty Accounts</button> }
+                        @if (otherStores.Count > 0)
+                        {
+                            <select value="@copyFrom" @onchange="e => copyFrom = int.TryParse(e.Value?.ToString(), out var v) ? v : 0">
+                                <option value="0">Copy from another store…</option>
+                                @foreach (var st in otherStores) { <option value="@st.StoreId">@st.StoreName</option> }
+                            </select>
+                            <button class="secondary" disabled="@(busy || copyFrom == 0)" @onclick="CopyFromStoreAsync">Copy Accounts</button>
+                        }
+                    </div>
+
+                    @foreach (var g in SalesAccountView.Groups)
+                    {
+                        var cols = ColumnsOf(g.Fields);
+                        if (cols.Count == 0) continue;
+                        <details open="@(g.Id == SalesAccountView.Posting)">
+                            <summary>@g.Title</summary>
+                            <p class="muted">@g.Hint</p>
+                            @foreach (var c in cols) { @Field(c) }
+                        </details>
+                    }
+                    @{ var adv = AdvancedColumns(); }
+                    @if (adv.Count > 0)
+                    {
+                        <details>
+                            <summary>Advanced (@adv.Count)</summary>
+                            <p class="muted">POS behaviour and report layout. Change these only if you know why.</p>
+                            @foreach (var c in adv) { @Field(c) }
+                        </details>
+                    }
+
+                    @if (review is not null)
+                    {
+                        <div class="rt-review">
+                            <strong>Review changes</strong>
+                            @if (review.Count == 0) { <p class="muted">Nothing changed.</p> }
+                            else
+                            {
+                                <ul>@foreach (var ch in review) { <li>@ch.Label: <s>@(ch.Was.Length == 0 ? "(blank)" : ch.Was)</s> → <b>@(ch.Now.Length == 0 ? "(blank)" : ch.Now)</b></li> }</ul>
+                            }
+                        </div>
+                    }
+                    <div class="rt-actions">
+                        @if (review is null) { <button disabled="@busy" @onclick="Review">Review Changes</button> }
+                        else { <button disabled="@(busy || review.Count == 0)" @onclick="SaveAsync">Save</button> <button class="secondary" @onclick="() => review = null">Keep Editing</button> }
+                        <button class="secondary" disabled="@busy" @onclick="Close">Close</button>
+                    </div>
+                </aside>
+            }
+        </div>
+    }
+</SetupGate>
+
+@code {
+    private static SetupTable Table => SetupTables.SalesAccounts;
+    private static string[] QbTypeNames => SetupTables.QuickBooksTypes;
+
+    private IReadOnlyList<StoreInfo> stores = [];
+    private int storeId, copyFrom;
+    private SetupGridData? data;
+    private bool loaded, busy, msgOk, tiles = true;
+    private string? msg, search, bulkType, filter = "all";
+    private SetupRow? editing;
+    private Dictionary<string, string?> edit = [];
+    private IReadOnlyList<(string Label, string Was, string Now)>? review;
+    private readonly HashSet<int> selected = [];
+
+    private IReadOnlyList<StoreInfo> otherStores => stores.Where(s => s.StoreId != storeId).ToList();
+    private int AttentionCount => data?.Rows.Count(r => SalesAccountView.Attention(r.Values).Count > 0) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var s = await Access.GetAsync();
+        if (s is null || !s.Decision.Allows(Table.Area)) { loaded = true; return; }
+        try
+        {
+            stores = await Grid.StoresAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table);
+            if (stores.Count == 1) storeId = stores[0].StoreId;
+            await ReloadAsync(s);
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or UnauthorizedAccessException) { Say(ex.Message, false); }
+        loaded = true;
+    }
+
+    private async Task ReloadAsync(SetupSituation s) =>
+        data = await Grid.LoadAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, storeId, null);
+
+    private async Task<SetupSituation?> FreshAsync()
+    {
+        var s = await Access.GetAsync(fresh: true);
+        if (s is null || !s.Decision.Allows(Table.Area)) { Say("Google's confirmation has run out. Reload the page and verify again.", false); return null; }
+        return s;
+    }
+
+    private async Task RunAsync(Func<SetupSituation, Task> work)
+    {
+        busy = true;
+        try { var s = await FreshAsync(); if (s is not null) await work(s); }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or UnauthorizedAccessException) { Say(ex.Message, false); }
+        finally { busy = false; }
+    }
+
+    private void Say(string? text, bool ok) { msg = text; msgOk = ok; }
+
+    private async Task StoreChangedAsync(ChangeEventArgs e)
+    {
+        storeId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        Close(); selected.Clear(); Say(null, true); copyFrom = 0;
+        if (storeId > 0) await RunAsync(ReloadAsync); else data = data;
+    }
+
+    // ---- what the page shows
+    private static string Text(SetupRow r, string col, string blank)
+    {
+        var v = r.Values.GetValueOrDefault(col);
+        var t = v is null ? "" : Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)!.Trim();
+        return t.Length == 0 || (col == "DefaultQuickBooksType" && t == "0") ? blank : t;
+    }
+    private static string NameOf(SetupRow r) { var n = Text(r, "CreditAccount", ""); return n.Length > 0 ? n : "Sales account " + r.Key; }
+
+    private IEnumerable<KeyValuePair<SalesAccountKind, List<SetupRow>>> Grouped() =>
+        data!.Rows
+            .Where(r => SalesAccountView.Matches(r.Values, search))
+            .Where(r => filter switch { "on" => SalesAccountView.IsEnabled(r.Values), "attn" => SalesAccountView.Attention(r.Values).Count > 0, _ => true })
+            .GroupBy(r => SalesAccountView.KindOf(r.Values)).OrderBy(g => g.Key)
+            .Select(g => new KeyValuePair<SalesAccountKind, List<SetupRow>>(g.Key, g.ToList()));
+
+    private void Pick(int key, bool on) { if (on) selected.Add(key); else selected.Remove(key); }
+
+    // ---- the side panel
+    private List<SetupColumnInfo> ColumnsOf(IEnumerable<string> names) =>
+        names.Select(n => data!.Columns.FirstOrDefault(c => c.Def.Name == n)).OfType<SetupColumnInfo>().ToList();
+
+    private List<SetupColumnInfo> AdvancedColumns()
+    {
+        var grouped = SalesAccountView.Groups.SelectMany(g => g.Fields).ToHashSet();
+        return data!.Columns.Where(c => !grouped.Contains(c.Def.Name) && !c.Def.ReadOnly).ToList();
+    }
+
+    private IReadOnlyDictionary<string, object?> DraftValues() =>
+        edit.ToDictionary(k => k.Key, k => (object?)(data!.Columns.First(c => c.Def.Name == k.Key).Def.Kind == SetupKind.Bool ? k.Value == "true" : k.Value));
+
+    private void Open(SetupRow r)
+    {
+        editing = r; review = null;
+        edit = data!.Columns.ToDictionary(c => c.Def.Name, c => (string?)SetupValue.Format(c.Def, r.Values.GetValueOrDefault(c.Def.Name)));
+    }
+
+    private void Close() { editing = null; review = null; }
+
+    private string Label(string name) => data!.Columns.First(c => c.Def.Name == name).Def.Label;
+
+    private void Review()
+    {
+        review = SalesAccountView.Changes(data!.Columns.Where(c => !c.Def.ReadOnly).Select(c =>
+            (c.Def.Label, SetupValue.Format(c.Def, editing!.Values.GetValueOrDefault(c.Def.Name)) ?? "", edit.GetValueOrDefault(c.Def.Name))));
+    }
+
+    private bool IsOn(string name) => edit.GetValueOrDefault(name) == "true";
+    private void SetBool(string name, ChangeEventArgs e) { edit[name] = e.Value is true ? "true" : "false"; review = null; }
+    private void Set(string name, ChangeEventArgs e) { edit[name] = e.Value?.ToString(); review = null; }
+
+    private void FillEmpty()
+    {
+        foreach (var f in Table.Fills ?? [])
+        {
+            if (!edit.ContainsKey(f.Column) || !string.IsNullOrWhiteSpace(edit[f.Column])) continue;
+            var ok = true;
+            var text = System.Text.RegularExpressions.Regex.Replace(f.Template, @"\{(\w+)\}", m =>
+            {
+                var v = edit.GetValueOrDefault(m.Groups[1].Value);
+                if (string.IsNullOrWhiteSpace(v)) ok = false;
+                return v?.Trim() ?? "";
+            });
+            if (ok) edit[f.Column] = text;
+        }
+        review = null;
+    }
+
+    /// <summary>Copies the account fields from the sales account with the same name at another store into the open panel; nothing is saved until Review and Save.</summary>
+    private Task CopyFromStoreAsync() => RunAsync(async s =>
+    {
+        var other = await Grid.LoadAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, copyFrom, null);
+        var name = Text(editing!, "CreditAccount", "");
+        var src = other?.Rows.FirstOrDefault(r => string.Equals(Text(r, "CreditAccount", ""), name, StringComparison.OrdinalIgnoreCase) && name.Length > 0);
+        if (src is null) { Say("That store has no sales account with the same name.", false); return; }
+        foreach (var col in SalesAccountView.Copyable.Values.SelectMany(x => x))
+            if (edit.ContainsKey(col) && other!.Columns.FirstOrDefault(c => c.Def.Name == col) is { } c)
+                edit[col] = SetupValue.Format(c.Def, src.Values.GetValueOrDefault(col));
+        review = null; Say("Copied the account fields. Review the changes, then save.", true);
+    });
+
+    private Task SaveAsync() => RunAsync(async s =>
+    {
+        var r = await Grid.UpdateAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, storeId, editing!, edit);
+        if (r.Ok) { Close(); await ReloadAsync(s); Say(r.Outcome == SetupOutcome.Saved ? "Saved." : r.Message, true); }
+        else if (r.Outcome is SetupOutcome.Conflict or SetupOutcome.NotFound) { Close(); await ReloadAsync(s); Say(r.Message, false); }
+        else Say(r.Message, false);
+    });
+
+    private Task ApplyBulkAsync() => RunAsync(async s =>
+    {
+        int done = 0; var problems = new List<string>();
+        foreach (var row in data!.Rows.Where(r => selected.Contains(r.Key)).ToList())
+        {
+            var values = data.Columns.ToDictionary(c => c.Def.Name, c => (string?)SetupValue.Format(c.Def, row.Values.GetValueOrDefault(c.Def.Name)));
+            values["DefaultQuickBooksType"] = bulkType;
+            var r = await Grid.UpdateAsync(s.ClientConnectionString, s.Actor, s.Decision, Access.Now, Table, storeId, row, values);
+            if (r.Ok) done++; else problems.Add(NameOf(row) + ": " + r.Message);
+        }
+        await ReloadAsync(s); selected.Clear(); Close();
+        Say(problems.Count == 0 ? $"QuickBooks type set on {done} sales account(s)." : $"Set on {done}; {problems.Count} not saved — " + string.Join("; ", problems), problems.Count == 0);
+    });
+
+    private RenderFragment Field(SetupColumnInfo c) => __b =>
+    {
+        var name = c.Def.Name;
+        __b.OpenElement(0, "label"); __b.AddAttribute(1, "class", "rt-field");
+        __b.AddContent(2, c.Def.Label + (c.Required ? " *" : ""));
+        if (c.Def.Lookup is not null)
+        {
+            __b.OpenElement(3, "select"); __b.AddAttribute(4, "value", edit.GetValueOrDefault(name));
+            __b.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => Set(name, e)));
+            __b.OpenElement(6, "option"); __b.AddAttribute(7, "value", ""); __b.AddContent(8, c.Nullable ? "(none)" : "Choose…"); __b.CloseElement();
+            foreach (var item in data!.Lookups.GetValueOrDefault(c.Def.Lookup) ?? [])
+            { __b.OpenElement(9, "option"); __b.AddAttribute(10, "value", item.Value.ToString()); __b.AddContent(11, item.Text); __b.CloseElement(); }
+            __b.CloseElement();
+        }
+        else if (c.Def.Strict && c.Def.Suggestions is not null)
+        {
+            var cur = edit.GetValueOrDefault(name)?.Trim();
+            __b.OpenElement(40, "select"); __b.AddAttribute(41, "value", edit.GetValueOrDefault(name));
+            __b.AddAttribute(42, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => Set(name, e)));
+            __b.OpenElement(43, "option"); __b.AddAttribute(44, "value", ""); __b.AddContent(45, "(none)"); __b.CloseElement();
+            if (!string.IsNullOrEmpty(cur) && !c.Def.Suggestions.Contains(cur))
+            { __b.OpenElement(46, "option"); __b.AddAttribute(47, "value", cur); __b.AddContent(48, cur + " (not a QuickBooks type: choose one)"); __b.CloseElement(); }
+            foreach (var sg in c.Def.Suggestions) { __b.OpenElement(49, "option"); __b.AddAttribute(50, "value", sg); __b.AddContent(51, sg); __b.CloseElement(); }
+            __b.CloseElement();
+        }
+        else if (c.Def.Kind == SetupKind.Bool && c.Nullable)
+        {
+            __b.OpenElement(12, "select"); __b.AddAttribute(13, "value", edit.GetValueOrDefault(name));
+            __b.AddAttribute(14, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => Set(name, e)));
+            __b.OpenElement(15, "option"); __b.AddAttribute(16, "value", ""); __b.AddContent(17, "(either)"); __b.CloseElement();
+            __b.OpenElement(18, "option"); __b.AddAttribute(19, "value", "true"); __b.AddContent(20, "Yes"); __b.CloseElement();
+            __b.OpenElement(21, "option"); __b.AddAttribute(22, "value", "false"); __b.AddContent(23, "No"); __b.CloseElement();
+            __b.CloseElement();
+        }
+        else if (c.Def.Kind == SetupKind.Bool)
+        {
+            __b.OpenElement(24, "input"); __b.AddAttribute(25, "type", "checkbox"); __b.AddAttribute(26, "checked", IsOn(name));
+            __b.AddAttribute(27, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => SetBool(name, e))); __b.CloseElement();
+        }
+        else
+        {
+            __b.OpenElement(28, "input"); __b.AddAttribute(29, "type", "text"); __b.AddAttribute(30, "value", edit.GetValueOrDefault(name));
+            __b.AddAttribute(31, "maxlength", c.Def.Kind == SetupKind.Text && c.Db.MaxLength > 0 ? c.Db.MaxLength : 40);
+            if (c.Def.Suggestions is not null) __b.AddAttribute(32, "list", "rtdl_" + name);
+            __b.AddAttribute(33, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => Set(name, e)));
+            __b.CloseElement();
+            if (c.Def.Suggestions is not null)
+            {
+                __b.OpenElement(34, "datalist"); __b.AddAttribute(35, "id", "rtdl_" + name);
+                foreach (var sg in c.Def.Suggestions) { __b.OpenElement(36, "option"); __b.AddAttribute(37, "value", sg); __b.CloseElement(); }
+                __b.CloseElement();
+            }
+        }
+        __b.CloseElement();
+    };
+}

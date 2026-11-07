@@ -104,11 +104,11 @@ else
     }
     @if (financials is { } fin)
     {
-        <h2>Balance Sheet, @start.ToString("d") – @end.ToString("d")</h2>
+        <h2>Balance Sheet Delta, @start.ToString("d") – @end.ToString("d")</h2>
         <p class="muted">Every account added together over the dates, filed by its QuickBooks account type. Debit less credit is the change on the books.</p>
         @FinancialTable(fin.BalanceSheet, "Balance sheet delta", fin.BalanceSheetDebit, fin.BalanceSheetCredit, fin.BalanceSheetDelta)
         <h2>Profit and Loss, @start.ToString("d") – @end.ToString("d")</h2>
-        @FinancialTable(fin.ProfitAndLoss, "Net income", fin.ProfitAndLossDebit, fin.ProfitAndLossCredit, fin.NetIncome)
+        @FinancialTable(fin.ProfitAndLoss, "Net Income From Points of Sale", fin.ProfitAndLossDebit, fin.ProfitAndLossCredit, fin.NetIncome)
         @if (fin.Unclassified.Count > 0)
         {
             <h2>No QuickBooks Account Type</h2>

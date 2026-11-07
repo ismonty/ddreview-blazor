@@ -336,5 +336,35 @@ public class BatchTimesTests
             new DDReview.Core.Gl.BatchTimes(new DateTime(2026, 11, 7, 9, 12, 0), new DateTime(2026, 11, 7, 8, 0, 0)).Text());
         Assert.Equal("Submitted 11/7/2026 9:12 AM", new DDReview.Core.Gl.BatchTimes(new DateTime(2026, 11, 7, 9, 12, 0), null).Text());
         Assert.Equal("Not submitted, Settings 11/7/2026 8:00 AM", new DDReview.Core.Gl.BatchTimes(null, new DateTime(2026, 11, 7, 8, 0, 0)).Text());
+
+public class SalesAccountViewTests
+{
+    static IReadOnlyDictionary<string, object?> V(params (string, object?)[] kv) => kv.ToDictionary(x => x.Item1, x => x.Item2);
+
+    [Fact] public void Accounts_are_grouped_by_what_they_are()
+    {
+        Assert.Equal(DDReview.QuickBooks.Setup.SalesAccountKind.Excluded, DDReview.QuickBooks.Setup.SalesAccountView.KindOf(V(("Exclude", true), ("SalesItem", true))));
+        Assert.Equal(DDReview.QuickBooks.Setup.SalesAccountKind.Suspense, DDReview.QuickBooks.Setup.SalesAccountView.KindOf(V(("Suspense", true))));
+        Assert.Equal(DDReview.QuickBooks.Setup.SalesAccountKind.TotalSales, DDReview.QuickBooks.Setup.SalesAccountView.KindOf(V(("TotalSalesAccount", true))));
+        Assert.Equal(DDReview.QuickBooks.Setup.SalesAccountKind.Sales, DDReview.QuickBooks.Setup.SalesAccountView.KindOf(V(("SalesItem", true))));
+        Assert.Equal(DDReview.QuickBooks.Setup.SalesAccountKind.Other, DDReview.QuickBooks.Setup.SalesAccountView.KindOf(V()));
+    }
+
+    [Fact] public void Attention_flags_a_missing_or_unknown_quickbooks_type_but_not_for_suspense_or_excluded()
+    {
+        var a = DDReview.QuickBooks.Setup.SalesAccountView.Attention;
+        Assert.Contains("No QuickBooks type", a(V(("CreditAccount", "Food Sales"), ("DefaultQuickBooksType", "0"))));
+        Assert.Contains(a(V(("CreditAccount", "Food Sales"), ("DefaultQuickBooksType", "Fancy"))), w => w.Contains("not one QuickBooks accepts"));
+        Assert.Empty(a(V(("CreditAccount", "Food Sales"), ("DefaultQuickBooksType", "Income"))));
+        Assert.Empty(a(V(("CreditAccount", "Suspense"), ("Suspense", true))));
+        Assert.Empty(a(V(("Exclude", true))));
+        Assert.Contains("No credit account", a(V(("DefaultQuickBooksType", "Income"))));
+    }
+
+    [Fact] public void Search_looks_in_account_reference_and_type()
+    {
+        var v = V(("CreditAccount", "Food Sales"), ("DistReference", "Food"), ("DefaultQuickBooksType", "Income"));
+        Assert.True(DDReview.QuickBooks.Setup.SalesAccountView.Matches(v, "food income"));
+        Assert.False(DDReview.QuickBooks.Setup.SalesAccountView.Matches(v, "beer"));
     }
 }
