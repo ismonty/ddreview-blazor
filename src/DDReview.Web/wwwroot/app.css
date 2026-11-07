@@ -282,3 +282,5 @@ html { scroll-behavior: smooth; }
 tr.batch-head td.jump { text-align: right; white-space: nowrap; }
 a.jump-btn { display: inline-block; min-width: 1.9rem; text-align: center; padding: .15rem .35rem; border: 1px solid var(--edge); border-radius: 6px; font-size: .8rem; line-height: 1.2; text-decoration: none; color: inherit; }
 a.jump-btn:hover { background: rgba(255,255,255,.12); }
+.query-time { font-weight: normal; opacity: .75; margin-left: .4rem; }
+.gl-topline { margin: .4rem 0; } .gl-topline.bad { color: var(--bad, #b00020); }
