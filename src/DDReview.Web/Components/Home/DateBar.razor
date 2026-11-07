@@ -2,9 +2,9 @@
 @using DDReview.Core.Gl
 @using DDReview.Core.Home
 <div class="datebar">
-    <label>Starting Date <input type="date" @bind="start" /></label>
+    <label>Starting Date <input type="date" @bind="start" @bind:after="StartChanged" /></label>
     <label>Ending Date <input type="date" @bind="end" /></label>
-    @if (ShowCompare) { <label>Compare Date <input type="date" @bind="compare" /></label> }
+    @if (ShowCompare) { <label>Compare Date <input type="date" @bind="compare" @bind:after="CompareChanged" /></label> }
     @if (ShowScope)
     {
         <select @bind="scope">
@@ -37,10 +37,19 @@
     [Parameter] public EventCallback<Value> OnChange { get; set; }
 
     private DateTime start, end, compare; private DashboardScope scope; private int storeId;
+    // How far the compare date sits before the start date (364 days to begin with). Changing the start date keeps that distance; typing a new compare date sets it.
+    private int compareOffset = DDReview.Core.DateRules.DefaultCompareOffsetDays;
+    private void StartChanged()
+    {
+        end = DDReview.Core.DateRules.EndFor(start);                    // the 1st of a month: the month's last day; otherwise six days later
+        compare = DDReview.Core.DateRules.CompareFor(start, compareOffset);
+    }
+    private void CompareChanged() { if (compare.Year >= 1900 && start.Year >= 1900) compareOffset = (int)(start - compare).TotalDays; }
     protected override void OnParametersSet()
     {
         start = Start.ToDateTime(TimeOnly.MinValue); end = End.ToDateTime(TimeOnly.MinValue); compare = Compare.ToDateTime(TimeOnly.MinValue);
         scope = Scope; storeId = StoreId;
+        if (Compare.Year >= 1900 && Start.Year >= 1900) compareOffset = (int)(start - compare).TotalDays;
     }
     private Task Submit() => OnChange.InvokeAsync(new Value(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), DateOnly.FromDateTime(compare), scope, storeId));
     private Task Shift(int dir)
