@@ -264,6 +264,8 @@ table.setup input[type=text], table.setup input[type=date], table.setup select {
 .adj-acct { cursor: pointer; }
 tr.picked td { background: #fff7d6; color: #000; }
 tr.picked td .sub-link { color: #000; }
+/* The Batch NNNNNN link on a heading: the heading's own colour and size, underlined to show it can be clicked. */
+tr.batch-head button.sub-link { color: inherit; font-size: inherit; font-weight: inherit; font-family: inherit; margin-left: 0; text-decoration: underline; }
 tr.batch-head td { font-weight: 600; background: var(--panel, rgba(255,255,255,.06)); }
 /* Adjust Sales / Adjust GL: each adjustment is a block of labelled fields that wraps, so the window never runs wider than the screen. */
 table.adj, table.adj tbody { display: block; width: 100%; }
