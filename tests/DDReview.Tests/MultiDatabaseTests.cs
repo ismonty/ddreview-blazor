@@ -285,3 +285,12 @@ public class AdjustValidationTests
     [Fact] public void Batch_label_names_store_date_and_batch() =>
         Assert.Equal("Main St, Sun Nov 1, 2026 (batch 7)", new DDReview.Core.Gl.AdjustBatch(7, 1, "Main St", new DateTime(2026, 11, 1)).Label);
 }
+
+public class AdjustSeedTests
+{
+    [Fact] public void Seed_carries_the_double_clicked_lines_account_reference_class_and_flag()
+    {
+        var s = new DDReview.Core.Gl.AdjustSeed(7, "1000 Cash", "Cash over/short", "Main", -1);
+        Assert.Equal(7, s.BatchId); Assert.Equal("1000 Cash", s.Account); Assert.Equal((short)-1, s.DebitCreditFlag);
+    }
+}

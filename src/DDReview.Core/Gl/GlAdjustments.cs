@@ -28,6 +28,9 @@ public sealed record AdjustData(IReadOnlyList<AdjustBatch> Batches, IReadOnlyLis
 
 public enum AdjustKind { Gl, Sales }
 
+/// <summary>A ledger line the person double-clicked: opens Adjust GL ready to add an adjustment for that account (as DD Admin CS did), with the same batch, account, reference, class and flag.</summary>
+public sealed record AdjustSeed(int BatchId, string? Account, string? DistReference, string? AccountClass, short DebitCreditFlag);
+
 /// <summary>What is wrong with a row, in words for the person, or null when it can be saved.</summary>
 public static class AdjustValidation
 {

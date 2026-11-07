@@ -72,6 +72,8 @@
     [Parameter] public string? AllowedStores { get; set; }
     /// <summary>Called when the window closes; true when anything was saved, so the report should be run again.</summary>
     [Parameter] public EventCallback<bool> OnClosed { get; set; }
+    /// <summary>A ledger line the person double-clicked (Adjust GL only): the add form opens already filled in from it.</summary>
+    [Parameter] public AdjustSeed? Seed { get; set; }
 
     private sealed class Draft
     {
@@ -88,7 +90,19 @@
 
     private string Title => Kind == AdjustKind.Gl ? "Adjust GL" : "Adjust Sales";
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        if (Seed is { } seed && Kind == AdjustKind.Gl && data is { Batches.Count: > 0 })
+        {
+            StartAdd();
+            var d = draft!;
+            if (data.Batches.Any(b => b.BatchId == seed.BatchId)) d.BatchId = seed.BatchId;
+            d.Account = seed.Account?.Trim() ?? ""; d.Reference = seed.DistReference?.Trim() ?? ""; d.Flag = seed.DebitCreditFlag;
+            var cls = data.Classes.FirstOrDefault(c => string.Equals(c.Name, seed.AccountClass?.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (cls is not null) d.ClassId = cls.Id;
+        }
+    }
 
     private async Task ReloadAsync()
     {

@@ -261,3 +261,4 @@ table.setup input[type=text], table.setup input[type=date], table.setup select {
 /* Adjust Sales / Adjust GL windows */
 .adj .nowrap { white-space: nowrap; }
 .adj-edit input, .adj-edit select { max-width: 14rem; }
+.adj-acct { cursor: pointer; }
