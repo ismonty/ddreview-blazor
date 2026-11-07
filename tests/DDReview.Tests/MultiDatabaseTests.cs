@@ -370,3 +370,11 @@ public class SalesAccountViewTests
         Assert.False(DDReview.QuickBooks.Setup.SalesAccountView.Matches(v, "beer"));
     }
 }
+
+public class OverShortTypeTests
+{
+    [Theory]
+    [InlineData(null, "Expense")] [InlineData("", "Expense")] [InlineData("0", "Expense")] [InlineData(" Other Expense ", "Other Expense")]
+    public void The_receipt_types_own_quickbooks_type_is_used_otherwise_expense(string? configured, string expected) =>
+        Assert.Equal(expected, DDReview.Core.Gl.GlAdjustmentService.OverShortType(configured));
+}
