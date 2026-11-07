@@ -30,8 +30,8 @@
                         else
                         {
                             <tr>
-                                <td>@BatchLabel(r.BatchId)</td><td>@r.Account</td><td class="n">@(r.Debit is > 0 ? r.Debit.Value.ToString("N2") : "")</td><td class="n">@(r.Credit is > 0 ? r.Credit.Value.ToString("N2") : "")</td>
-                                <td>@r.DistReference</td><td class="n">@r.Sorter</td><td>@r.BankRecAccount</td><td>@ClassName(r.AccountClassId)</td><td>@r.Vendor</td><td>@(r.DebitCreditFlag == 1 ? "Debit" : r.DebitCreditFlag == -1 ? "Credit" : r.DebitCreditFlag.ToString())</td><td>@r.DefaultAccountType</td>
+                                <td data-label="Batch">@BatchLabel(r.BatchId)</td><td data-label="Account">@r.Account</td><td class="n" data-label="Debit">@(r.Debit is > 0 ? r.Debit.Value.ToString("N2") : "")</td><td class="n" data-label="Credit">@(r.Credit is > 0 ? r.Credit.Value.ToString("N2") : "")</td>
+                                <td data-label="Reference">@r.DistReference</td><td class="n" data-label="Sort">@r.Sorter</td><td data-label="Bank Rec Account">@r.BankRecAccount</td><td data-label="Class">@ClassName(r.AccountClassId)</td><td data-label="Vendor">@r.Vendor</td><td data-label="Debit/Credit Flag">@(r.DebitCreditFlag == 1 ? "Debit" : r.DebitCreditFlag == -1 ? "Credit" : r.DebitCreditFlag.ToString())</td><td data-label="Type">@r.DefaultAccountType</td>
                                 <td class="nowrap">@RowButtons(r.ItemId, () => EditGl(r), () => RemoveGlAsync(r))</td>
                             </tr>
                         }
@@ -49,7 +49,7 @@
                         else
                         {
                             <tr>
-                                <td>@BatchLabel(r.BatchId)</td><td>@CreditName(r.CreditAccountId)</td><td class="n">@r.SalesAmount?.ToString("N2")</td><td>@r.OffsetAccount</td><td>@ClassName(r.OffsetAccountClassId)</td><td>@r.OffsetDistReference</td>
+                                <td data-label="Batch">@BatchLabel(r.BatchId)</td><td data-label="Sales Account">@CreditName(r.CreditAccountId)</td><td class="n" data-label="Sales Amount">@r.SalesAmount?.ToString("N2")</td><td data-label="Offset Account">@r.OffsetAccount</td><td data-label="Offset Class">@ClassName(r.OffsetAccountClassId)</td><td data-label="Offset Reference">@r.OffsetDistReference</td>
                                 <td class="nowrap">@RowButtons(r.ItemId, () => EditSales(r), () => RemoveSalesAsync(r))</td>
                             </tr>
                         }
@@ -190,27 +190,27 @@
     </text>;
 
     private RenderFragment GlEditor() => @<tr class="adj-edit">
-        <td><select @bind="draft!.BatchId">@foreach (var b in data!.Batches) {<option value="@b.BatchId">@b.Label</option>}</select></td>
-        <td><input @bind="draft!.Account" maxlength="100" aria-label="Account" /></td>
-        <td class="n"><input @bind="draft!.Debit" inputmode="decimal" size="9" aria-label="Debit" /></td>
-        <td class="n"><input @bind="draft!.Credit" inputmode="decimal" size="9" aria-label="Credit" /></td>
-        <td><input @bind="draft!.Reference" maxlength="100" aria-label="Reference" /></td>
-        <td class="n"><input @bind="draft!.Sort" inputmode="numeric" size="5" aria-label="Sort" /></td>
-        <td><input @bind="draft!.BankRec" maxlength="50" aria-label="Bank rec account" /></td>
-        <td><select @bind="draft!.ClassId">@foreach (var c in data!.Classes) {<option value="@c.Id">@c.Name</option>}</select></td>
-        <td><input @bind="draft!.Vendor" maxlength="50" aria-label="Vendor" /></td>
-        <td><select @bind="draft!.Flag" aria-label="Debit/Credit Flag"><option value="0">(none)</option><option value="1">Debit</option><option value="-1">Credit</option></select></td>
-        <td><input @bind="draft!.Type" maxlength="50" aria-label="Account type" /></td>
+        <td data-label="Batch"><select @bind="draft!.BatchId">@foreach (var b in data!.Batches) {<option value="@b.BatchId">@b.Label</option>}</select></td>
+        <td data-label="Account"><input @bind="draft!.Account" maxlength="100" aria-label="Account" /></td>
+        <td class="n" data-label="Debit"><input @bind="draft!.Debit" inputmode="decimal" size="9" aria-label="Debit" /></td>
+        <td class="n" data-label="Credit"><input @bind="draft!.Credit" inputmode="decimal" size="9" aria-label="Credit" /></td>
+        <td data-label="Reference"><input @bind="draft!.Reference" maxlength="100" aria-label="Reference" /></td>
+        <td class="n" data-label="Sort"><input @bind="draft!.Sort" inputmode="numeric" size="5" aria-label="Sort" /></td>
+        <td data-label="Bank Rec Account"><input @bind="draft!.BankRec" maxlength="50" aria-label="Bank rec account" /></td>
+        <td data-label="Class"><select @bind="draft!.ClassId">@foreach (var c in data!.Classes) {<option value="@c.Id">@c.Name</option>}</select></td>
+        <td data-label="Vendor"><input @bind="draft!.Vendor" maxlength="50" aria-label="Vendor" /></td>
+        <td data-label="Debit/Credit Flag"><select @bind="draft!.Flag" aria-label="Debit/Credit Flag"><option value="0">(none)</option><option value="1">Debit</option><option value="-1">Credit</option></select></td>
+        <td data-label="Type"><input @bind="draft!.Type" maxlength="50" aria-label="Account type" /></td>
         <td class="nowrap"><button type="button" disabled="@busy" @onclick="SaveAsync">Save</button> <button type="button" class="secondary" @onclick="Cancel">Cancel</button></td>
     </tr>;
 
     private RenderFragment SalesEditor() => @<tr class="adj-edit">
-        <td><select @bind="draft!.BatchId">@foreach (var b in data!.Batches) {<option value="@b.BatchId">@b.Label</option>}</select></td>
-        <td><select @bind="draft!.CreditAccountId"><option value="0">Choose…</option>@foreach (var c in CreditsFor(draft!.BatchId)) {<option value="@c.CreditAccountId">@c.Label</option>}</select></td>
-        <td class="n"><input @bind="draft!.Amount" inputmode="decimal" size="10" aria-label="Sales amount" /></td>
-        <td><input @bind="draft!.Account" maxlength="100" aria-label="Offset account" /></td>
-        <td><select @bind="draft!.ClassId">@foreach (var c in data!.Classes) {<option value="@c.Id">@c.Name</option>}</select></td>
-        <td><input @bind="draft!.Reference" maxlength="100" aria-label="Offset reference" /></td>
+        <td data-label="Batch"><select @bind="draft!.BatchId">@foreach (var b in data!.Batches) {<option value="@b.BatchId">@b.Label</option>}</select></td>
+        <td data-label="Sales Account"><select @bind="draft!.CreditAccountId"><option value="0">Choose…</option>@foreach (var c in CreditsFor(draft!.BatchId)) {<option value="@c.CreditAccountId">@c.Label</option>}</select></td>
+        <td class="n" data-label="Sales Amount"><input @bind="draft!.Amount" inputmode="decimal" size="10" aria-label="Sales amount" /></td>
+        <td data-label="Offset Account"><input @bind="draft!.Account" maxlength="100" aria-label="Offset account" /></td>
+        <td data-label="Offset Class"><select @bind="draft!.ClassId">@foreach (var c in data!.Classes) {<option value="@c.Id">@c.Name</option>}</select></td>
+        <td data-label="Offset Reference"><input @bind="draft!.Reference" maxlength="100" aria-label="Offset reference" /></td>
         <td class="nowrap"><button type="button" disabled="@busy" @onclick="SaveAsync">Save</button> <button type="button" class="secondary" @onclick="Cancel">Cancel</button></td>
     </tr>;
 
