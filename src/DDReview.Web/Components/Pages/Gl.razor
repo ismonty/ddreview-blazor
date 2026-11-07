@@ -65,13 +65,13 @@ else
         {
             <h2>Batches Out of Balance</h2>
             <table><thead><tr><th>Batch</th><th>Date</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Difference</th><th></th></tr></thead>
-            <tbody>@foreach (var b in report.OutOfBalance) {<tr><td>@b.BatchId</td><td>@b.PostingDate.ToString("d")</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td class="n">@b.Difference.ToString("N2")</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody></table>
+            <tbody>@foreach (var b in report.OutOfBalance) {<tr class="@(focusBatch == b.BatchId ? "picked" : null)"><td><button type="button" class="cell sub-link" title="Show only this batch's ledger lines" @onclick="() => FocusBatch(b.BatchId)">@b.BatchId</button></td><td>@b.PostingDate.ToString("d")</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td class="n">@b.Difference.ToString("N2")</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody></table>
         }
         @if (showBatches)
         {
             <h2>Batch Subtotals</h2>
             <table><thead><tr><th>Batch</th><th>Date</th><th>Store</th><th class="n">Debit</th><th class="n">Credit</th><th>Balance</th><th></th></tr></thead>
-            <tbody>@foreach (var b in report.Batches) {<tr class="@(b.HasSuspense ? "suspense" : null)"><td>@b.BatchId</td><td>@b.PostingDate.ToString("d")</td><td>@(batchStores.GetValueOrDefault(b.BatchId))</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td>@BalanceNote(b.Debit, b.Credit)</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody>
+            <tbody>@foreach (var b in report.Batches) {<tr class="@(b.HasSuspense ? "suspense" : null)"><td><button type="button" class="cell sub-link" title="Show only this batch's ledger lines" @onclick="() => FocusBatch(b.BatchId)">@b.BatchId</button></td><td>@b.PostingDate.ToString("d")</td><td>@(batchStores.GetValueOrDefault(b.BatchId))</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td>@BalanceNote(b.Debit, b.Credit)</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody>
             <tbody class="gl-grand"><tr class="total"><td colspan="3">Grand total @BalanceNote(report.TotalDebit, report.TotalCredit)</td><td class="n">@report.TotalDebit.ToString("N2")</td><td class="n">@report.TotalCredit.ToString("N2")</td><td colspan="2"></td></tr></tbody></table>
         }
     }
@@ -102,7 +102,12 @@ else
     }
     @if (detailLines is not null)
     {
-        <h2>@detailLines.Count(l => l.Debit != 0 || l.Credit != 0) lines</h2>
+        <h2>@detailLines.Count(l => l.Debit != 0 || l.Credit != 0) lines@(focusBatch is int fb ? ", Batch " + fb : "")</h2>
+        @if (focusBatch is int fbn)
+        {
+            <p class="sub-actions"><button type="button" @onclick="ShowAllLines">Show All Lines</button>
+                <button type="button" @onclick="() => SeedBatch(fbn)" title="Adds a ledger line to this batch after the sales tax is worked out">Adjust GL</button></p>
+        }
         <table><thead><tr><th>Batch</th><th>Date</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         @{ var shown = detailLines.Where(l => l.Debit != 0 || l.Credit != 0).ToList(); }
         @foreach (var day in shown.GroupBy(l => l.PostingDate.Date).OrderBy(g => g.Key))
@@ -116,7 +121,7 @@ else
         }
         @{ var gd = shown.Sum(l => l.Debit); var gc = shown.Sum(l => l.Credit); }
         <tbody class="gl-grand">
-            <tr class="total"><td colspan="5">Grand total @BalanceNote(gd, gc)</td><td class="n">@gd.ToString("N2")</td><td class="n">@gc.ToString("N2")</td></tr>
+            <tr class="total"><td colspan="5">@(focusBatch is int ? "Batch subtotal" : "Grand total") @BalanceNote(gd, gc)</td><td class="n">@gd.ToString("N2")</td><td class="n">@gc.ToString("N2")</td></tr>
         </tbody></table>
     }
     @if (summaryLines is not null)
@@ -215,6 +220,9 @@ else
     private bool subsOpen, subsBusy;
     private AdjustKind? adjust;
     private AdjustSeed? adjustSeed;
+    private IReadOnlyList<GlLine>? keptLines;   // every line of the last run, so a batch can be picked out of it
+    private int? focusBatch;
+    private string runMode = "";
     private int adjGlCount, adjSalesCount;
     private string subsTitle = "";
     private string? subsError;
@@ -328,7 +336,7 @@ else
     private async Task RunAsync()
     {
         if (ctx is null || busy) return;
-        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
+        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
         if (selected.Count == 0) { error = "Pick at least one store."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
         busy = true;
@@ -347,6 +355,7 @@ else
             {
                 var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
                 report = GlBalance.Compute(lines);
+                keptLines = lines; runMode = mode;
                 if (mode == "batches")
                 {
                     showBatches = true;
@@ -373,6 +382,26 @@ else
     /// <summary>
     /// The tax rate check runs after the report is on the page, so a slow or failing check never holds the report back. Nothing to show is the normal case.
     /// </summary>
+    /// <summary>A click on a batch number: the ledger lines below narrow to that batch, with its own subtotal.</summary>
+    private void FocusBatch(int batchId)
+    {
+        if (keptLines is null) return;
+        focusBatch = batchId;
+        detailLines = keptLines.Where(l => l.BatchId == batchId).ToList();
+    }
+
+    private void ShowAllLines()
+    {
+        focusBatch = null;
+        detailLines = runMode == "batches" ? null : keptLines;
+    }
+
+    private void SeedBatch(int batchId)
+    {
+        adjustSeed = new AdjustSeed(batchId, null, null, null, 0);
+        adjust = AdjustKind.Gl;
+    }
+
     /// <summary>Double-click on an account in the detail lines: opens Adjust GL with a new line started for that account.</summary>
     private void SeedAdjust(GlLine l)
     {

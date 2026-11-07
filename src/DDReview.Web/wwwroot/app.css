@@ -262,3 +262,4 @@ table.setup input[type=text], table.setup input[type=date], table.setup select {
 .adj .nowrap { white-space: nowrap; }
 .adj-edit input, .adj-edit select { max-width: 14rem; }
 .adj-acct { cursor: pointer; }
+tr.picked td { background: #fff7d6; }
