@@ -126,7 +126,7 @@ else
                 @foreach (var bg in day.GroupBy(x => new { x.StoreNumber, x.BatchId }).OrderBy(g => g.Key.StoreNumber ?? int.MaxValue).ThenBy(g => g.Key.BatchId))   /* each batch together; lines keep their own order */
                 {
                     var bd = bg.Sum(x => x.Debit); var bc = bg.Sum(x => x.Credit);
-                    <tr class="batch-head"><td colspan="6"><button type="button" class="cell sub-link" title="Show only this batch's ledger lines (to adjust it or request resubmission)" @onclick="() => FocusBatch(bg.Key.BatchId)">Batch @bg.Key.BatchId</button>@(batchStores.TryGetValue(bg.Key.BatchId, out var sn) ? " — " + sn : "")</td><td class="jump"><a href="@Nav.ToAbsoluteUri("gl#gl-top")" class="jump-btn" title="Jump to the top" aria-label="Jump to the top">▲</a> <a href="@Nav.ToAbsoluteUri("gl#gl-bottom")" class="jump-btn" title="Jump to the bottom" aria-label="Jump to the bottom">▼</a></td></tr>
+                    <tr class="batch-head"><td colspan="6"><button type="button" class="cell sub-link" title="Show only this batch's ledger lines (to adjust it or request resubmission)" @onclick="() => FocusBatch(bg.Key.BatchId)">Batch @bg.Key.BatchId</button>@(batchStores.TryGetValue(bg.Key.BatchId, out var sn) ? " — " + sn : "")@(focusBatch == bg.Key.BatchId && focusSubmitted is not null ? " — " + focusSubmitted : "")</td><td class="jump"><a href="@Nav.ToAbsoluteUri("gl#gl-top")" class="jump-btn" title="Jump to the top" aria-label="Jump to the top">▲</a> <a href="@Nav.ToAbsoluteUri("gl#gl-bottom")" class="jump-btn" title="Jump to the bottom" aria-label="Jump to the bottom">▼</a></td></tr>
                     @foreach (var l in bg)
                     {
                         <tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td class="adj-acct" title="Double-click to add an Adjust GL line for this account" @ondblclick="() => SeedAdjust(l)">@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>
@@ -249,6 +249,7 @@ else
     private AdjustSeed? adjustSeed;
     private IReadOnlyList<GlLine>? keptLines;   // every line of the last run, so a batch can be picked out of it
     private int? focusBatch;
+    private string? focusSubmitted;   // "Submitted 11/7/2026 9:12 AM" for the picked batch, when it can be read
     private bool resubmitConfirm, resubmitBusy, resubmitFailed;
     private string? resubmitMessage;
     private string runMode = "";
@@ -409,17 +410,30 @@ else
     /// The tax rate check runs after the report is on the page, so a slow or failing check never holds the report back. Nothing to show is the normal case.
     /// </summary>
     /// <summary>A click on a batch number: the ledger lines below narrow to that batch, with its own subtotal.</summary>
-    private void FocusBatch(int batchId)
+    private async Task FocusBatch(int batchId)
     {
         if (keptLines is null) return;
-        if (focusBatch != batchId) { resubmitConfirm = false; resubmitMessage = null; }
+        if (focusBatch != batchId) { resubmitConfirm = false; resubmitMessage = null; focusSubmitted = null; }
         focusBatch = batchId;
         detailLines = keptLines.Where(l => l.BatchId == batchId).ToList();
+        await LoadSubmittedAsync(batchId);
+    }
+
+    /// <summary>The submission date and time on record for the picked batch, shown on its heading line.</summary>
+    private async Task LoadSubmittedAsync(int batchId)
+    {
+        if (ctx is null) return;
+        try
+        {
+            var when = await ResubmitSvc.GetSubmittedAsync(ctx.ClientConnectionString, SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit), batchId);
+            if (focusBatch == batchId) focusSubmitted = when is DateTime d ? "Submitted " + d.ToString("M/d/yyyy h:mm tt") : "Not submitted";
+        }
+        catch (Exception) { if (focusBatch == batchId) focusSubmitted = null; }   // the heading just goes without it
     }
 
     private void ShowAllLines()
     {
-        focusBatch = null; resubmitConfirm = false; resubmitMessage = null;
+        focusBatch = null; focusSubmitted = null; resubmitConfirm = false; resubmitMessage = null;
         detailLines = runMode == "batches" ? null : keptLines;
     }
 
@@ -431,6 +445,7 @@ else
         {
             await ResubmitSvc.RequestAsync(ctx.ClientConnectionString, AdjustActor(), SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit), batchId);
             resubmitMessage = "Batch " + batchId + " was sent back for more work.";
+            await LoadSubmittedAsync(batchId);
         }
         catch (GlAdjustmentException ex) { resubmitFailed = true; resubmitMessage = ex.Message; }
         catch (Exception ex) { resubmitFailed = true; resubmitMessage = "The request could not be made: " + ex.Message; }

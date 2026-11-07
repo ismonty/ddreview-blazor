@@ -13,6 +13,17 @@ public sealed class BatchResubmissionService
 {
     private const string AuditArea = "GlResubmit";
 
+    /// <summary>When the batch was last submitted, as on record: null when it never was (or the date is blank).</summary>
+    public async Task<DateTime?> GetSubmittedAsync(string cs, string? allowedStoresCsv, int batchId, CancellationToken ct = default)
+    {
+        await using var cn = new SqlConnection(cs);
+        await cn.OpenAsync(ct);
+        await GlAdjustmentService.EnsureBatchAllowedAsync(cn, null!, batchId, allowedStoresCsv, ct);
+        await using var cmd = new SqlCommand("select BatchSubmitted from dbo.tblCashAndSalesBatches where BatchID = @b", cn);
+        cmd.Parameters.Add("@b", System.Data.SqlDbType.Int).Value = batchId;
+        return await cmd.ExecuteScalarAsync(ct) as DateTime?;
+    }
+
     /// <param name="allowedStoresCsv">null = every store; otherwise the batch must belong to one of these stores.</param>
     public async Task RequestAsync(string cs, SetupActor actor, string? allowedStoresCsv, int batchId, CancellationToken ct = default)
     {
