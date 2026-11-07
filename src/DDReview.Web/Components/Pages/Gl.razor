@@ -64,8 +64,8 @@ else
         @if (report.OutOfBalance.Any())
         {
             <h2>Batches Out of Balance</h2>
-            <table><thead><tr><th>Batch</th><th>Date</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Difference</th><th></th></tr></thead>
-            <tbody>@foreach (var b in report.OutOfBalance) {<tr class="@(focusBatch == b.BatchId ? "picked" : null)"><td><button type="button" class="cell sub-link" title="Show only this batch's ledger lines" @onclick="() => FocusBatch(b.BatchId)">@b.BatchId</button></td><td>@b.PostingDate.ToString("d")</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td class="n">@b.Difference.ToString("N2")</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody></table>
+            <table><thead><tr><th>Batch</th><th>Date</th><th>Store Report</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Difference</th><th></th></tr></thead>
+            <tbody>@foreach (var b in report.OutOfBalance) {<tr class="@(focusBatch == b.BatchId ? "picked" : null)"><td><button type="button" class="cell sub-link" title="Show only this batch's ledger lines" @onclick="() => FocusBatch(b.BatchId)">@b.BatchId</button></td><td>@b.PostingDate.ToString("d")</td><td>@(batchStores.GetValueOrDefault(b.BatchId))</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td class="n">@b.Difference.ToString("N2")</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody></table>
         }
         @if (showBatches)
         {
@@ -112,9 +112,16 @@ else
         @{ var shown = detailLines.Where(l => l.Debit != 0 || l.Credit != 0).ToList(); }
         @foreach (var day in shown.GroupBy(l => l.PostingDate.Date).OrderBy(g => g.Key))
         {
+            lastHeaderBatch = null;
             var dd = day.Sum(l => l.Debit); var dc = day.Sum(l => l.Credit);
             <tbody class="gl-day">
-                @foreach (var l in day) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td class="adj-acct" title="Double-click to add an Adjust GL line for this account" @ondblclick="() => SeedAdjust(l)">@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}
+                @foreach (var l in day) {
+                    @if (l.BatchId != lastHeaderBatch)
+                    {
+                        lastHeaderBatch = l.BatchId;
+                        <tr class="batch-head"><td colspan="7">Batch @l.BatchId@(batchStores.TryGetValue(l.BatchId, out var sn) ? " — " + sn : "")</td></tr>
+                    }
+                    <tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td class="adj-acct" title="Double-click to add an Adjust GL line for this account" @ondblclick="() => SeedAdjust(l)">@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}
                 <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc) <button type="button" class="cell sub-link" @onclick="() => ShowDayAsync(day.Key)">Submission Reports</button></td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
                 <tr class="gl-gap"><td colspan="7"></td></tr>
             </tbody>
@@ -222,6 +229,7 @@ else
     private AdjustSeed? adjustSeed;
     private IReadOnlyList<GlLine>? keptLines;   // every line of the last run, so a batch can be picked out of it
     private int? focusBatch;
+    private int? lastHeaderBatch;
     private string runMode = "";
     private int adjGlCount, adjSalesCount;
     private string subsTitle = "";
@@ -336,7 +344,7 @@ else
     private async Task RunAsync()
     {
         if (ctx is null || busy) return;
-        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
+        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; batchStores = new(); focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
         if (selected.Count == 0) { error = "Pick at least one store."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
         busy = true;
@@ -356,12 +364,9 @@ else
                 var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
                 report = GlBalance.Compute(lines);
                 keptLines = lines; runMode = mode;
-                if (mode == "batches")
-                {
-                    showBatches = true;
-                    batchStores = lines.Where(l => l.StoreName is not null).GroupBy(l => l.BatchId)
-                        .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(l => (l.StoreNumber is int n ? n + " – " : "") + l.StoreName).Distinct()));
-                }
+                batchStores = lines.Where(l => l.StoreName is not null).GroupBy(l => l.BatchId)
+                    .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(l => (l.StoreNumber is int n ? n + " – " : "") + l.StoreName).Distinct()));
+                if (mode == "batches") showBatches = true;
                 else detailLines = lines;
                 if (mode == "both") totalLines = GlTotals.Group(lines);
             }
