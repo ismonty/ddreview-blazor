@@ -90,7 +90,7 @@ else
             var dd = day.Sum(l => l.Debit); var dc = day.Sum(l => l.Credit);
             <tbody class="gl-day">
                 @foreach (var l in day) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}
-                <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc) <button type="button" class="cell sub-link" @onclick="() => ShowDayAsync(day.Key)">Submission Report</button></td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
+                <tr class="total"><td colspan="5">@day.Key.ToString("dddd, MMMM d, yyyy") — total @BalanceNote(dd, dc) <button type="button" class="cell sub-link" @onclick="() => ShowDayAsync(day.Key)">Submission Reports</button></td><td class="n">@dd.ToString("N2")</td><td class="n">@dc.ToString("N2")</td></tr>
                 <tr class="gl-gap"><td colspan="7"></td></tr>
             </tbody>
         }
