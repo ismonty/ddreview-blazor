@@ -276,7 +276,7 @@ else
     private IReadOnlyList<GlLine>? keptLines;   // every line of the last run, so a batch can be picked out of it
     private GlFinancials? financials;
     private int? focusBatch;
-    private string? focusSubmitted;   // "Submitted 11/7/2026 9:12 AM" for the picked batch, when it can be read
+    private string? focusSubmitted;   // "Submitted 11/7/2026 9:12 AM, Settings 11/7/2026 8:00 AM" for the picked batch, when it can be read
     private bool resubmitConfirm, resubmitBusy, resubmitFailed;
     private string? resubmitMessage;
     private string runMode = "";
@@ -453,8 +453,8 @@ else
         if (ctx is null) return;
         try
         {
-            var when = await ResubmitSvc.GetSubmittedAsync(ctx.ClientConnectionString, SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit), batchId);
-            if (focusBatch == batchId) focusSubmitted = when is DateTime d ? "Submitted " + d.ToString("M/d/yyyy h:mm tt") : "Not submitted";
+            var times = await ResubmitSvc.GetTimesAsync(ctx.ClientConnectionString, SubmissionReportService.AllowedStores(ctx.Access, DDReview.Core.Tenancy.ReportKind.DebitCredit), batchId);
+            if (focusBatch == batchId) focusSubmitted = times.Text();
         }
         catch (Exception) { if (focusBatch == batchId) focusSubmitted = null; }   // the heading just goes without it
     }

@@ -9,19 +9,34 @@ namespace DDReview.Core.Gl;
 /// BatchSubmitted to its PostingDate and BatchSubmissionStatus to 4 so the submission function returns it for more work.
 /// The store check and the audit row are here, in one transaction with the change.
 /// </summary>
+public sealed record BatchTimes(DateTime? Submitted, DateTime? SettingsUpdated)
+{
+    /// <summary>"Submitted 11/7/2026 9:12 AM, Settings 11/7/2026 8:00 AM" (or "Not submitted"); Settings is left off when the store has no such date.</summary>
+    public string Text() =>
+        (Submitted is DateTime d ? "Submitted " + d.ToString("M/d/yyyy h:mm tt", System.Globalization.CultureInfo.InvariantCulture) : "Not submitted")
+        + (SettingsUpdated is DateTime u ? ", Settings " + u.ToString("M/d/yyyy h:mm tt", System.Globalization.CultureInfo.InvariantCulture) : "");
+}
+
 public sealed class BatchResubmissionService
 {
     private const string AuditArea = "GlResubmit";
 
-    /// <summary>When the batch was last submitted, as on record: null when it never was (or the date is blank).</summary>
-    public async Task<DateTime?> GetSubmittedAsync(string cs, string? allowedStoresCsv, int batchId, CancellationToken ct = default)
+    /// <summary>When the batch was last submitted, as on record (null = never), and when its store's settings were last updated (null = unknown or never).</summary>
+    public async Task<BatchTimes> GetTimesAsync(string cs, string? allowedStoresCsv, int batchId, CancellationToken ct = default)
     {
         await using var cn = new SqlConnection(cs);
         await cn.OpenAsync(ct);
         await GlAdjustmentService.EnsureBatchAllowedAsync(cn, null!, batchId, allowedStoresCsv, ct);
-        await using var cmd = new SqlCommand("select BatchSubmitted from dbo.tblCashAndSalesBatches where BatchID = @b", cn);
+        try { return await ReadTimesAsync(cn, "st.SettingsUpdated", batchId, ct); }
+        catch (SqlException ex) when (ex.Number == 207) { return await ReadTimesAsync(cn, "null", batchId, ct); }   // a database without tblStores.SettingsUpdated
+    }
+
+    private static async Task<BatchTimes> ReadTimesAsync(SqlConnection cn, string settingsColumn, int batchId, CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand($"select b.BatchSubmitted, {settingsColumn} as SettingsUpdated from dbo.tblCashAndSalesBatches b left join dbo.tblStores st on st.StoreID = b.StoreID where b.BatchID = @b", cn);
         cmd.Parameters.Add("@b", System.Data.SqlDbType.Int).Value = batchId;
-        return await cmd.ExecuteScalarAsync(ct) as DateTime?;
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct) ? new BatchTimes(r["BatchSubmitted"] as DateTime?, r["SettingsUpdated"] as DateTime?) : new BatchTimes(null, null);
     }
 
     /// <param name="allowedStoresCsv">null = every store; otherwise the batch must belong to one of these stores.</param>

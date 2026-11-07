@@ -328,6 +328,15 @@ public class GlFinancialsTests
     }
 }
 
+public class BatchTimesTests
+{
+    [Fact] public void Heading_text_lists_the_submission_then_the_stores_settings_date()
+    {
+        Assert.Equal("Submitted 11/7/2026 9:12 AM, Settings 11/7/2026 8:00 AM",
+            new DDReview.Core.Gl.BatchTimes(new DateTime(2026, 11, 7, 9, 12, 0), new DateTime(2026, 11, 7, 8, 0, 0)).Text());
+        Assert.Equal("Submitted 11/7/2026 9:12 AM", new DDReview.Core.Gl.BatchTimes(new DateTime(2026, 11, 7, 9, 12, 0), null).Text());
+        Assert.Equal("Not submitted, Settings 11/7/2026 8:00 AM", new DDReview.Core.Gl.BatchTimes(null, new DateTime(2026, 11, 7, 8, 0, 0)).Text());
+
 public class SalesAccountViewTests
 {
     static IReadOnlyDictionary<string, object?> V(params (string, object?)[] kv) => kv.ToDictionary(x => x.Item1, x => x.Item2);
