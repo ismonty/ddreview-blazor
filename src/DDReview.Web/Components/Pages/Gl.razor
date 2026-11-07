@@ -117,7 +117,7 @@ else
                 @foreach (var bg in day.GroupBy(x => new { x.StoreNumber, x.BatchId }).OrderBy(g => g.Key.StoreNumber ?? int.MaxValue).ThenBy(g => g.Key.BatchId))   /* each batch together; lines keep their own order */
                 {
                     var bd = bg.Sum(x => x.Debit); var bc = bg.Sum(x => x.Credit);
-                    <tr class="batch-head"><td colspan="6">Batch @bg.Key.BatchId@(batchStores.TryGetValue(bg.Key.BatchId, out var sn) ? " — " + sn : "")</td><td class="jump"><a href="#gl-top" class="jump-btn" title="Jump to the top" aria-label="Jump to the top">▲</a> <a href="#gl-bottom" class="jump-btn" title="Jump to the bottom" aria-label="Jump to the bottom">▼</a></td></tr>
+                    <tr class="batch-head"><td colspan="6">Batch @bg.Key.BatchId@(batchStores.TryGetValue(bg.Key.BatchId, out var sn) ? " — " + sn : "")</td><td class="jump"><a href="@Nav.ToAbsoluteUri("gl#gl-top")" class="jump-btn" title="Jump to the top" aria-label="Jump to the top">▲</a> <a href="@Nav.ToAbsoluteUri("gl#gl-bottom")" class="jump-btn" title="Jump to the bottom" aria-label="Jump to the bottom">▼</a></td></tr>
                     @foreach (var l in bg)
                     {
                         <tr class="@(l.Suspense ? "suspense" : null)"><td>@l.BatchId</td><td>@l.PostingDate.ToString("d")</td><td class="adj-acct" title="Double-click to add an Adjust GL line for this account" @ondblclick="() => SeedAdjust(l)">@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>
