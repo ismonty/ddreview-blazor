@@ -273,3 +273,6 @@ table.adj td { display: block; padding: 0; border: 0; }
 table.adj td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--muted, #666); }
 table.adj td.n { text-align: left; }
 .adj-edit input, .adj-edit select { max-width: 100%; }
+tr.batch-bal td { font-weight: 600; border-top: 1px solid var(--edge); }
+tr.batch-bal.bad td { color: #ff9a8a; }
+tr.batch-gap td { height: .9rem; padding: 0; border: 0; }
