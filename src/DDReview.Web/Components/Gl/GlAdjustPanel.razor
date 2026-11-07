@@ -22,7 +22,7 @@
             <table class="adj">
                 @if (Kind == AdjustKind.Gl)
                 {
-                    <thead><tr><th>Batch</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th><th>Reference</th><th class="n">Sort</th><th>Bank Rec Account</th><th>Class</th><th>Vendor</th><th class="n">Flag</th><th>Type</th><th></th></tr></thead>
+                    <thead><tr><th>Batch</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th><th>Reference</th><th class="n">Sort</th><th>Bank Rec Account</th><th>Class</th><th>Vendor</th><th>Debit/Credit Flag</th><th>Type</th><th></th></tr></thead>
                     <tbody>
                     @foreach (var r in data.Gl)
                     {
@@ -31,7 +31,7 @@
                         {
                             <tr>
                                 <td>@BatchLabel(r.BatchId)</td><td>@r.Account</td><td class="n">@(r.Debit is > 0 ? r.Debit.Value.ToString("N2") : "")</td><td class="n">@(r.Credit is > 0 ? r.Credit.Value.ToString("N2") : "")</td>
-                                <td>@r.DistReference</td><td class="n">@r.Sorter</td><td>@r.BankRecAccount</td><td>@ClassName(r.AccountClassId)</td><td>@r.Vendor</td><td class="n">@r.DebitCreditFlag</td><td>@r.DefaultAccountType</td>
+                                <td>@r.DistReference</td><td class="n">@r.Sorter</td><td>@r.BankRecAccount</td><td>@ClassName(r.AccountClassId)</td><td>@r.Vendor</td><td>@(r.DebitCreditFlag == 1 ? "Debit" : r.DebitCreditFlag == -1 ? "Credit" : r.DebitCreditFlag.ToString())</td><td>@r.DefaultAccountType</td>
                                 <td class="nowrap">@RowButtons(r.ItemId, () => EditGl(r), () => RemoveGlAsync(r))</td>
                             </tr>
                         }
@@ -199,7 +199,7 @@
         <td><input @bind="draft!.BankRec" maxlength="50" aria-label="Bank rec account" /></td>
         <td><select @bind="draft!.ClassId">@foreach (var c in data!.Classes) {<option value="@c.Id">@c.Name</option>}</select></td>
         <td><input @bind="draft!.Vendor" maxlength="50" aria-label="Vendor" /></td>
-        <td class="n"><input type="number" @bind="draft!.Flag" size="3" aria-label="Debit credit flag" title="Same meaning as in the ledger lines; leave 0 unless you know you need another value." /></td>
+        <td><select @bind="draft!.Flag" aria-label="Debit/Credit Flag"><option value="0">(none)</option><option value="1">Debit</option><option value="-1">Credit</option></select></td>
         <td><input @bind="draft!.Type" maxlength="50" aria-label="Account type" /></td>
         <td class="nowrap"><button type="button" disabled="@busy" @onclick="SaveAsync">Save</button> <button type="button" class="secondary" @onclick="Cancel">Cancel</button></td>
     </tr>;
