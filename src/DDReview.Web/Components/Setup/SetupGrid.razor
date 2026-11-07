@@ -32,13 +32,13 @@ else
                 <input type="text" value="@search" @onchange="e => search = e.Value?.ToString()" @onkeydown="SearchKey" placeholder="contains…" />
             </label>
             <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="ApplySearchAsync">Apply</button>
-            @if (!string.IsNullOrEmpty(applied)) { <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="ClearSearchAsync">Show all</button> }
+            @if (!string.IsNullOrEmpty(applied)) { <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="ClearSearchAsync">Show All</button> }
         </p>
     }
     @if (Table.ParentCheck is not null && storeId > 0)
     {
         <p>
-            <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="CheckParentsAsync">Check for parent loops</button>
+            <button class="secondary" disabled="@(busy || editKey is not null)" @onclick="CheckParentsAsync">Check for Parent Loops</button>
             @if (conflicts is not null && conflicts.Count == 0) { <span class="muted"> No account is its own ancestor.</span> }
         </p>
         @if (conflicts is { Count: > 0 })
@@ -48,7 +48,7 @@ else
                 <tbody>
                 @foreach (var cf in conflicts)
                 {
-                    <tr><td class="actions"><button class="secondary" disabled="@busy" @onclick="() => ClearParentAsync(cf.AccountId)">Clear parent</button></td>
+                    <tr><td class="actions"><button class="secondary" disabled="@busy" @onclick="() => ClearParentAsync(cf.AccountId)">Clear Parent</button></td>
                         <td>@cf.AccountName</td><td>@cf.ParentAccountName</td><td class="n">@cf.Depth</td></tr>
                 }
                 </tbody>
@@ -73,7 +73,7 @@ else
                     <td class="actions">
                         <button disabled="@busy" @onclick="SaveAsync">Save</button>
                         <button class="secondary" disabled="@busy" @onclick="CancelEdit">Cancel</button>
-                        @if (Table.Fills is { Count: > 0 }) { <button class="secondary" disabled="@busy" @onclick="FillEmpty" title="Propose the empty account fields from the names in this row">Fill empty accounts</button> }
+                        @if (Table.Fills is { Count: > 0 }) { <button class="secondary" disabled="@busy" @onclick="FillEmpty" title="Propose the empty account fields from the names in this row">Fill Empty Accounts</button> }
                     </td>
                     @foreach (var c in data.Columns)
                     {
@@ -156,7 +156,7 @@ else
     </div>
     @if (!data.Rows.Any() && editKey != 0) { <p class="muted">@(applied is { Length: > 0 } ? "Nothing matches that filter." : "No rows yet.")</p> }
     @if (Table.TopRows > 0 && data.Rows.Count >= Table.TopRows) { <p class="muted">Showing the first @Table.TopRows rows. Use the filter to narrow the list.</p> }
-    @if (editKey is null && Table.AllowAdd) { <p><button disabled="@busy" @onclick="StartAdd">Add a row</button></p> }
+    @if (editKey is null && Table.AllowAdd) { <p><button disabled="@busy" @onclick="StartAdd">Add a Row</button></p> }
     @if (data.Columns.Any(c => c.Required)) { <p class="muted">* required</p> }
 }
 

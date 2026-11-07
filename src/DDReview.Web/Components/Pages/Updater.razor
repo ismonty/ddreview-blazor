@@ -5,7 +5,7 @@
 @inject ClientUpdater Service
 
 <PageTitle>MontySoft DD Review™</PageTitle>
-<h1>Database updater</h1>
+<h1>Database Updater</h1>
 
 @if (ctx is null) { <p>Loading…</p> }
 else if (!ctx.Access.Administrator) { <p class="error">Only an administrator may use this page.</p> }
@@ -45,8 +45,8 @@ else
     }
 
     <p>
-        <button @onclick="CheckAsync" disabled="@busy">Check again</button>
-        @if (report?.NeedsWork == true) { <button @onclick="ApplyAsync" disabled="@busy">@(busy ? "Working…" : "Apply missing updates")</button> }
+        <button @onclick="CheckAsync" disabled="@busy">Check Again</button>
+        @if (report?.NeedsWork == true) { <button @onclick="ApplyAsync" disabled="@busy">@(busy ? "Working…" : "Apply Missing Updates")</button> }
     </p>
 }
 

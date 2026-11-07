@@ -52,8 +52,8 @@
                         @foreach (var t in QbTypeNames) { <option value="@t">@t</option> }
                     </select>
                 </label>
-                <button disabled="@(busy || string.IsNullOrEmpty(bulkType))" @onclick="ApplyBulkAsync">Set on selected</button>
-                <button class="secondary" @onclick="() => selected.Clear()">Clear selection</button>
+                <button disabled="@(busy || string.IsNullOrEmpty(bulkType))" @onclick="ApplyBulkAsync">Set on Selected</button>
+                <button class="secondary" @onclick="() => selected.Clear()">Clear Selection</button>
             </div>
         }
 
@@ -107,14 +107,14 @@
                     <h2>@NameOf(editing)</h2>
                     @foreach (var w in ReceiptTypeView.Attention(DraftValues())) { <p class="rt-warn">⚠ @w</p> }
                     <div class="rt-actions">
-                        <button class="secondary" disabled="@busy" @onclick="FillEmpty" title="Propose empty account fields from this receipt type's name">Fill empty accounts</button>
+                        <button class="secondary" disabled="@busy" @onclick="FillEmpty" title="Propose empty account fields from this receipt type's name">Fill Empty Accounts</button>
                         @if (otherStores.Count > 0)
                         {
                             <select value="@copyFrom" @onchange="e => copyFrom = int.TryParse(e.Value?.ToString(), out var v) ? v : 0">
                                 <option value="0">Copy from another store…</option>
                                 @foreach (var st in otherStores) { <option value="@st.StoreId">@st.StoreName</option> }
                             </select>
-                            <button class="secondary" disabled="@(busy || copyFrom == 0)" @onclick="CopyFromStoreAsync">Copy accounts</button>
+                            <button class="secondary" disabled="@(busy || copyFrom == 0)" @onclick="CopyFromStoreAsync">Copy Accounts</button>
                         }
                     </div>
 
@@ -150,8 +150,8 @@
                         </div>
                     }
                     <div class="rt-actions">
-                        @if (review is null) { <button disabled="@busy" @onclick="Review">Review changes</button> }
-                        else { <button disabled="@(busy || review.Count == 0)" @onclick="SaveAsync">Save</button> <button class="secondary" @onclick="() => review = null">Keep editing</button> }
+                        @if (review is null) { <button disabled="@busy" @onclick="Review">Review Changes</button> }
+                        else { <button disabled="@(busy || review.Count == 0)" @onclick="SaveAsync">Save</button> <button class="secondary" @onclick="() => review = null">Keep Editing</button> }
                         <button class="secondary" disabled="@busy" @onclick="Close">Close</button>
                     </div>
                 </aside>
