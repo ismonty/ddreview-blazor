@@ -378,3 +378,17 @@ public class OverShortTypeTests
     public void The_receipt_types_own_quickbooks_type_is_used_otherwise_expense(string? configured, string expected) =>
         Assert.Equal(expected, DDReview.Core.Gl.GlAdjustmentService.OverShortType(configured));
 }
+
+public class OverShortOffsetTests
+{
+    [Theory]
+    [InlineData(3.75, null, 3.75)]    // debits are ahead: credit it
+    [InlineData(-12.5, 12.5, null)]   // credits are ahead: debit it
+    [InlineData(0.004, null, null)]   // rounds to nothing
+    [InlineData(0, null, null)]
+    public void The_offset_goes_on_the_opposite_side_of_the_difference(double diff, double? debit, double? credit)
+    {
+        var (d, c) = DDReview.Core.Gl.GlAdjustmentService.OffsetFor((decimal)diff);
+        Assert.Equal((decimal?)debit, d); Assert.Equal((decimal?)credit, c);
+    }
+}

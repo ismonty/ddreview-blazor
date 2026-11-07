@@ -78,6 +78,8 @@
     [Parameter] public EventCallback<bool> OnClosed { get; set; }
     /// <summary>A ledger line the person double-clicked (Adjust GL only): the add form opens already filled in from it.</summary>
     [Parameter] public AdjustSeed? Seed { get; set; }
+    /// <summary>How far each batch was off (debits less credits) when the report was run; Add Over/Short enters the amount that offsets it.</summary>
+    [Parameter] public IReadOnlyDictionary<int, decimal>? BatchDifferences { get; set; }
 
     private sealed class Draft
     {
@@ -94,9 +96,14 @@
 
     private string Title => Kind == AdjustKind.Gl ? "Adjust GL" : "Adjust Sales";
 
+    private readonly Dictionary<int, decimal> adjustedAtOpen = [];   // debits less credits of each batch's adjustment lines when this window opened
+
+    private decimal AdjustmentNet(int batchId) => data!.Gl.Where(g => g.BatchId == batchId).Sum(g => (g.Debit ?? 0) - (g.Credit ?? 0));
+
     protected override async Task OnInitializedAsync()
     {
         await ReloadAsync();
+        if (data is not null) foreach (var b in data.Batches) adjustedAtOpen[b.BatchId] = AdjustmentNet(b.BatchId);
         if (Seed is { } seed && Kind == AdjustKind.Gl && data is { Batches.Count: > 0 })
         {
             StartAdd();
@@ -143,6 +150,14 @@
         if (os is null) { error = $"{store.StoreName} has no over/short receipt type (ID 999) with a debit account, so there is nothing to copy. Add one in Receipt Account Mapping."; return; }
         error = null;
         d.Account = os.Account; d.Reference = os.DistReference ?? ""; d.Type = os.QuickBooksType; d.Flag = 1;
+        // The batch's difference as the report showed it, moved by whatever adjustments were added or changed since: the amount that offsets what is still off.
+        d.Debit = d.Credit = "";
+        if (BatchDifferences is not null && BatchDifferences.TryGetValue(batchId, out var off))
+        {
+            var (debit, credit) = GlAdjustmentService.OffsetFor(off + AdjustmentNet(batchId) - adjustedAtOpen.GetValueOrDefault(batchId));
+            if (credit is decimal c) d.Credit = c.ToString("0.00");   // debits are ahead, so credit the difference
+            if (debit is decimal db) d.Debit = db.ToString("0.00");   // credits are ahead, so debit the difference
+        }
         if (os.AccountClassId != 0 && data.Classes.Any(c => c.Id == os.AccountClassId)) d.ClassId = os.AccountClassId;
     }
 

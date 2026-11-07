@@ -198,6 +198,13 @@ where ReceiptTypeID = 999 and StoreID in ({string.Join(",", storeIds)}) and Rece
     }
 
     /// <summary>The QuickBooks type for an over/short account: the one set on the receipt type, otherwise Expense (as the ledger function does for type 999).</summary>
+    /// <summary>The amount that puts a batch right, given how far it is off (debits less credits): debits ahead are offset by a credit, credits ahead by a debit.</summary>
+    public static (decimal? Debit, decimal? Credit) OffsetFor(decimal difference)
+    {
+        var d = Math.Round(difference, 2);
+        return d > 0 ? (null, d) : d < 0 ? (-d, null) : (null, null);
+    }
+
     public static string OverShortType(string? configured) =>
         string.IsNullOrWhiteSpace(configured) || configured.Trim() == "0" ? "Expense" : configured.Trim();
 
