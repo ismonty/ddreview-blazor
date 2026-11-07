@@ -72,10 +72,10 @@ else
         @if (showBatches)
         {
             <h2>Batch Subtotals</h2>
-            @TopLine("Grand total", report.TotalDebit, report.TotalCredit)
+            @TopLine("Grand Total", report.TotalDebit, report.TotalCredit)
             <table><thead><tr><th>Batch</th><th>Date</th><th>Store</th><th class="n">Debit</th><th class="n">Credit</th><th>Balance</th><th></th></tr></thead>
             <tbody>@foreach (var b in report.Batches) {<tr class="@(b.HasSuspense ? "suspense" : null)"><td><button type="button" class="cell sub-link" title="Show only this batch's ledger lines" @onclick="() => FocusBatch(b.BatchId)">@b.BatchId</button></td><td>@b.PostingDate.ToString("d")</td><td>@(batchStores.GetValueOrDefault(b.BatchId))</td><td class="n">@b.Debit.ToString("N2")</td><td class="n">@b.Credit.ToString("N2")</td><td>@BalanceNote(b.Debit, b.Credit)</td><td><button type="button" class="cell sub-link" @onclick="() => ShowBatchAsync(b)">Submission Report</button></td></tr>}</tbody>
-            <tbody class="gl-grand"><tr class="total"><td colspan="3">Grand total @BalanceNote(report.TotalDebit, report.TotalCredit)@QueryNote()</td><td class="n">@report.TotalDebit.ToString("N2")</td><td class="n">@report.TotalCredit.ToString("N2")</td><td colspan="2"></td></tr></tbody></table>
+            <tbody class="gl-grand"><tr class="total"><td colspan="3">Grand Total @BalanceNote(report.TotalDebit, report.TotalCredit)@QueryNote()</td><td class="n">@report.TotalDebit.ToString("N2")</td><td class="n">@report.TotalCredit.ToString("N2")</td><td colspan="2"></td></tr></tbody></table>
         }
     }
     @if (taxChecking) { <p class="muted" role="status">Checking tax rates…</p> }
@@ -134,7 +134,7 @@ else
             }
             @if (resubmitMessage is not null) { <p class="@(resubmitFailed ? "error" : "muted")" role="status">@resubmitMessage</p> }
         }
-        @TopLine(focusBatch is int ? "Batch subtotal" : "Grand total", shown.Sum(l => l.Debit), shown.Sum(l => l.Credit), focusBatch is not int)
+        @TopLine(focusBatch is int ? "Batch Subtotal" : "Grand Total", shown.Sum(l => l.Debit), shown.Sum(l => l.Credit), focusBatch is not int)
         <table><thead><tr><th>Batch</th><th>Date</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         @{ var shown = detailLines.Where(l => l.Debit != 0 || l.Credit != 0).ToList(); }
         @foreach (var day in shown.GroupBy(l => l.PostingDate.Date).OrderBy(g => g.Key))
@@ -158,18 +158,18 @@ else
         }
         @{ var gd = shown.Sum(l => l.Debit); var gc = shown.Sum(l => l.Credit); }
         <tbody class="gl-grand">
-            <tr class="total"><td colspan="5">@(focusBatch is int ? "Batch subtotal" : "Grand total") @BalanceNote(gd, gc)@(focusBatch is int ? null : QueryNote())</td><td class="n">@gd.ToString("N2")</td><td class="n">@gc.ToString("N2")</td></tr>
+            <tr class="total"><td colspan="5">@(focusBatch is int ? "Batch Subtotal" : "Grand Total") @BalanceNote(gd, gc)@(focusBatch is int ? null : QueryNote())</td><td class="n">@gd.ToString("N2")</td><td class="n">@gc.ToString("N2")</td></tr>
         </tbody></table>
     }
     @if (summaryLines is not null)
     {
         <h2>@summaryLines.Count(l => l.Debit != 0 || l.Credit != 0) rows</h2>
         @{ var top = summaryLines.Where(l => l.TotalLine == 0).ToList(); }
-        @TopLine("Grand total", top.Sum(l => l.Debit), top.Sum(l => l.Credit))
+        @TopLine("Grand Total", top.Sum(l => l.Debit), top.Sum(l => l.Credit))
         <table><thead><tr><th>Store</th><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         <tbody>@foreach (var l in summaryLines.Where(l => l.Debit != 0 || l.Credit != 0)) {<tr class="@(l.TotalLine == 1 ? "total" : null)"><td>@StoreNameOf(l.StoreId, l.StoreNumber, l.StoreName)</td><td>@l.Account</td><td>@l.ARAccount</td><td>@l.DistReference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
         @{ var sr = summaryLines.Where(l => l.TotalLine == 0).ToList(); var sd = sr.Sum(l => l.Debit); var sc = sr.Sum(l => l.Credit); }
-        <tbody class="gl-grand"><tr class="total"><td colspan="4">Grand total @BalanceNote(sd, sc)@QueryNote()</td><td class="n">@sd.ToString("N2")</td><td class="n">@sc.ToString("N2")</td></tr></tbody></table>
+        <tbody class="gl-grand"><tr class="total"><td colspan="4">Grand Total @BalanceNote(sd, sc)@QueryNote()</td><td class="n">@sd.ToString("N2")</td><td class="n">@sc.ToString("N2")</td></tr></tbody></table>
     }
     @if (lastRun is not null)
     {
@@ -243,14 +243,14 @@ else
     private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
     private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
     private TimeSpan? queryTime;
-    /// <summary>"· 1.42 s" after the Grand total label: how long the database took to answer (the query only, not the page drawing).</summary>
+    /// <summary>"· 1.42 s" after the Grand Total label: how long the database took to answer (the query only, not the page drawing).</summary>
     private MarkupString QueryNote() => queryTime is TimeSpan t ? new MarkupString($" <span class=\"query-time\">· Query {(t.TotalSeconds < 10 ? t.TotalSeconds.ToString("0.00") : t.TotalSeconds.ToString("0.0"))} s</span>") : default;
 
-    /// <summary>The same Grand total / Total line as at the bottom, shown above the lines too: label, balanced or not, both sums, query time.</summary>
+    /// <summary>The same Grand Total / Total line as at the bottom, shown above the lines too: label, balanced or not, both sums, query time.</summary>
     private RenderFragment TopLine(string label, decimal debit, decimal credit, bool withTime = true) => @<p class="gl-topline @(debit == credit ? null : "bad")"><strong>@label</strong> @BalanceNote(debit, credit) · Debit @debit.ToString("N2") · Credit @credit.ToString("N2")@(withTime ? QueryNote() : default)</p>;
 
     private static string BalanceNote(decimal debit, decimal credit) =>
-        debit == credit ? "(balanced)" : "(OUT OF BALANCE by " + (debit - credit).ToString("N2") + ")";
+        debit == credit ? "(Balanced)" : "(Out Of Balance By " + (debit - credit).ToString("N2") + ")";
 
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
 
