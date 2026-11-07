@@ -11,7 +11,7 @@
 else if (!ctx.Access.Administrator) { <p class="error">Only an administrator may use this page.</p> }
 else
 {
-    <p class="muted">Checks your client database for the objects DD Review adds, and adds any that are missing. Nothing existing is changed or removed.</p>
+    <p class="muted">Checks your client database for the objects DD Review adds, and adds any that are missing. Nothing is removed. Script 011 is the one that amends something existing: it adds one step to this database's own copy of the General Ledger function.</p>
 
     @if (error is not null) { <p class="error" role="alert">@error</p> }
 
