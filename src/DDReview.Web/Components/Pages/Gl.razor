@@ -35,6 +35,7 @@ else
                 <option value="totals">Totals by account and reference</option>
                 <option value="both">Totals at the top, detail below</option>
                 <option value="batches">Batch subtotals, with submission reports</option>
+                <option value="financials">Balance Sheet and Profit and Loss</option>
             </select>
         </label>
         <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
@@ -100,6 +101,20 @@ else
         <table><thead><tr><th>Account</th><th>A/R account</th><th>Reference</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
         <tbody>@foreach (var l in totalLines) {<tr class="@(l.Suspense ? "suspense" : null)"><td>@l.Account</td><td>@l.ARAccount</td><td>@l.Reference</td><td class="n">@(l.Debit == 0 ? "" : l.Debit.ToString("N2"))</td><td class="n">@(l.Credit == 0 ? "" : l.Credit.ToString("N2"))</td></tr>}</tbody>
         <tbody class="gl-grand"><tr class="total"><td colspan="3">Total @start.ToString("d") – @end.ToString("d") @BalanceNote(td, tc)</td><td class="n">@td.ToString("N2")</td><td class="n">@tc.ToString("N2")</td></tr></tbody></table>
+    }
+    @if (financials is { } fin)
+    {
+        <h2>Balance Sheet, @start.ToString("d") – @end.ToString("d")</h2>
+        <p class="muted">Every account added together over the dates, filed by its QuickBooks account type. Debit less credit is the change on the books.</p>
+        @FinancialTable(fin.BalanceSheet, "Balance sheet delta", fin.BalanceSheetDebit, fin.BalanceSheetCredit, fin.BalanceSheetDelta)
+        <h2>Profit and Loss, @start.ToString("d") – @end.ToString("d")</h2>
+        @FinancialTable(fin.ProfitAndLoss, "Net income", fin.ProfitAndLossDebit, fin.ProfitAndLossCredit, fin.NetIncome)
+        @if (fin.Unclassified.Count > 0)
+        {
+            <h2>No QuickBooks Account Type</h2>
+            <p class="muted">These accounts have no usable QuickBooks type, so they are in neither statement above. Set the type on the account in Setup to file them.</p>
+            @FinancialTable(fin.Unclassified, "Net", fin.Unclassified.Sum(l => l.Debit), fin.Unclassified.Sum(l => l.Credit), fin.UnclassifiedNet)
+        }
     }
     @if (detailLines is not null)
     {
@@ -209,6 +224,16 @@ else
 <div id="gl-bottom"></div>
 
 @code {
+    private static RenderFragment FinancialTable(IReadOnlyList<GlFinancialLine> rows, string totalLabel, decimal debit, decimal credit, decimal result) => @<table>
+        <thead><tr><th>Account</th><th>QuickBooks Type</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead>
+        <tbody>@foreach (var r in rows) {<tr><td>@r.Account</td><td>@r.AccountType</td><td class="n">@(r.Debit == 0 ? "" : r.Debit.ToString("N2"))</td><td class="n">@(r.Credit == 0 ? "" : r.Credit.ToString("N2"))</td></tr>}</tbody>
+        <tbody class="gl-grand">
+            <tr class="total"><td colspan="2">Total</td><td class="n">@debit.ToString("N2")</td><td class="n">@credit.ToString("N2")</td></tr>
+            <tr class="total"><td colspan="3">@totalLabel</td><td class="n">@result.ToString("N2")</td></tr>
+        </tbody></table>;
+}
+
+@code {
     // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
     private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
     private static string BalanceNote(decimal debit, decimal credit) =>
@@ -248,6 +273,7 @@ else
     private AdjustKind? adjust;
     private AdjustSeed? adjustSeed;
     private IReadOnlyList<GlLine>? keptLines;   // every line of the last run, so a batch can be picked out of it
+    private GlFinancials? financials;
     private int? focusBatch;
     private string? focusSubmitted;   // "Submitted 11/7/2026 9:12 AM" for the picked batch, when it can be read
     private bool resubmitConfirm, resubmitBusy, resubmitFailed;
@@ -366,7 +392,7 @@ else
     private async Task RunAsync()
     {
         if (ctx is null || busy) return;
-        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; batchStores = new(); focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
+        error = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; financials = null; batchStores = new(); focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
         if (selected.Count == 0) { error = "Pick at least one store."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
         busy = true;
@@ -381,7 +407,7 @@ else
                 totalLines = GlTotals.Group(lines);
                 report = new GlBalanceReport(totalLines.Sum(l => l.Debit), totalLines.Sum(l => l.Credit), []);
             }
-            else if (mode is "detail" or "both" or "batches")
+            else if (mode is "detail" or "both" or "batches" or "financials")
             {
                 var lines = await GlSvc.GetDetailAsync(ctx.ClientConnectionString, req);
                 report = GlBalance.Compute(lines);
@@ -389,6 +415,7 @@ else
                 batchStores = lines.Where(l => l.StoreName is not null).GroupBy(l => l.BatchId)
                     .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(l => (l.StoreNumber is int n ? n + " – " : "") + StoreNameOf(l.StoreId, l.StoreNumber, l.StoreName)).Distinct()));
                 if (mode == "batches") showBatches = true;
+                else if (mode == "financials") financials = GlFinancialsBuilder.Build(lines);
                 else detailLines = lines;
                 if (mode == "both") totalLines = GlTotals.Group(lines);
             }
