@@ -276,3 +276,7 @@ table.adj td.n { text-align: left; }
 tr.batch-bal td { font-weight: 600; border-top: 1px solid var(--edge); }
 tr.batch-bal.bad td { color: #ff9a8a; }
 tr.batch-gap td { height: .9rem; padding: 0; border: 0; }
+html { scroll-behavior: smooth; }
+tr.batch-head td.jump { text-align: right; white-space: nowrap; }
+a.jump-btn { display: inline-block; min-width: 1.9rem; text-align: center; padding: .15rem .35rem; border: 1px solid var(--edge); border-radius: 6px; font-size: .8rem; line-height: 1.2; text-decoration: none; color: inherit; }
+a.jump-btn:hover { background: rgba(255,255,255,.12); }
