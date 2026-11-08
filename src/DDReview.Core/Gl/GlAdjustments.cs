@@ -27,7 +27,7 @@ public sealed record CreditAccountChoice(int CreditAccountId, int StoreId, strin
 public sealed record OverShortAccount(int StoreId, string Account, string? DistReference, int AccountClassId, string QuickBooksType);
 
 public sealed record AdjustData(IReadOnlyList<AdjustBatch> Batches, IReadOnlyList<GlAdjustRow> Gl, IReadOnlyList<SalesAdjustRow> Sales,
-    IReadOnlyList<NamedId> Classes, IReadOnlyList<CreditAccountChoice> CreditAccounts, IReadOnlyList<OverShortAccount>? OverShort = null);
+    IReadOnlyList<NamedId> Classes, IReadOnlyList<CreditAccountChoice> CreditAccounts, IReadOnlyList<OverShortAccount>? OverShort = null, IReadOnlyList<OverShortAccount>? CashOut = null);
 
 public enum AdjustKind { Gl, Sales }
 
@@ -182,19 +182,24 @@ order by rtrim(ac.DistReference), ac.CreditAccount", cn) { CommandTimeout = 60 }
         }
 
         // Every store has an over/short receipt type, ReceiptTypeID 999; its debit account, reference, class and QuickBooks type are what an over/short adjustment posts to.
+        // Receipt type 1 (cash) is read the same way for the Cash Out line.
         var overShort = new List<OverShortAccount>();
+        var cashOut = new List<OverShortAccount>();
         if (storeIds.Count > 0)
         {
             await using var cmd = new SqlCommand($@"
-select StoreID, ReceiptDebitAcct, DistReference, AccountClassID, DefaultQuickBooksType
+select ReceiptTypeID, StoreID, ReceiptDebitAcct, DistReference, AccountClassID, DefaultQuickBooksType
 from dbo.tblReceiptTypes
-where ReceiptTypeID = 999 and StoreID in ({string.Join(",", storeIds)}) and ReceiptDebitAcct is not null", cn) { CommandTimeout = 60 };
+where ReceiptTypeID in (1, 999) and StoreID in ({string.Join(",", storeIds)}) and ReceiptDebitAcct is not null", cn) { CommandTimeout = 60 };
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
-                overShort.Add(new OverShortAccount(Convert.ToInt32(r["StoreID"]), ((string)r["ReceiptDebitAcct"]).Trim(), (r["DistReference"] as string)?.Trim(),
-                    r["AccountClassID"] is DBNull ? 0 : Convert.ToInt32(r["AccountClassID"]), OverShortType(r["DefaultQuickBooksType"] as string)));
+            {
+                var isCash = Convert.ToInt32(r["ReceiptTypeID"]) == 1;
+                (isCash ? cashOut : overShort).Add(new OverShortAccount(Convert.ToInt32(r["StoreID"]), ((string)r["ReceiptDebitAcct"]).Trim(), (r["DistReference"] as string)?.Trim(),
+                    r["AccountClassID"] is DBNull ? 0 : Convert.ToInt32(r["AccountClassID"]), isCash ? CashOutType(r["DefaultQuickBooksType"] as string) : OverShortType(r["DefaultQuickBooksType"] as string)));
+            }
         }
-        return new AdjustData(batches, gl, sales, classes, credits, overShort);
+        return new AdjustData(batches, gl, sales, classes, credits, overShort, cashOut);
     }
 
     /// <summary>The QuickBooks type for an over/short account: the one set on the receipt type, otherwise Expense (as the ledger function does for type 999).</summary>
@@ -204,6 +209,10 @@ where ReceiptTypeID = 999 and StoreID in ({string.Join(",", storeIds)}) and Rece
         var d = Math.Round(difference, 2);
         return d > 0 ? (null, d) : d < 0 ? (-d, null) : (null, null);
     }
+
+    /// <summary>The QuickBooks type for a cash-out account: the one set on the cash receipt type, otherwise Bank.</summary>
+    public static string CashOutType(string? configured) =>
+        string.IsNullOrWhiteSpace(configured) || configured.Trim() == "0" ? "Bank" : configured.Trim();
 
     public static string OverShortType(string? configured) =>
         string.IsNullOrWhiteSpace(configured) || configured.Trim() == "0" ? "Expense" : configured.Trim();

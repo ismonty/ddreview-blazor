@@ -61,7 +61,8 @@
             @if (draft is null || draft.ItemId == 0)
             {
                 <p>@if (draft is null) { <button type="button" @onclick="StartAdd" disabled="@busy">Add an Adjustment</button> }
-                   @if (Kind == AdjustKind.Gl) { <button type="button" class="secondary" @onclick="AddOverShort" disabled="@busy" title="Starts a line for this store's over/short account (receipt type 999); you enter the amount">Add Over/Short</button> }</p>
+                   @if (Kind == AdjustKind.Gl) { <button type="button" class="secondary adj-gap" @onclick="AddOverShort" disabled="@busy" title="Starts a line for this store's over/short account (receipt type 999); the amount offsets what is still off">Add Over/Short</button>
+                      <button type="button" class="secondary" @onclick="AddCashOut" disabled="@busy" title="Starts a line for this store's cash account (receipt type 1); you enter the amount">Add Cash Out</button> }</p>
             }
         }
     </div>
@@ -159,6 +160,23 @@
             if (debit is decimal db) d.Debit = db.ToString("0.00");   // credits are ahead, so debit the difference
         }
         if (os.AccountClassId != 0 && data.Classes.Any(c => c.Id == os.AccountClassId)) d.ClassId = os.AccountClassId;
+    }
+
+    /// <summary>Starts (or fills) a new line from the cash receipt type (ID 1) of the batch's store: account, reference, class and QuickBooks type. The amount is left for the person.</summary>
+    private void AddCashOut()
+    {
+        if (data is null || data.Batches.Count == 0) return;
+        var batchId = draft is { ItemId: 0 } ? draft.BatchId : (Seed?.BatchId is int sb && data.Batches.Any(b => b.BatchId == sb) ? sb : data.Batches[0].BatchId);
+        if (draft is not { ItemId: 0 }) StartAdd();
+        var d = draft!;
+        d.BatchId = batchId;
+        var store = data.Batches.First(b => b.BatchId == batchId);
+        var co = data.CashOut?.FirstOrDefault(o => o.StoreId == store.StoreId);
+        if (co is null) { error = $"{store.StoreName} has no cash receipt type (ID 1) with a debit account, so there is nothing to copy. Add one in Receipt Account Mapping."; return; }
+        error = null;
+        d.Account = co.Account; d.Reference = co.DistReference ?? ""; d.Type = co.QuickBooksType; d.Flag = 1;
+        d.Debit = d.Credit = "";
+        if (co.AccountClassId != 0 && data.Classes.Any(c => c.Id == co.AccountClassId)) d.ClassId = co.AccountClassId;
     }
 
     private void EditGl(GlAdjustRow r)
