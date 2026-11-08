@@ -211,7 +211,7 @@ else
         if (result is null) return;
         var (h, rows, tot) = SalesLayout.Export(result, cols);
         var title = $"Sales review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}";
-        var bytes = DDReview.Core.Support.XlsxWriter.Write("Sales", title, h, rows, tot);
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Sales", title, h, rows, tot, FilterHeader.Describe(Boxes()));
         await JS.InvokeVoidAsync("ddDownload", $"SalesReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }

@@ -71,3 +71,22 @@ public class FilterHeaderTests
         public DataTable GetTable(string name, string sql) => new DataTable(name);
     }
 }
+
+public class ExportFilterLineTests
+{
+    [Fact]
+    public void Describe_Lists_Names_Or_None()
+    {
+        Assert.Equal("Filters: None", FilterHeader.Describe([]));
+        Assert.Equal("Filters: Cashiers: A, B; Store", FilterHeader.Describe([new("Cashier", "Cashiers", ["A", "B"], false), new("Store", "Store", [], false)]));
+    }
+
+    [Fact]
+    public void Workbook_Puts_The_Filter_Line_Under_The_Title_And_Above_The_Headers()
+    {
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("S", "Title", ["H1"], [["v"]], null, "Filters: None");
+        using var z = new System.IO.Compression.ZipArchive(new MemoryStream(bytes));
+        var xml = new StreamReader(z.GetEntry("xl/worksheets/sheet1.xml")!.Open()).ReadToEnd();
+        Assert.True(xml.IndexOf("Title") < xml.IndexOf("Filters: None") && xml.IndexOf("Filters: None") < xml.IndexOf("H1"));
+    }
+}

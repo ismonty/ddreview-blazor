@@ -79,4 +79,9 @@ public static class FilterHeader
         }
         return boxes;
     }
+
+    /// <summary>The one-line description of the active filters for an export, e.g. "Filters: Cashiers: A, B; Store: Main" (or "Filters: None").</summary>
+    public static string Describe(IReadOnlyCollection<FilterBox> boxes) =>
+        boxes.Count == 0 ? "Filters: None"
+            : "Filters: " + string.Join("; ", boxes.Select(b => b.Names.Count == 0 ? b.Title : b.Title + ": " + string.Join(", ", b.Names)));
 }

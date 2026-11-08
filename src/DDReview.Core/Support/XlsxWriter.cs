@@ -8,7 +8,7 @@ namespace DDReview.Core.Support;
 /// <summary>A minimal .xlsx writer (one sheet, bold header, optional bold totals row, numbers kept as numbers) so no extra package is needed.</summary>
 public static class XlsxWriter
 {
-    public static byte[] Write(string sheetName, string? title, IReadOnlyList<string> headers, IEnumerable<object?[]> rows, object?[]? totals = null)
+    public static byte[] Write(string sheetName, string? title, IReadOnlyList<string> headers, IEnumerable<object?[]> rows, object?[]? totals = null, string? note = null)
     {
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, true))
@@ -22,6 +22,7 @@ public static class XlsxWriter
             var sb = new StringBuilder("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>""");
             int r = 1;
             if (!string.IsNullOrEmpty(title)) Row(sb, r++, [title], bold: true);
+            if (!string.IsNullOrEmpty(note)) Row(sb, r++, [note], bold: false);
             Row(sb, r++, headers.Cast<object?>().ToArray(), bold: true);
             foreach (var row in rows) Row(sb, r++, row, false);
             if (totals is not null) Row(sb, r++, totals, bold: true);

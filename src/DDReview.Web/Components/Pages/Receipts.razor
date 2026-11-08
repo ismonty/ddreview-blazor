@@ -272,7 +272,7 @@ else
         if (result is null) return;
         var lead = AllLeading.Where(l => ranDims.HasFlag(l.Dim)).Select(l => (l.Label, l.Column)).ToList();
         var (h, rows) = ReceiptsExport.Build(result, lead);
-        var bytes = DDReview.Core.Support.XlsxWriter.Write("Receipts", $"Receipts review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}", h, rows);
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Receipts", $"Receipts review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}", h, rows, null, FilterHeader.Describe(Boxes()));
         await JS.InvokeVoidAsync("ddDownload", $"ReceiptsReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
