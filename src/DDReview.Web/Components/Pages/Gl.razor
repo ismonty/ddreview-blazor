@@ -42,6 +42,8 @@ else
         </label>
         <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
         <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+        <button type="button" disabled="@busy" @onclick="() => ShiftRange(-1)">Previous</button>
+        <button type="button" disabled="@busy" @onclick="() => ShiftRange(1)">Next</button>
         @if (PosterLinks.IsConfigured)
         {
             <button type="button" @onclick="PostToQuickBooksAsync" disabled="@(!GlPostingGate.HasData(report, busy))"
@@ -407,6 +409,13 @@ else
             Logger.LogWarning("Web user {UserId} used the poster from an out-of-balance report", ctx.WebUserId);
         }
         return new DDReview.QuickBooks.Sql.PostingRequest(ids, lastRun.Start.ToDateTime(TimeOnly.MinValue), lastRun.End.ToDateTime(TimeOnly.MinValue), lastRun.ArFlag);
+    }
+
+    /// <summary>Previous / Next date range, as on the other reviews (whole months move by calendar months), then run.</summary>
+    private async Task ShiftRange(int dir)
+    {
+        (start, end) = DDReview.Core.DateRules.Shift(start, end, dir, DDReview.Core.DateRules.Yesterday);
+        await RunAsync();
     }
 
     private async Task RunAsync()
