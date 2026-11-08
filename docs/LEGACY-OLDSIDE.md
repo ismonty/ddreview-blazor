@@ -30,3 +30,20 @@ The handoff reads the old plain-text `Password` from `tblWebUserSecurity`. If th
 - The Dundas gauges work with no extra handler; the proxy lets `TempFiles/` and `TempImages/` through for `.js`/`.png` only.
 - The master page writes `url(~/images/...)` in a `style` attribute, which the browser cannot resolve (a harmless 404 for the tiled background; same on the original site).
 - Do not paste real secrets into chats or commit them: the handoff secret exists only in the two servers' config files.
+
+## Cold start (about 45 seconds the first time)
+The first request after the old site has been idle or recycled pays for IIS starting the worker process, ASP.NET compiling the pages and `App_Code`, and loading DevExpress/Dundas. Three layers, cheapest first:
+
+1. **The new site keeps it warm** (built in; `LegacyProxy:WarmupMinutes`, default 4, 0 = off; `WarmupPath`, default `/classic/LoginPage.aspx`). From a few seconds after the new site starts it asks the old site for its login page every few minutes (loopback only, no cookies, nothing changed). The log line is "Classic warm-up: HTTP 200 in N ms". This stops the idle shutdown (20 minutes by default) from ever happening; keep the interval below the pool's idle time-out.
+2. **IIS settings on the old site's application pool** (run once in an elevated PowerShell; replace the pool name with the one `ddreview-classic` uses):
+   ```powershell
+   Import-Module WebAdministration
+   $pool = 'ddreview-classic'
+   Set-ItemProperty "IIS:\AppPools\$pool" -Name startMode -Value AlwaysRunning                       # start with IIS, not on the first request
+   Set-ItemProperty "IIS:\AppPools\$pool" -Name processModel.idleTimeout -Value ([TimeSpan]::Zero)   # never shut down for being idle
+   Set-ItemProperty "IIS:\AppPools\$pool" -Name recycling.periodicRestart.time -Value ([TimeSpan]::Zero)   # no restart every 29 hours (a fixed 3 AM recycle is better if wanted)
+   Set-ItemProperty "IIS:\Sites\ddreview-classic" -Name applicationDefaults.preloadEnabled -Value $true     # needs the IIS "Application Initialization" feature
+   ```
+3. **Precompile the old site** (the real cost of a cold start is usually ASP.NET compiling every page): `aspnet_compiler -v /classic -p <old site folder> -f <new folder>` (from the .NET Framework folder), publish the output folder as the `/classic` application, and keep `<compilation debug="false">` in its `web.config` (`debug="true"` turns off compilation caching and batching). A deploy then compiles once, on the build machine.
+
+Layers 1 and 2 are safe to do now. Layer 3 changes how the old site is published, so do it on the staging copy first.
