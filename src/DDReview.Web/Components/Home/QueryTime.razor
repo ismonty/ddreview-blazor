@@ -1,0 +1,8 @@
+@* "Query 2.11 s" under a report, the same figure the General Ledger shows. *@
+@if (Elapsed is TimeSpan t)
+{
+    <p class="query-line"><span class="query-time">Query @(t.TotalSeconds < 10 ? t.TotalSeconds.ToString("0.00") : t.TotalSeconds.ToString("0.0")) s</span></p>
+}
+@code {
+    [Parameter] public TimeSpan? Elapsed { get; set; }
+}
