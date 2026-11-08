@@ -80,13 +80,14 @@ else
     }
     @if (taxChecking) { <p class="muted" role="status">Checking tax rates…</p> }
     @if (taxError is not null) { <p class="muted" role="status">@taxError</p> }
-    @if (taxLines is { Count: > 0 })
+    @if (taxLines is { Count: > 0 } && !taxDismissed)
     {
         var ts = TaxVariance.Summarize(taxLines);
-        <div class="banner bad" role="status">
-            TAX VARIANCES — @ts.Lines menu item@(ts.Lines == 1 ? "" : "s") sold with a POS tax rate that differs from the mapped rate (sales @ts.Sales.ToString("N2"), tax variance @ts.Variance.ToString("N2"))
+        <div class="banner bad tax-banner" role="status">
+            <span>TAX VARIANCES — @ts.Lines menu item@(ts.Lines == 1 ? "" : "s") sold with a POS tax rate that differs from the mapped rate (sales @ts.Sales.ToString("N2"), tax variance @ts.Variance.ToString("N2"))</span>
+            <button type="button" class="tax-close" title="Hide until the next run" aria-label="Hide tax variances until the next run" @onclick="() => taxDismissed = true">✕</button>
         </div>
-        <details class="tax-var" open="@(taxLines.Count <= 25)">
+        <details class="tax-var">
             <summary>Tax Variances</summary>
             <table><thead><tr><th>Date</th><th>Store</th><th>Profit Center</th><th>Main Type</th><th>Main Group</th><th>Sale Type</th><th>Menu Item</th><th>PLU</th><th>Exempt</th><th class="n">POS Rate</th><th class="n">Mapped Rate</th><th>Credit Account</th><th>Reference</th><th class="n">Qty</th><th class="n">Amount</th><th class="n">Tax Variance</th></tr></thead>
             <tbody>@foreach (var t in taxLines.Take(500)) {<tr><td>@t.PostingDate.ToString("d")</td><td>@t.StoreName</td><td>@t.ProfitCenter</td><td>@t.MainType</td><td>@t.MainGroup</td><td>@t.SaleType</td><td>@t.MenuItem</td><td>@t.Plu</td><td>@(t.TaxExempt ? "Yes" : "")</td><td class="n">@t.PosRate.ToString("0.####")</td><td class="n">@t.MappedRate.ToString("0.####")</td><td>@t.CreditAccount</td><td>@t.DistReference</td><td class="n">@t.Quantity.ToString("N2")</td><td class="n">@t.Amount.ToString("N2")</td><td class="n">@t.TaxVariance.ToString("N2")</td></tr>}</tbody>
@@ -269,7 +270,7 @@ else
     private readonly HashSet<int> selected = [];
     private DateTime start = DateTime.Today.AddDays(-7), end = DateTime.Today.AddDays(-1);
     private IReadOnlyList<TaxVarianceLine>? taxLines;
-    private bool taxChecking;
+    private bool taxChecking, taxDismissed;
     private string? taxError;
     private string mode = "detail";
     private bool showBatches;
@@ -408,7 +409,7 @@ else
     private async Task RunAsync()
     {
         if (ctx is null || busy) return;
-        error = null; queryTime = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; financials = null; batchStores = new(); focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
+        error = null; taxDismissed = false; queryTime = null; report = null; detailLines = null; summaryLines = null; totalLines = null; lastRun = null; subsOpen = false; showBatches = false; financials = null; batchStores = new(); focusBatch = null; keptLines = null; adjust = null; adjGlCount = adjSalesCount = 0; taxLines = null; taxError = null; taxChecking = false;
         if (selected.Count == 0) { error = "Pick at least one store."; return; }
         if (end < start) { error = "The end date is before the start date."; return; }
         busy = true;
