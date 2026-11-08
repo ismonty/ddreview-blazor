@@ -20,6 +20,13 @@ public sealed class LegacyProxyOptions
     public string HandoffPath { get; set; } = "/classic/LoginPage.aspx";
     /// <summary>Installer downloads (/classic/download/...) stay blocked unless the owner turns them on.</summary>
     public bool AllowDownloads { get; set; }
+    /// <summary>
+    /// How often (minutes) the new site quietly asks the old site for its login page, from start-up on, so IIS never lets it go cold (a cold start of the old site
+    /// takes about 45 seconds). 0 turns it off. Keep it below the old application pool's idle time-out (20 minutes unless changed).
+    /// </summary>
+    public int WarmupMinutes { get; set; } = 4;
+    /// <summary>The old-site page the warm-up asks for. A page that needs no sign-in, so nothing is created or logged in.</summary>
+    public string WarmupPath { get; set; } = "/classic/LoginPage.aspx";
 
     public bool HandoffOn => HandoffSecret.Length >= LegacyTicket.MinSecretLength;
 }

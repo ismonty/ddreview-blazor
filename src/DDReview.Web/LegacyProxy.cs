@@ -48,6 +48,7 @@ public static class LegacyProxy
                 HttpRequest = new Yarp.ReverseProxy.Forwarder.ForwarderRequestConfig { ActivityTimeout = TimeSpan.FromMinutes(6) },   // old site allows 300 s
             },
         };
+        builder.Services.AddHostedService<LegacyWarmup>();
         builder.Services.AddReverseProxy().LoadFromMemory(routes, clusters).AddTransforms(ctx =>
         {
             if (ctx.Route.RouteId != RouteId) return;
