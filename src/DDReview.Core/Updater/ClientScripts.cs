@@ -62,6 +62,14 @@ public static class ClientScripts
         new("012", "General Ledger: set-based function dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor (no cursors; the old function is untouched)", "ClientScripts/012_client_gl_blazor_function.sql",
             @"select cast(case when object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor', 'IF') is not null then 1 else 0 end as int) as Present,
                      cast(1 as int) as Usable"),
+        // Stage 2: the sales-mapping step as one query, and a COPY of this database's per-store function that uses it. Needs 012. Nothing existing is changed except the Blazor function from 012.
+        new("013", "General Ledger: set-based sales mapping (dbo.fn_CashAndSalesMappedRecordsBlazor and a copy of the per-store function that uses it)", "ClientScripts/013_client_gl_blazor_mapping.sql",
+            @"select cast(case when object_id('dbo.fn_CashAndSalesGLandARBlazor', 'TF') is null then 0
+                               when object_id('dbo.fn_CashAndSalesMappedRecordsBlazor', 'IF') is null then 0
+                               when object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor', 'IF') is null then 0
+                               when charindex('dbo.fn_CashAndSalesGLandARBlazor(', object_definition(object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor', 'IF'))) > 0 then 1
+                               else 0 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 

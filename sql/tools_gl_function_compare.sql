@@ -24,3 +24,11 @@ select (select count(*) from (select * from #old except select * from #new) a) a
        (select count(*) from (select * from #new except select * from #old) b) as NewNotInOld;
 -- Row ORDER is checked separately by the app (order by RowSeq); EXCEPT compares the rows themselves, duplicates collapsed,
 -- so the row counts above must also match.
+
+-- ---- Stage 2 (after script 013): the pieces on their own, for one store. Both counts in each pair must be 0.
+-- declare @s int = <a store id>, @a datetime = '01/01/2026', @b datetime = '01/31/2026';
+-- select (select count(*) from (select * from dbo.fn_CashAndSalesMappedRecords(@s,@a,@b,3) except select * from dbo.fn_CashAndSalesMappedRecordsBlazor(@s,@a,@b,3)) x) as MapOldNotNew,
+--        (select count(*) from (select * from dbo.fn_CashAndSalesMappedRecordsBlazor(@s,@a,@b,3) except select * from dbo.fn_CashAndSalesMappedRecords(@s,@a,@b,3)) y) as MapNewNotOld;
+-- select (select count(*) from (select * from dbo.fn_CashAndSalesGLandAR(@s,@a,@b,3,0) except select * from dbo.fn_CashAndSalesGLandARBlazor(@s,@a,@b,3,0)) x) as GlOldNotNew,
+--        (select count(*) from (select * from dbo.fn_CashAndSalesGLandARBlazor(@s,@a,@b,3,0) except select * from dbo.fn_CashAndSalesGLandAR(@s,@a,@b,3,0)) y) as GlNewNotOld;
+-- set statistics time on; select count(*) from dbo.fn_CashAndSalesMappedRecordsBlazor(@s,@a,@b,3); select count(*) from dbo.fn_CashAndSalesGLandARBlazor(@s,@a,@b,3,0); set statistics time off;
