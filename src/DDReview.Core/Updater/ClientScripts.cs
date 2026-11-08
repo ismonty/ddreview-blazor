@@ -76,6 +76,12 @@ public static class ClientScripts
                                when charindex('-- PATCH: batch totals set-based', object_definition(object_id('dbo.fn_CashAndSalesGLandARBlazor', 'TF'))) > 0 then 1
                                else 0 end as int) as Present,
                      cast(1 as int) as Usable"),
+        // The recompile hint 014 first added cost more than it saved; this takes it out of the copy (nothing to do when it is not there).
+        new("015", "General Ledger: remove the recompile hint from the copy dbo.fn_CashAndSalesGLandARBlazor", "ClientScripts/015_client_gl_blazor_no_recompile.sql",
+            @"select cast(case when object_id('dbo.fn_CashAndSalesGLandARBlazor', 'TF') is null then 0
+                               when charindex('@ARFlag) OPTION (RECOMPILE)', object_definition(object_id('dbo.fn_CashAndSalesGLandARBlazor', 'TF'))) > 0 then 0
+                               else 1 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 

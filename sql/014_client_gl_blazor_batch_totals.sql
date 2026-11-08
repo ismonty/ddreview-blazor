@@ -3,8 +3,8 @@
 --     update @output_table set AROffsetBalance=@AROffsetBalance, TotalSales=@TotalSales, PercentOfTotalSales=... where BatchID=@BatchID
 -- run once per batch of EVERY store in the date range (the cursor above it has no StoreID filter): 209,596 runs, each scanning the table.
 -- This script rebuilds dbo.fn_CashAndSalesGLandARBlazor (the copy made by 013) from this database's own dbo.fn_CashAndSalesGLandAR with two changes:
---   1) it calls dbo.fn_CashAndSalesMappedRecordsBlazor (as in 013), and tries OPTION (RECOMPILE) on that statement so the plan is made for the
---      real store and dates (kept only if this server accepts the hint inside a function)
+--   1) it calls dbo.fn_CashAndSalesMappedRecordsBlazor (as in 013). (A recompile hint on that statement was tried and removed: planning it on
+--      every store call cost more than it saved; see script 015.)
 --   2) the batch loop becomes one UPDATE with the same arithmetic (a batch with no A/R offset line and no total-sales line is left alone, as before)
 -- The original dbo.fn_CashAndSalesGLandAR is not touched.
 set nocount on;
@@ -67,24 +67,9 @@ set @nameAt = charindex(N'fn_CashAndSalesGLandAR', @body collate Latin1_General_
 set @body = stuff(@body, @nameAt + len(N'fn_CashAndSalesGLandAR'), 0, N'Blazor');
 set @body = replace(@body collate Latin1_General_CI_AS, @callTok, N'fn_CashAndSalesMappedRecordsBlazor(');
 
--- 1) the same with a recompile hint on the mapping statement, tried first
-declare @callEnd nvarchar(120) = N'fn_CashAndSalesMappedRecordsBlazor(@StoreID, @StartDate, @EndDate, @ARFlag)';
-declare @withHint nvarchar(max) = replace(@body collate Latin1_General_CI_AS, @callEnd, @callEnd + N' OPTION (RECOMPILE)');
-
 if object_id(N'dbo.fn_CashAndSalesGLandARBlazor', N'TF') is null
-begin
-    -- first time: create from the same text
-    set @body = N'CREATE ' + substring(@body, len(N'ALTER ') + 1, len(@body));
-    set @withHint = N'CREATE ' + substring(@withHint, len(N'ALTER ') + 1, len(@withHint));
-end
-begin try
-    exec sys.sp_executesql @withHint;
-    print N'Created with OPTION (RECOMPILE) on the mapping statement.';
-end try
-begin catch
-    print N'This server does not accept OPTION (RECOMPILE) inside the function (' + error_message() + N'); using the plain form.';
-    exec sys.sp_executesql @body;
-end catch
+    set @body = N'CREATE ' + substring(@body, len(N'ALTER ') + 1, len(@body));   -- first time: create from the same text
+exec sys.sp_executesql @body;
 GO
 -- the multi-store function must (still) call the copy: nothing to do if 013 already did that
 if object_id(N'dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor', N'IF') is not null
