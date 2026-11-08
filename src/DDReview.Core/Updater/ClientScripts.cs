@@ -70,6 +70,12 @@ public static class ClientScripts
                                when charindex('dbo.fn_CashAndSalesGLandARBlazor(', object_definition(object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor', 'IF'))) > 0 then 1
                                else 0 end as int) as Present,
                      cast(1 as int) as Usable"),
+        // Stage 3: rebuilds the copy from 013 with the per-batch update loop (the profile's one expensive statement) as a single UPDATE. Needs 012 and 013.
+        new("014", "General Ledger: batch totals as one update (rebuilds the copy dbo.fn_CashAndSalesGLandARBlazor; the original function is untouched)", "ClientScripts/014_client_gl_blazor_batch_totals.sql",
+            @"select cast(case when object_id('dbo.fn_CashAndSalesGLandARBlazor', 'TF') is null then 0
+                               when charindex('-- PATCH: batch totals set-based', object_definition(object_id('dbo.fn_CashAndSalesGLandARBlazor', 'TF'))) > 0 then 1
+                               else 0 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 
