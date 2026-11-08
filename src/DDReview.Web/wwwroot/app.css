@@ -292,3 +292,4 @@ div.fbox .fnames { margin-top: .15rem; }
 div.fbox details summary { cursor: pointer; }
 .tax-banner { display: flex; justify-content: space-between; align-items: flex-start; gap: .75rem; }
 .tax-banner .tax-close { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; padding: 0 .25rem; line-height: 1; }
+select.datepreset { max-width: 9.5rem; }

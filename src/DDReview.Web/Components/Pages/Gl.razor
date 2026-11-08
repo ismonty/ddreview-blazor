@@ -27,7 +27,9 @@ else
     <EditForm Model="this" OnSubmit="RunAsync" FormName="gl" class="filters">
         <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
         <label>From <input type="date" @bind="start" @bind:after="StartChanged" /></label>
+        <DatePreset Label="From Shortcuts" Options="DatePreset.StartOptions" OnPick="StartPick" />
         <label>To <input type="date" @bind="end" @bind:after="EndChanged" /></label>
+        <DatePreset Label="To Shortcuts" Options="DatePreset.EndOptions" OnPick="EndPick" />
         <label>Mode
             <select @bind="mode">
                 <option value="summary">Summary (as the old web report)</option>
@@ -40,6 +42,8 @@ else
         </label>
         <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
         <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+        <button type="button" disabled="@busy" @onclick="() => ShiftRange(-1)">Previous</button>
+        <button type="button" disabled="@busy" @onclick="() => ShiftRange(1)">Next</button>
         @if (PosterLinks.IsConfigured)
         {
             <button type="button" @onclick="PostToQuickBooksAsync" disabled="@(!GlPostingGate.HasData(report, busy))"
@@ -239,7 +243,9 @@ else
 
 @code {
     // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
-    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
+    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start, DDReview.Core.DateRules.Yesterday);
+    private void StartPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyStart(Enum.Parse<DDReview.Core.DateRules.StartPreset>(key), end, DateTime.Today);
+    private void EndPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyEnd(Enum.Parse<DDReview.Core.DateRules.EndPreset>(key), start, DateTime.Today);
     private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
     // The lines that carry an amount, worked out once per result (a code block inside the markup would not compile next to TopLine).
     private IReadOnlyList<GlLine>? shownFor; private List<GlLine> shownCache = [];
@@ -404,6 +410,13 @@ else
             Logger.LogWarning("Web user {UserId} used the poster from an out-of-balance report", ctx.WebUserId);
         }
         return new DDReview.QuickBooks.Sql.PostingRequest(ids, lastRun.Start.ToDateTime(TimeOnly.MinValue), lastRun.End.ToDateTime(TimeOnly.MinValue), lastRun.ArFlag);
+    }
+
+    /// <summary>Previous / Next date range, as on the other reviews (whole months move by calendar months), then run.</summary>
+    private async Task ShiftRange(int dir)
+    {
+        (start, end) = DDReview.Core.DateRules.Shift(start, end, dir, DDReview.Core.DateRules.Yesterday);
+        await RunAsync();
     }
 
     private async Task RunAsync()

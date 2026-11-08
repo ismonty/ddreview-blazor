@@ -20,8 +20,10 @@ else
     <EditForm Model="this" OnSubmit="RunAsync" FormName="receipts" class="filters">
         <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
         <MultiSelect Caption="View by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<ReceiptsDimensions>(t.Key), t.On)" />
-        <label>Starting date <input type="date" @bind="start" @bind:after="StartChanged" /></label>
-        <label>Ending date <input type="date" @bind="end" @bind:after="EndChanged" /></label>
+        <label>Starting Date <input type="date" @bind="start" @bind:after="StartChanged" /></label>
+        <DatePreset Label="Start Shortcuts" Options="DatePreset.StartOptions" OnPick="StartPick" />
+        <label>Ending Date <input type="date" @bind="end" @bind:after="EndChanged" /></label>
+        <DatePreset Label="End Shortcuts" Options="DatePreset.EndOptions" OnPick="EndPick" />
         <button type="submit" disabled="@busy">@(busy ? "Running…" : "Submit")</button>
     </EditForm>
 
@@ -123,15 +125,19 @@ else
                 </tr>
             </tfoot>
         </table>
+        <QueryTime Elapsed="queryTime" />
         <ReportButtons Busy="busy" ShowWeekdaysToggle="true" Weekdays="weekdays" OnToggleWeekdays="() => weekdays = !weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
     }
 }
 
 @code {
     // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
-    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
+    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start, DDReview.Core.DateRules.Yesterday);
+    private void StartPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyStart(Enum.Parse<DDReview.Core.DateRules.StartPreset>(key), end, DateTime.Today);
+    private void EndPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyEnd(Enum.Parse<DDReview.Core.DateRules.EndPreset>(key), start, DateTime.Today);
     private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
     private DataRow? header;
+    private TimeSpan? queryTime;
     private IReadOnlyList<FilterBox> Boxes() => FilterHeader.Boxes(header, result, Cat, state.Filters.Keys);
 
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
@@ -241,7 +247,7 @@ else
     private async Task ExecuteAsync()
     {
         if (ctx is null || busy) return;
-        error = null; result = null; header = null; checkedRows.Clear();
+        error = null; result = null; header = null; queryTime = null; checkedRows.Clear();
         var dims = state.Dimensions<ReceiptsDimensions>();
         var allowedIds = stores.Select(s => s.StoreId).ToHashSet();                         // re-check against the access list
         var (ids, lists) = DrillFilters.Split(state, Cat, selected.Where(allowedIds.Contains));
@@ -252,9 +258,10 @@ else
         {
             var req = new ReceiptsRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids,
                 lists.Count == 0 ? null : lists.ToDictionary(kv => Enum.Parse<ReceiptsDimensions>(kv.Key), kv => kv.Value));
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var runTask = ReceiptsSvc.RunAsync(ctx.ClientConnectionString, req);
             var headTask = state.Filters.Count == 0 ? Task.FromResult<DataRow?>(null) : ReceiptsSvc.HeaderAsync(ctx.ClientConnectionString, req);
-            result = await runTask; header = await headTask;
+            result = await runTask; queryTime = sw.Elapsed; header = await headTask;
             ranDims = dims; rangeStart = start; rangeEnd = end;
         }
         catch (Exception ex) { error = "The query failed: " + ex.Message; }
@@ -263,8 +270,7 @@ else
 
     private async Task Shift(int dir)
     {
-        var days = (int)(end - start).TotalDays + 1;
-        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        (start, end) = DDReview.Core.DateRules.Shift(start, end, dir, DDReview.Core.DateRules.Yesterday);
         await ExecuteAsync();
     }
     private async Task ExcelAsync()
