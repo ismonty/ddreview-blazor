@@ -52,8 +52,8 @@ public sealed class DrillState
     {
         var c = Find(cols, key); if (c is not null) Flags.Add(c.NextKey);
     }
-    /// <summary>"Show All": forget this dimension's filter.</summary>
-    public void ShowAll(string key) => Filters.Remove(key);
+    /// <summary>"Show All": forget this dimension's filter and group by the dimension, so its values are listed rather than lost.</summary>
+    public void ShowAll(string key) { Filters.Remove(key); Flags.Add(key); }
     /// <summary>A row's cell was clicked: filter to it, stop grouping by it, group by the next dimension.</summary>
     public void RowClick(IReadOnlyList<DrillColumn> cols, string key, string filterValue)
     {

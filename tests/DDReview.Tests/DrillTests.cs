@@ -46,8 +46,10 @@ public class DrillTests
         s.DrillUp("MainType");
         s.DrillRight(Cat, "MainType");           // next after MainType is SaleType
         Assert.True(s.Flags.SetEquals(["Store", "MainType", "SaleType"]));
+        s.Flags.Remove("Store");                 // a row click on Store had turned it off
         s.ShowAll("Store");
         Assert.False(s.Filters.ContainsKey("Store"));
+        Assert.Contains("Store", s.Flags);       // clearing the filter puts the dimension back in View by
     }
 
     [Fact]
