@@ -22,7 +22,9 @@ else
         <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
         <MultiSelect Caption="Group by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<LaborDimensions>(t.Key), t.On)" />
         <label>From <input type="date" @bind="start" @bind:after="StartChanged" /></label>
+        <DatePreset Label="From Shortcuts" Options="DatePreset.StartOptions" OnPick="StartPick" />
         <label>To <input type="date" @bind="end" @bind:after="EndChanged" /></label>
+        <DatePreset Label="To Shortcuts" Options="DatePreset.EndOptions" OnPick="EndPick" />
         <label>Show
             <select @bind="mode">
                 <option value="@LaborDisplay.Hours">Hours</option>
@@ -98,7 +100,9 @@ else
 
 @code {
     // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
-    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
+    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start, DDReview.Core.DateRules.Yesterday);
+    private void StartPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyStart(Enum.Parse<DDReview.Core.DateRules.StartPreset>(key), end, DateTime.Today);
+    private void EndPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyEnd(Enum.Parse<DDReview.Core.DateRules.EndPreset>(key), start, DateTime.Today);
     private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
     private DataRow? header;
     private TimeSpan? queryTime;
@@ -211,8 +215,7 @@ else
     }
     private async Task Shift(int dir)
     {
-        var days = (int)(end - start).TotalDays + 1;
-        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        (start, end) = DDReview.Core.DateRules.Shift(start, end, dir, DDReview.Core.DateRules.Yesterday);
         await ExecuteAsync();
     }
     private async Task ExcelAsync()
