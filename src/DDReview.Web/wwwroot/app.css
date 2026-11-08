@@ -285,3 +285,8 @@ a.jump-btn { display: inline-block; min-width: 1.9rem; text-align: center; paddi
 a.jump-btn:hover { background: rgba(255,255,255,.12); }
 .query-time { font-weight: normal; opacity: .75; margin-left: .4rem; }
 .gl-topline { margin: .4rem 0; } .gl-topline.bad { color: var(--bad, #b00020); }
+div.filterboxes { display: flex; flex-wrap: wrap; gap: .5rem; margin: .4rem 0; }
+div.fbox { border: 1px solid currentColor; border-radius: 4px; padding: .25rem .5rem; min-width: 7rem; max-width: 22rem; font-size: .85rem; }
+div.fbox .fhead { display: flex; justify-content: space-between; gap: .6rem; align-items: baseline; }
+div.fbox .fnames { margin-top: .15rem; }
+div.fbox details summary { cursor: pointer; }

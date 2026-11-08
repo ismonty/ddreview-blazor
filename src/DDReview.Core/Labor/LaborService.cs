@@ -29,6 +29,12 @@ public sealed class LaborService
     /// <summary>The script exactly as the legacy generator builds it (tests and diagnostics).</summary>
     public string BuildScript(LaborRequest req) => Configure(req).BuildDataScript();
 
+    /// <summary>The names behind every active filter (one row), from the old page's own header query; null if it cannot be had.</summary>
+    public Task<DataRow?> HeaderAsync(string connectionString, LaborRequest req, CancellationToken ct = default) =>
+        DDReview.Core.Drill.FilterHeader.RunAsync(connectionString, () => BuildHeaderScript(req), ct);
+
+    public string BuildHeaderScript(LaborRequest req) => Configure(req).BuildHeaderScript();
+
     public async Task<DataTable> RunAsync(string connectionString, LaborRequest req, CancellationToken ct = default)
     {
         if (req.End < req.Start) throw new ArgumentException("The end date is before the start date.");

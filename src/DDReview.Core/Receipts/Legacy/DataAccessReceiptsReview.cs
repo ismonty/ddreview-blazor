@@ -3364,6 +3364,7 @@ namespace DDReview.Core.Receipts.Legacy {
 			sb.Append(this.SQLSelectStatement = ReceiptsSelect.OutputSelect());
 			return sb.ToString();
 			}
+		public String BuildHeaderScript() { return RetrieveReceiptsHeaderSQL(); }
 		private String RetrieveReceiptsHeaderSQL() {
 			StringBuilder sb = new StringBuilder();
 			sb.Append(@"

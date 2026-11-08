@@ -234,8 +234,17 @@ public static class FilterText
 {
     public static string Names(System.Data.DataTable? result, IReadOnlyList<DrillColumn> cat, string key, int max = 4)
     {
+        var names = List(result, cat, key);
+        if (names.Count == 0) return "";
+        var more = names.Count > max ? $" +{names.Count - max} more" : "";
+        return string.Join(", ", names.Take(max)) + more;
+    }
+
+    /// <summary>The distinct names for a filter's dimension found in the result rows (empty when there are none).</summary>
+    public static List<string> List(System.Data.DataTable? result, IReadOnlyList<DrillColumn> cat, string key)
+    {
         var col = DrillState.Find(cat, key);
-        if (result is null || col is null) return "";
+        if (result is null || col is null) return [];
         var names = new List<string>();
         foreach (var c in col.Display)
         {
@@ -245,8 +254,6 @@ public static class FilterText
                 .Where(v => v.Length > 0 && !v.Equals("All", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
             if (part.Count > 0) { names = part; if (c == col.Display[^1]) break; }
         }
-        if (names.Count == 0) return "";
-        var more = names.Count > max ? $" +{names.Count - max} more" : "";
-        return string.Join(", ", names.Take(max)) + more;
+        return names;
     }
 }

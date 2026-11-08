@@ -39,9 +39,7 @@ else
         <p class="range">@($"{rangeStart:dddd, MMMM d, yyyy} - {rangeEnd:dddd, MMMM d, yyyy}")</p>
         @if (state.Filters.Count > 0)
         {
-            <p class="filters-on">Filtered on:
-                @foreach (var k in state.Filters.Keys.ToList()) {<button type="button" class="hlink" title="Show All" @onclick="() => Act(s => s.ShowAll(k))">@FilterLabel(k) ✕</button>}
-            </p>
+            <FilterBoxes Boxes="Boxes()" OnShowAll="k => Act(st => st.ShowAll(k))" />
         }
         <table class="sales">
             <thead><tr>
@@ -94,7 +92,8 @@ else
     // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
     private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start);
     private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
-    private string FilterLabel(string k) { var n = FilterText.Names(result, Cat, k); return n.Length == 0 ? k : k + ": " + n; }
+    private DataRow? header;
+    private IReadOnlyList<FilterBox> Boxes() => FilterHeader.Boxes(header, result, Cat, state.Filters.Keys);
 
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
     private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
@@ -170,7 +169,7 @@ else
     private async Task ExecuteAsync()
     {
         if (ctx is null || busy) return;
-        error = null; result = null; checkedRows.Clear();
+        error = null; result = null; header = null; checkedRows.Clear();
         var dims = state.Dimensions<SalesDimensions>();
         var allowedIds = stores.Select(s => s.StoreId).ToHashSet();                         // re-check against the access list
         var (ids, lists) = DrillFilters.Split(state, Cat, selected.Where(allowedIds.Contains));
@@ -183,7 +182,9 @@ else
             int? off = int.TryParse(compare, out var o) ? o : null;
             var filters = lists.Count == 0 ? null : lists.ToDictionary(kv => Enum.Parse<SalesDimensions>(kv.Key), kv => kv.Value);
             var req = new SalesRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids, off, filters);
-            result = await SalesSvc.RunAsync(ctx.ClientConnectionString, req);
+            var runTask = SalesSvc.RunAsync(ctx.ClientConnectionString, req);
+            var headTask = state.Filters.Count == 0 ? Task.FromResult<DataRow?>(null) : SalesSvc.HeaderAsync(ctx.ClientConnectionString, req);
+            result = await runTask; header = await headTask;
             ranDims = dims;
             cols = SalesLayout.Build(ranDims, result, weekdays);
             colDrill = cols.Select(c => c.Kind == SalesCellKind.Text ? DrillState.ForDisplay(Cat, c.Column) : null).ToList();
