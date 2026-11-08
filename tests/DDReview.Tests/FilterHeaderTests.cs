@@ -90,3 +90,13 @@ public class ExportFilterLineTests
         Assert.True(xml.IndexOf("Title") < xml.IndexOf("Filters: None") && xml.IndexOf("Filters: None") < xml.IndexOf("H1"));
     }
 }
+
+public class CashOutTypeTests
+{
+    [Theory]
+    [InlineData(null, "Bank")]
+    [InlineData("", "Bank")]
+    [InlineData("0", "Bank")]
+    [InlineData(" Other Current Asset ", "Other Current Asset")]
+    public void Cash_out_type_defaults_to_bank(string? configured, string expected) => Assert.Equal(expected, DDReview.Core.Gl.GlAdjustmentService.CashOutType(configured));
+}
