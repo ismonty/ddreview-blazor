@@ -102,6 +102,7 @@ th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
 tr.suspense td { background: var(--warn); }
 tr.total td { color: var(--gold); }
 table.receipts th.stack, table.receipts td.stack { white-space: nowrap; vertical-align: top; }
+table.receipts td.wklabels { text-align: right; font-weight: 600; padding-right: .6rem; border-right: 1px solid currentColor; }
 ul.menu { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .7rem; }
 ul.menu li a { display: block; padding: .8rem 1.4rem; background: var(--tile); border: 1px solid var(--edge); border-left: 5px solid var(--gold); border-radius: 10px; text-decoration: none; font-weight: 700; color: var(--ink); }
 ul.menu li a:hover { border-color: var(--accent); }

@@ -51,9 +51,23 @@ else
                         }
                         else { <DrillHeader Title="@l.Label" Sortable="true" Mark="@Mark(l.Label)" OnSort="() => state.Sort(l.Label, false)" /> }
                     }
+                    @if (weekdays)
+                    {
+                        <th></th>
+                        @foreach (var d in ReceiptsWeekdays.Days) { <th class="n">@d</th> }
+                        <th class="n">
+                            <select aria-label="Sort by" @onchange="e => SortWeek(e.Value?.ToString())">
+                                <option value="">Sort by…</option>
+                                @foreach (var l in ReceiptsWeekdays.Lines.Select(x => x.Label).Distinct()) { <option value="@l" selected="@(state.SortHeader == WeekKey(l))">@l</option> }
+                            </select>
+                        </th>
+                    }
+                    else
+                    {
                     @foreach (var c in ReceiptsLayout.Columns)
                     {
                         <th class="n stack">@foreach (var line in c.Lines) {<div><button type="button" class="hlink" title="Sort by this" @onclick="() => state.Sort(LineKey(c, line), true)">@line.Label@Mark(LineKey(c, line))</button></div>}</th>
+                    }
                     }
                 </tr>
             </thead>
@@ -67,9 +81,21 @@ else
                             var dc = DrillState.ForDisplay(Cat, l.Column);
                             <td>@if (dc is not null && CanClick(row, dc)) { <button type="button" class="cell" @onclick="() => RowClick(dc, row)">@Text(row, l.Column)</button> } else { @Text(row, l.Column) }</td>
                         }
+                        @if (weekdays)
+                        {
+                            <td class="n stack wklabels">@foreach (var l in ReceiptsWeekdays.Lines) {<div class="@(l.Bold ? "b" : null)">@l.Label</div>}</td>
+                            @for (var d = 0; d < 8; d++)
+                            {
+                                var dd = d;
+                                <td class="n stack">@foreach (var l in ReceiptsWeekdays.Lines) {<div class="@(l.Bold ? "b" : null)">@ReceiptsWeekdays.Cell(row, l, dd)</div>}</td>
+                            }
+                        }
+                        else
+                        {
                         @foreach (var c in ReceiptsLayout.Columns)
                         {
                             <td class="n stack">@foreach (var line in c.Lines) {<div class="@(line.Bold ? "b" : null)">@ReceiptsLayout.Format(row, line)</div>}</td>
+                        }
                         }
                     </tr>
                 }
@@ -79,14 +105,27 @@ else
                 <tr class="total">
                     <td>Total</td>
                     @foreach (var l in Leading) { <td></td> }
+                    @if (weekdays)
+                    {
+                        var wsums = ReceiptsWeekdays.Sums(result);
+                        <td class="n stack wklabels">@foreach (var l in ReceiptsWeekdays.Lines) {<div class="@(l.Bold ? "b" : null)">@l.Label</div>}</td>
+                        @for (var d = 0; d < 8; d++)
+                        {
+                            var dd = d;
+                            <td class="n stack">@foreach (var l in ReceiptsWeekdays.Lines) {<div class="@(l.Bold ? "b" : null)">@ReceiptsWeekdays.Cell(wsums, l, dd)</div>}</td>
+                        }
+                    }
+                    else
+                    {
                     @foreach (var c in ReceiptsLayout.Columns)
                     {
                         <td class="n stack">@foreach (var line in c.Lines) {<div class="@(line.Bold ? "b" : null)">@ReceiptsLayout.FormatTotal(sums, line)</div>}</td>
                     }
+                    }
                 </tr>
             </tfoot>
         </table>
-        <ReportButtons Busy="busy" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
+        <ReportButtons Busy="busy" ShowWeekdaysToggle="true" Weekdays="weekdays" OnToggleWeekdays="() => weekdays = !weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
     }
 }
 
@@ -127,6 +166,7 @@ else
 
     private DDReview.Web.UserContext? ctx;
     private bool allowed, busy;
+    private bool weekdays = true;   // the old page opened with Weekdays on: labels down the left, Mon..Sun and a Total across
     private IReadOnlyList<StoreInfo> stores = [];
     private readonly HashSet<int> selected = [];
     private static readonly IReadOnlyList<DrillColumn> Cat = DrillCatalogs.Receipts;
@@ -163,6 +203,12 @@ else
     private readonly HashSet<DataRow> checkedRows = [];
     private static bool CanClick(DataRow row, DrillColumn dc) => DrillKeyResolver.CanClick(row, dc);
     private void Check(DataRow row, bool on) { if (on) checkedRows.Add(row); else checkedRows.Remove(row); }
+    private static string WeekKey(string label) => "wk/" + label;
+    private void SortWeek(string? label)
+    {
+        if (string.IsNullOrEmpty(label)) { state.SortHeader = null; return; }
+        state.Sort(WeekKey(label), true);
+    }
     private static string LineKey(StackColumn c, StackLine line) => c.Title + "/" + line.Label;
     private string Mark(string key) => state.SortHeader == key ? (state.SortDescending ? " ▼" : " ▲") : "";
     private IEnumerable<DataRow> Ordered()
@@ -175,6 +221,12 @@ else
         {
             var dc = DrillState.ForDisplay(Cat, lead.Column);
             return GridSort.Rows(result, GridSort.Column(result, dc?.SortColumn is not null && result.Columns.Contains(dc.SortColumn) ? dc.SortColumn : lead.Column), state.SortDescending);
+        }
+        if (h.StartsWith("wk/"))
+        {
+            var wl = ReceiptsWeekdays.Lines.FirstOrDefault(x => WeekKey(x.Label) == h);
+            if (wl is null) return result.Rows.Cast<DataRow>();
+            return GridSort.Rows(result, wl.Ratio ? GridSort.Column(result, wl.TotalField, wl.TotalDenominator) : GridSort.Column(result, wl.TotalField), state.SortDescending);
         }
         foreach (var c in ReceiptsLayout.Columns)
             foreach (var line in c.Lines)
