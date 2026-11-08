@@ -43,6 +43,20 @@ public sealed class ReceiptsService
 
     public string BuildScript(ReceiptsRequest req, ReceiptsDbFacts facts)
     {
+        var r = Configure(req, out var filteredDetail);
+        var d = req.Dimensions;
+        bool showDeposits = (d & DetailDims) != 0 || filteredDetail;
+        return r.BuildDataScript(facts.ProfitCenterColumnExists, showDeposits, facts.CashTipsEarnedId);
+    }
+
+    /// <summary>The names behind every active filter (one row), from the old page's own header query; null if it cannot be had.</summary>
+    public Task<DataRow?> HeaderAsync(string cs, ReceiptsRequest req, CancellationToken ct = default) =>
+        DDReview.Core.Drill.FilterHeader.RunAsync(cs, () => BuildHeaderScript(req), ct);
+
+    public string BuildHeaderScript(ReceiptsRequest req) => Configure(req, out _).BuildHeaderScript();
+
+    static DataAccessReceiptsReview Configure(ReceiptsRequest req, out bool filteredDetail)
+    {
         var r = new DataAccessReceiptsReview("")
         {
             StartDayNumber = DayNumber.FromDate(req.Start),
@@ -60,7 +74,7 @@ public sealed class ReceiptsService
         r.CheckNumberFlag = F(ReceiptsDimensions.CheckNumber); r.DayNameFlag = F(ReceiptsDimensions.DayName);
         r.WeekNameFlag = F(ReceiptsDimensions.WeekName); r.CashierSessionNumberFlag = F(ReceiptsDimensions.CashierSessionNumber);
         r.DayHourNumberFlag = F(ReceiptsDimensions.DayHourNumber);
-        bool filteredDetail = false;
+        filteredDetail = false;
         if (req.Filters != null)
             foreach (var (dim, list) in req.Filters)
             {
@@ -69,8 +83,7 @@ public sealed class ReceiptsService
                 f.SetValue(r, list);
                 if (list.Length > 0 && DetailDims.HasFlag(dim)) filteredDetail = true;
             }
-        bool showDeposits = (d & DetailDims) != 0 || filteredDetail;
-        return r.BuildDataScript(facts.ProfitCenterColumnExists, showDeposits, facts.CashTipsEarnedId);
+        return r;
     }
 
     public async Task<ReceiptsDbFacts> ProbeAsync(string cs, CancellationToken ct = default)

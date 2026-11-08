@@ -1,0 +1,23 @@
+@using DDReview.Core.Drill
+@* The boxes the old review pages showed above the grid: one per active filter, with what it is limited to. *@
+@if (Boxes.Count > 0)
+{
+    <div class="filterboxes">
+        @foreach (var b in Boxes)
+        {
+            <div class="fbox">
+                <div class="fhead"><b>@b.Title</b><button type="button" class="hlink" title="Show All" aria-label="@("Show all " + b.Title)" @onclick="() => OnShowAll.InvokeAsync(b.Key)">✕</button></div>
+                @if (b.Names.Count == 0) { <div class="fnames">Selected</div> }
+                else if (b.Long)
+                {
+                    <details><summary>@b.Names.Count selected</summary><div class="fnames">@foreach (var n in b.Names) {<div>@n</div>}</div></details>
+                }
+                else { <div class="fnames">@foreach (var n in b.Names) {<div>@n</div>}</div> }
+            </div>
+        }
+    </div>
+}
+@code {
+    [Parameter] public IReadOnlyList<FilterBox> Boxes { get; set; } = [];
+    [Parameter] public EventCallback<string> OnShowAll { get; set; }
+}
