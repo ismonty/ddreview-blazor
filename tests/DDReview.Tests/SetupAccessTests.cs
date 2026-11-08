@@ -171,7 +171,7 @@ public class SetupMiscTests
 
     [Fact] public void Access_script_creates_both_tables_with_a_live_grant_index_and_is_registered_last()
     {
-        Assert.Equal(["002", "004", "007", "010", "011", "012"], ClientScripts.All.Select(s => s.Id));
+        Assert.Equal(["002", "004", "007", "010", "011", "012", "013"], ClientScripts.All.Select(s => s.Id));
         var sql = ClientScripts.All.Single(s => s.Id == "007").ReadSql();
         Assert.Contains("create table dbo.tblDDReviewAdminAccess", sql);
         Assert.Contains("create table dbo.tblDDReviewAdminAudit", sql);
@@ -262,6 +262,17 @@ public class GlBlazorFunctionTests
         Assert.Contains("fn_CashAndSalesGLandARMultiStoreSelectBlazor(@stores", q);
         Assert.Contains("order by RowSeq option (recompile)", q);
         Assert.Contains("dbo.fn_CashAndSalesGLandARMultiStoreSelect(@stores", q);
+    }
+
+    [Fact] public void Script_013_adds_the_mapping_function_and_patches_a_copy_not_the_original()
+    {
+        var sql = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "013").ReadSql();
+        Assert.Contains("ALTER FUNCTION dbo.fn_CashAndSalesMappedRecordsBlazor", sql);
+        Assert.Contains("fn_CashAndSalesGLandARBlazor", sql);
+        Assert.DoesNotContain("ALTER FUNCTION dbo.fn_CashAndSalesGLandAR ", sql);
+        Assert.DoesNotContain("drop function dbo.fn_CashAndSalesGLandAR;", sql);
+        Assert.DoesNotContain("declare cur", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fetch next", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact] public void Script_012_is_one_inline_function_with_no_cursors_and_no_table_variables()
