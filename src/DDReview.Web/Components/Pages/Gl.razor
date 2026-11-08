@@ -250,7 +250,7 @@ else
     private MarkupString QueryNote() => queryTime is TimeSpan t ? new MarkupString($" <span class=\"query-time\">· Query {(t.TotalSeconds < 10 ? t.TotalSeconds.ToString("0.00") : t.TotalSeconds.ToString("0.0"))} s</span>") : default;
 
     /// <summary>The same Grand Total / Total line as at the bottom, shown above the lines too: label, balanced or not, both sums, query time.</summary>
-    private RenderFragment TopLine(string label, decimal debit, decimal credit, bool withTime = true) => @<p class="gl-topline @(debit == credit ? null : "bad")"><strong>@label</strong> @BalanceNote(debit, credit) · Debit @debit.ToString("N2") · Credit @credit.ToString("N2")@(withTime ? QueryNote() : default)</p>;
+    private RenderFragment TopLine(string label, decimal debit, decimal credit, bool withTime = true) => @<p class="gl-topline @(debit == credit ? null : "bad")"><strong>@label</strong> @BalanceNote(debit, credit) · Debit @debit.ToString("N2") · Credit @credit.ToString("N2")@(withTime ? QueryNote() : default)@(withTime && lastRun is not null ? " · Ran " + lastRun.Start.ToString("d") + " – " + lastRun.End.ToString("d") : null)</p>;
 
     private static string BalanceNote(decimal debit, decimal credit) =>
         debit == credit ? "(Balanced)" : "(Out Of Balance By " + (debit - credit).ToString("N2") + ")";
