@@ -217,7 +217,7 @@ else
         if (result is null) return;
         var (h, rows, tot) = SalesLayout.Export(result, cols, LaborLayout.Format);
         var title = $"Labor review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}";
-        var bytes = DDReview.Core.Support.XlsxWriter.Write("Labor", title, h, rows, punch ? null : tot);
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Labor", title, h, rows, punch ? null : tot, FilterHeader.Describe(Boxes()));
         await JS.InvokeVoidAsync("ddDownload", $"LaborReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
