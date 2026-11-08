@@ -3,7 +3,9 @@
 @using DDReview.Core.Home
 <div class="datebar">
     <label>Starting Date <input type="date" @bind="start" @bind:after="StartChanged" /></label>
+    <DatePreset Label="Start Shortcuts" Options="DatePreset.StartOptions" OnPick="StartPick" />
     <label>Ending Date <input type="date" @bind="end" @bind:after="EndChanged" /></label>
+    <DatePreset Label="End Shortcuts" Options="DatePreset.EndOptions" OnPick="EndPick" />
     @if (ShowCompare) { <label>Compare Date <input type="date" @bind="compare" @bind:after="CompareChanged" /></label> }
     @if (ShowScope)
     {
@@ -41,7 +43,7 @@
     private int compareOffset = DDReview.Core.DateRules.DefaultCompareOffsetDays;
     private void StartChanged()
     {
-        end = DDReview.Core.DateRules.EndFor(start);                    // the 1st of a month: the month's last day; otherwise six days later
+        end = DDReview.Core.DateRules.EndFor(start, DDReview.Core.DateRules.Yesterday);   // the 1st of a month: its last day (yesterday if sooner); otherwise six days later
         compare = DDReview.Core.DateRules.CompareFor(start, compareOffset);
     }
     private void EndChanged()
@@ -57,10 +59,20 @@
         if (Compare.Year >= 1900 && Start.Year >= 1900) compareOffset = (int)(start - compare).TotalDays;
     }
     private Task Submit() => OnChange.InvokeAsync(new Value(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), DateOnly.FromDateTime(compare), scope, storeId));
+    private void StartPick(string key)
+    {
+        (start, end) = DDReview.Core.DateRules.ApplyStart(Enum.Parse<DDReview.Core.DateRules.StartPreset>(key), end, DateTime.Today);
+        compare = DDReview.Core.DateRules.CompareFor(start, compareOffset);
+    }
+    private void EndPick(string key)
+    {
+        (start, end) = DDReview.Core.DateRules.ApplyEnd(Enum.Parse<DDReview.Core.DateRules.EndPreset>(key), start, DateTime.Today);
+        compare = DDReview.Core.DateRules.CompareFor(start, compareOffset);
+    }
     private Task Shift(int dir)
     {
-        var days = (int)(end - start).TotalDays + 1;
-        start = start.AddDays(dir * days); end = end.AddDays(dir * days); compare = compare.AddDays(dir * days);
+        (start, end) = DDReview.Core.DateRules.Shift(start, end, dir, DDReview.Core.DateRules.Yesterday);
+        compare = DDReview.Core.DateRules.CompareFor(start, compareOffset);
         return Submit();
     }
 }

@@ -290,3 +290,4 @@ div.fbox { border: 1px solid currentColor; border-radius: 4px; padding: .25rem .
 div.fbox .fhead { display: flex; justify-content: space-between; gap: .6rem; align-items: baseline; }
 div.fbox .fnames { margin-top: .15rem; }
 div.fbox details summary { cursor: pointer; }
+select.datepreset { max-width: 9.5rem; }
