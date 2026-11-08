@@ -1,0 +1,27 @@
+@* The row the old review grids had under the table: View By, two Drill Up lists and a second Submit. View By groups by that one dimension alone; each Drill Up adds a dimension to the grouping. *@
+@using System.Globalization
+<div class="viewbybar">
+    <label>View By @Pick(viewBy, v => viewBy = v)</label>
+    <label>Drill Up @Pick(up1, v => up1 = v)</label>
+    <label>Drill Up @Pick(up2, v => up2 = v)</label>
+    <button type="button" class="gold" disabled="@Busy" @onclick="Go">Submit</button>
+</div>
+@code {
+    public sealed record Selection(string? ViewBy, string? DrillUp1, string? DrillUp2);
+    [Parameter] public IReadOnlyList<(string Key, string Label)> Choices { get; set; } = [];
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback<Selection> OnSubmit { get; set; }
+
+    private string? viewBy, up1, up2;
+    private static string Title(string s) => CultureInfo.CurrentCulture.TextInfo.ToTitleCase(s.ToLowerInvariant());
+    private RenderFragment Pick(string? current, Action<string?> set) => @<select value="@(current ?? "")" @onchange="e => set(string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value!.ToString())">
+        <option value=""></option>
+        @foreach (var (key, label) in Choices) { <option value="@key">@Title(label)</option> }
+    </select>;
+    private async Task Go()
+    {
+        var s = new Selection(viewBy, up1, up2);
+        viewBy = up1 = up2 = null;
+        await OnSubmit.InvokeAsync(s);
+    }
+}

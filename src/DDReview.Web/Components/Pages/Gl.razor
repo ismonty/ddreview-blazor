@@ -41,7 +41,7 @@ else
             </select>
         </label>
         <label>Show <select @bind="arFlag"><option value="1">GL only</option><option value="2">AR only</option><option value="3">GL and AR</option></select></label>
-        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Submit")</button>
         <button type="button" disabled="@busy" @onclick="() => ShiftRange(-1)">Previous</button>
         <button type="button" disabled="@busy" @onclick="() => ShiftRange(1)">Next</button>
         @if (PosterLinks.IsConfigured)

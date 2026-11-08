@@ -126,6 +126,7 @@ else
             </tfoot>
         </table>
         <QueryTime Elapsed="queryTime" />
+        <ViewByBar Busy="busy" Choices="Choices.Select(c => (c.Value.ToString(), c.Label)).ToList()" OnSubmit="FooterSubmit" />
         <ReportButtons Busy="busy" ShowWeekdaysToggle="true" Weekdays="weekdays" OnToggleWeekdays="() => weekdays = !weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
     }
 }
@@ -195,6 +196,16 @@ else
 
     private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
     private void ToggleDim(ReceiptsDimensions d, bool on) { if (on) state.Flags.Add(d.ToString()); else state.Flags.Remove(d.ToString()); }
+
+    /// <summary>The View By / Drill Up row under the grid: View By groups by that one dimension, each Drill Up adds one; then the report runs again (filters kept).</summary>
+    private async Task FooterSubmit(ViewByBar.Selection s)
+    {
+        if (s.ViewBy is not null) { state.Flags.Clear(); state.Flags.Add(s.ViewBy); }
+        if (s.DrillUp1 is not null) state.Flags.Add(s.DrillUp1);
+        if (s.DrillUp2 is not null) state.Flags.Add(s.DrillUp2);
+        state.SortHeader = null;
+        await ExecuteAsync();
+    }
 
     private async Task Act(Action<DrillState> change) { change(state); await ExecuteAsync(); }
     private async Task RowClick(DrillColumn dc, DataRow row)
