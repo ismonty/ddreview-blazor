@@ -25,6 +25,7 @@
     <EmbeddedResource Include="..\..\sql\011_client_adjust_gl_quickbooks_type.sql" LogicalName="ClientScripts/011_client_adjust_gl_quickbooks_type.sql" />
     <EmbeddedResource Include="..\..\sql\012_client_gl_blazor_function.sql" LogicalName="ClientScripts/012_client_gl_blazor_function.sql" />
     <EmbeddedResource Include="..\..\sql\013_client_gl_blazor_mapping.sql" LogicalName="ClientScripts/013_client_gl_blazor_mapping.sql" />
+    <EmbeddedResource Include="..\..\sql\014_client_gl_blazor_batch_totals.sql" LogicalName="ClientScripts/014_client_gl_blazor_batch_totals.sql" />
   </ItemGroup>
 
 </Project>

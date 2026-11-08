@@ -171,7 +171,7 @@ public class SetupMiscTests
 
     [Fact] public void Access_script_creates_both_tables_with_a_live_grant_index_and_is_registered_last()
     {
-        Assert.Equal(["002", "004", "007", "010", "011", "012", "013"], ClientScripts.All.Select(s => s.Id));
+        Assert.Equal(["002", "004", "007", "010", "011", "012", "013", "014"], ClientScripts.All.Select(s => s.Id));
         var sql = ClientScripts.All.Single(s => s.Id == "007").ReadSql();
         Assert.Contains("create table dbo.tblDDReviewAdminAccess", sql);
         Assert.Contains("create table dbo.tblDDReviewAdminAudit", sql);
@@ -273,6 +273,16 @@ public class GlBlazorFunctionTests
         Assert.DoesNotContain("drop function dbo.fn_CashAndSalesGLandAR;", sql);
         Assert.DoesNotContain("declare cur", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("fetch next", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] public void Script_014_replaces_the_batch_loop_in_the_copy_only()
+    {
+        var sql = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "014").ReadSql();
+        Assert.Contains("-- PATCH: batch totals set-based", sql);
+        Assert.Contains("object_id(N'dbo.fn_CashAndSalesGLandAR', N'TF')", sql);
+        Assert.DoesNotContain("drop function", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER FUNCTION dbo.fn_CashAndSalesGLandAR ", sql);
+        Assert.DoesNotContain("declare cur", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact] public void Script_012_is_one_inline_function_with_no_cursors_and_no_table_variables()
