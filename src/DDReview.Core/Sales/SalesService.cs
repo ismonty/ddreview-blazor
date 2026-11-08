@@ -41,6 +41,7 @@ public sealed class SalesService
         if (req.StoreIds.Count == 0) throw new ArgumentException("No stores selected.");
         var (script, pairs) = await DDReview.Core.Drill.PairSupport.BuildAsync(connectionString, () => BuildScript(connectionString, req), ct);
         var (sql, pars) = Parameterize(script);
+        sql = ReportSqlTuning.Apply(sql);
 
         await using var cn = new SqlConnection(connectionString);
         await cn.OpenAsync(ct);

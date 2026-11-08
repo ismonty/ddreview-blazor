@@ -100,6 +100,7 @@ public sealed class ReceiptsService
         var facts = await ProbeAsync(cs, ct);
         var (script, pairs) = await DDReview.Core.Drill.PairSupport.BuildAsync(cs, () => BuildScript(req, facts), ct);
         var (sql, pars) = SalesService.Parameterize(script);
+        sql = DDReview.Core.Sales.ReportSqlTuning.Apply(sql);
         await using var cn = new SqlConnection(cs);
         await cn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, cn) { CommandTimeout = 600 };
