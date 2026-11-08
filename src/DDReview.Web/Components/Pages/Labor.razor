@@ -170,8 +170,8 @@ else
     private void SetDrill() => colDrill = cols.Select(c => c.Kind == SalesCellKind.Text ? DrillState.ForDisplay(Cat, c.Column) : null).ToList();
     private static string? Cls(SalesColumn c) => c.Kind is SalesCellKind.Number or SalesCellKind.Percent ? "n" : null;
 
-    /// <summary>The Run button: a fresh report, so filters and sort start over.</summary>
-    private async Task RunAsync() { state.Filters.Clear(); state.SortHeader = null; await ExecuteAsync(); }
+    /// <summary>The Run button: runs again with the filters kept (clear one with its box's ✕); the sort starts over.</summary>
+    private async Task RunAsync() { state.SortHeader = null; await ExecuteAsync(); }
 
     private async Task ExecuteAsync()
     {

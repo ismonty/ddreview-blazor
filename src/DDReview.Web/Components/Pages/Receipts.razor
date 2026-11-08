@@ -236,8 +236,8 @@ else
     }
     private static string Text(DataRow row, string col) => row.Table.Columns.Contains(col) && row[col] is not DBNull ? row[col].ToString() ?? "" : "";
 
-    /// <summary>The Submit button: a fresh report, so filters and sort start over.</summary>
-    private async Task RunAsync() { state.Filters.Clear(); state.SortHeader = null; await ExecuteAsync(); }
+    /// <summary>The Submit button: runs again with the filters kept (clear one with its box's ✕); the sort starts over.</summary>
+    private async Task RunAsync() { state.SortHeader = null; await ExecuteAsync(); }
 
     private async Task ExecuteAsync()
     {

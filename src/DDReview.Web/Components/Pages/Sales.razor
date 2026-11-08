@@ -164,8 +164,8 @@ else
         return GridSort.Rows(result, key, state.SortDescending);
     }
 
-    /// <summary>The Run button: a fresh report, so filters and sort start over.</summary>
-    private async Task RunAsync() { state.Filters.Clear(); state.SortHeader = null; await ExecuteAsync(); }
+    /// <summary>The Run button: runs again with the filters kept (clear one with its box's ✕); the sort starts over.</summary>
+    private async Task RunAsync() { state.SortHeader = null; await ExecuteAsync(); }
 
     private async Task ExecuteAsync()
     {
