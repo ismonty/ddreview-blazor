@@ -114,3 +114,17 @@ public class ReceiptTypeOtherTests
         Assert.Contains("(0=0 and rt.CreditCardReceipt<>0", old);
     }
 }
+
+public class DayHourNameTests
+{
+    [Fact]
+    public void Script_Without_The_Function_Works_The_Names_Out_In_Line()
+    {
+        var req = new ReceiptsRequest(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), ReceiptsDimensions.Store | ReceiptsDimensions.DayHourNumber, [1, 2]);
+        var svc = new ReceiptsService();
+        Assert.Contains("dbo.fn_DayHourName(DayHourNumber)", svc.BuildScript(req, new ReceiptsDbFacts(true, 0)));
+        var old = svc.BuildScript(req, new ReceiptsDbFacts(true, 0, true, false));
+        Assert.DoesNotContain("fn_DayHourName", old);
+        Assert.Contains("'Midnight'", old);
+    }
+}

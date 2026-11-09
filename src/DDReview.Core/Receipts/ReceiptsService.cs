@@ -20,7 +20,7 @@ public sealed record ReceiptsRequest(
     IReadOnlyDictionary<ReceiptsDimensions, string>? Filters = null);
 
 /// <summary>Facts about the client database the generator needs (probed once per run).</summary>
-public sealed record ReceiptsDbFacts(bool ProfitCenterColumnExists, int CashTipsEarnedId, bool ReceiptTypeOtherExists = true);
+public sealed record ReceiptsDbFacts(bool ProfitCenterColumnExists, int CashTipsEarnedId, bool ReceiptTypeOtherExists = true, bool DayHourNameFunctionExists = true);
 
 public sealed class ReceiptsService
 {
@@ -48,7 +48,12 @@ public sealed class ReceiptsService
         bool showDeposits = (d & DetailDims) != 0 || filteredDetail;
         var script = r.BuildDataScript(facts.ProfitCenterColumnExists, showDeposits, facts.CashTipsEarnedId);
         // Older databases have no tblReceiptTypes.ReceiptTypeOther ("Other card"): treat every receipt type as not flagged, as before the column existed.
-        return facts.ReceiptTypeOtherExists ? script : System.Text.RegularExpressions.Regex.Replace(script, @"\brt\.ReceiptTypeOther\b", "0", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!facts.ReceiptTypeOtherExists)
+            script = System.Text.RegularExpressions.Regex.Replace(script, @"\brt\.ReceiptTypeOther\b", "0", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Older databases have no dbo.fn_DayHourName: the same names are worked out in line (Midnight, Noon, then 1:00 AM style, as the Sales review builds them).
+        if (!facts.DayHourNameFunctionExists)
+            script = script.Replace("dbo.fn_DayHourName(DayHourNumber)", DayHourNameInline);
+        return script;
     }
 
     /// <summary>The names behind every active filter (one row), from the old page's own header query; null if it cannot be had.</summary>
@@ -108,7 +113,37 @@ public sealed class ReceiptsService
         bool other;
         await using (var c = new SqlCommand("select coalesce(col_length('dbo.tblReceiptTypes','ReceiptTypeOther'),0)", cn))
             other = Convert.ToInt32(await c.ExecuteScalarAsync(ct)) != 0;
-        return new ReceiptsDbFacts(pc, tips, other);
+        bool hourFn;
+        await using (var c = new SqlCommand("select case when object_id('dbo.fn_DayHourName') is null then 0 else 1 end", cn))
+            hourFn = Convert.ToInt32(await c.ExecuteScalarAsync(ct)) != 0;
+        return new ReceiptsDbFacts(pc, tips, other, hourFn);
+    }
+
+    public const string DayHourNameInline =
+        "case when DayHourNumber in (0,24) then 'Midnight' when DayHourNumber in (12,36) then 'Noon' " +
+        "else right('  ' + cast(DayHourNumber as varchar(3)),2) + case when floor(DayHourNumber/12)%2=1 then ':00 PM' else ':00 AM' end end";
+
+    static readonly Regex DbObjects = new(@"\b(?:dbo\.)?(?<n>(?:fn|vw|cs_sp)_\w+|tbl[A-Za-z]\w*)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>The tables, views and functions a script names that this database does not have (to say so when a run fails on one).</summary>
+    static async Task<string> MissingObjectsAsync(string cs, string sql, CancellationToken ct)
+    {
+        try
+        {
+            var names = DbObjects.Matches(sql).Select(m => m.Groups["n"].Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (names.Count == 0) return "";
+            await using var cn = new SqlConnection(cs);
+            await cn.OpenAsync(ct);
+            await using var cmd = new SqlCommand("select name from sys.objects where name in (" + string.Join(",", names.Select((_, i) => "@n" + i)) + ")", cn);
+            for (int i = 0; i < names.Count; i++) cmd.Parameters.AddWithValue("@n" + i, names[i]);
+            var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) found.Add(r.GetString(0));
+            var missing = names.Where(n => !found.Contains(n)).ToList();
+            return missing.Count == 0 ? "" : " Not found in this database: " + string.Join(", ", missing) + ".";
+        }
+        catch (Exception) { return ""; }
     }
 
     public async Task<DataTable> RunAsync(string cs, ReceiptsRequest req, CancellationToken ct = default)
@@ -125,8 +160,15 @@ public sealed class ReceiptsService
         foreach (var p in pars) cmd.Parameters.Add(p);
         pairs?.AttachTo(cmd);
         var table = new DataTable("Receipts");
-        await using var rd = await cmd.ExecuteReaderAsync(ct);
-        table.Load(rd);
+        try
+        {
+            await using var rd = await cmd.ExecuteReaderAsync(ct);
+            table.Load(rd);
+        }
+        catch (SqlException ex) when (ex.Number is 207 or 208 or 4121 or 195)
+        {
+            throw new InvalidOperationException(ex.Message + await MissingObjectsAsync(cs, sql, ct), ex);
+        }
         return table;
     }
 }
