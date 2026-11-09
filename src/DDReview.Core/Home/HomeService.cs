@@ -61,9 +61,23 @@ public sealed class HomeService
     }
 
     /// <summary>Register-processing status per group of stores; StoreProcessingStatus above 0 means running behind.</summary>
-    public Task<DataTable> StatusAsync(string cs, IEnumerable<int> stores, CancellationToken ct = default) =>
-        QueryAsync(cs, "select StoreProcessingStatus, StoreProcessingStatusDescription, StoreNameList from dbo.fn_StoreRegisterProcessingStatus(@list) order by StoreProcessingStatus desc",
-            "Status", 600, ct, List("@list", stores));
+    public async Task<DataTable> StatusAsync(string cs, IEnumerable<int> stores, CancellationToken ct = default)
+    {
+        try
+        {
+            return await QueryAsync(cs, "select StoreProcessingStatus, StoreProcessingStatusDescription, StoreNameList from dbo.fn_StoreRegisterProcessingStatus(@list) order by StoreProcessingStatus desc",
+                "Status", 600, ct, List("@list", stores));
+        }
+        catch (SqlException ex) when (ex.Number is 208 or 4121)
+        {
+            // An older database without dbo.fn_StoreRegisterProcessingStatus: no "running behind" notice, but the page still loads.
+            var none = new DataTable("Status");
+            none.Columns.Add("StoreProcessingStatus", typeof(int));
+            none.Columns.Add("StoreProcessingStatusDescription", typeof(string));
+            none.Columns.Add("StoreNameList", typeof(string));
+            return none;
+        }
+    }
 
     /// <summary>Dashboard source rows (the gauges and charts add these up). storeIds = the stores to include.</summary>
     public async Task<DataTable> DashboardAsync(string cs, IEnumerable<int> storeIds, DashboardScope scope, DateOnly start, DateOnly end, DateOnly previousStart, CancellationToken ct = default)
