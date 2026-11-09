@@ -20,7 +20,7 @@ public sealed record ReceiptsRequest(
     IReadOnlyDictionary<ReceiptsDimensions, string>? Filters = null);
 
 /// <summary>Facts about the client database the generator needs (probed once per run).</summary>
-public sealed record ReceiptsDbFacts(bool ProfitCenterColumnExists, int CashTipsEarnedId);
+public sealed record ReceiptsDbFacts(bool ProfitCenterColumnExists, int CashTipsEarnedId, bool ReceiptTypeOtherExists = true);
 
 public sealed class ReceiptsService
 {
@@ -46,7 +46,9 @@ public sealed class ReceiptsService
         var r = Configure(req, out var filteredDetail);
         var d = req.Dimensions;
         bool showDeposits = (d & DetailDims) != 0 || filteredDetail;
-        return r.BuildDataScript(facts.ProfitCenterColumnExists, showDeposits, facts.CashTipsEarnedId);
+        var script = r.BuildDataScript(facts.ProfitCenterColumnExists, showDeposits, facts.CashTipsEarnedId);
+        // Older databases have no tblReceiptTypes.ReceiptTypeOther ("Other card"): treat every receipt type as not flagged, as before the column existed.
+        return facts.ReceiptTypeOtherExists ? script : System.Text.RegularExpressions.Regex.Replace(script, @"\brt\.ReceiptTypeOther\b", "0", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
     /// <summary>The names behind every active filter (one row), from the old page's own header query; null if it cannot be had.</summary>
@@ -103,7 +105,10 @@ public sealed class ReceiptsService
                 if (o != null && o != DBNull.Value) tips = Convert.ToInt32(o);
             }
         }
-        return new ReceiptsDbFacts(pc, tips);
+        bool other;
+        await using (var c = new SqlCommand("select coalesce(col_length('dbo.tblReceiptTypes','ReceiptTypeOther'),0)", cn))
+            other = Convert.ToInt32(await c.ExecuteScalarAsync(ct)) != 0;
+        return new ReceiptsDbFacts(pc, tips, other);
     }
 
     public async Task<DataTable> RunAsync(string cs, ReceiptsRequest req, CancellationToken ct = default)
