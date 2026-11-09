@@ -100,3 +100,17 @@ public class CashOutTypeTests
     [InlineData(" Other Current Asset ", "Other Current Asset")]
     public void Cash_out_type_defaults_to_bank(string? configured, string expected) => Assert.Equal(expected, DDReview.Core.Gl.GlAdjustmentService.CashOutType(configured));
 }
+
+public class ReceiptTypeOtherTests
+{
+    [Fact]
+    public void Script_Without_The_Other_Card_Column_Does_Not_Mention_It()
+    {
+        var req = new ReceiptsRequest(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 7), ReceiptsDimensions.Store, [1, 2]);
+        var svc = new ReceiptsService();
+        Assert.Contains("rt.ReceiptTypeOther", svc.BuildScript(req, new ReceiptsDbFacts(true, 0)));
+        var old = svc.BuildScript(req, new ReceiptsDbFacts(true, 0, false));
+        Assert.DoesNotContain("ReceiptTypeOther", old);
+        Assert.Contains("(0=0 and rt.CreditCardReceipt<>0", old);
+    }
+}
