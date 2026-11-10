@@ -83,11 +83,11 @@ else
                         }
                         @if (weekdays)
                         {
-                            <td class="n stack wklabels">@foreach (var l in ReceiptsWeekdays.Lines) {<div class="@(l.Bold ? "b" : null)">@l.Label</div>}</td>
+                            <td class="n stack wklabels">@foreach (var l in WkLines) {<div class="@(l.Bold ? "b" : null)">@l.Label</div>}</td>
                             @for (var d = 0; d < 8; d++)
                             {
                                 var dd = d;
-                                <td class="n stack">@foreach (var l in ReceiptsWeekdays.Lines) {<div class="@(l.Bold ? "b" : null)">@ReceiptsWeekdays.Cell(row, l, dd)</div>}</td>
+                                <td class="n stack">@foreach (var l in WkLines) {<div class="@(l.Bold ? "b" : null)">@ReceiptsWeekdays.Cell(row, l, dd)</div>}</td>
                             }
                         }
                         else
@@ -108,11 +108,11 @@ else
                     @if (weekdays)
                     {
                         var wsums = ReceiptsWeekdays.Sums(result);
-                        <td class="n stack wklabels">@foreach (var l in ReceiptsWeekdays.Lines) {<div class="@(l.Bold ? "b" : null)">@l.Label</div>}</td>
+                        <td class="n stack wklabels">@foreach (var l in WkLines) {<div class="@(l.Bold ? "b" : null)">@l.Label</div>}</td>
                         @for (var d = 0; d < 8; d++)
                         {
                             var dd = d;
-                            <td class="n stack">@foreach (var l in ReceiptsWeekdays.Lines) {<div class="@(l.Bold ? "b" : null)">@ReceiptsWeekdays.Cell(wsums, l, dd)</div>}</td>
+                            <td class="n stack">@foreach (var l in WkLines) {<div class="@(l.Bold ? "b" : null)">@ReceiptsWeekdays.Cell(wsums, l, dd)</div>}</td>
                         }
                     }
                     else
@@ -127,7 +127,7 @@ else
         </table>
         <QueryTime Elapsed="queryTime" />
         <ViewByBar Busy="busy" Choices="Choices.Select(c => (c.Value.ToString(), c.Label)).ToList()" OnSubmit="FooterSubmit" />
-        <ReportButtons Busy="busy" ShowWeekdaysToggle="true" Weekdays="weekdays" OnToggleWeekdays="() => weekdays = !weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
+        <ReportButtons Busy="busy" ShowZeroToggle="weekdays" HideZero="hideZero" OnToggleZero="ToggleZeroAsync" ShowWeekdaysToggle="true" Weekdays="weekdays" OnToggleWeekdays="() => weekdays = !weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
     }
 }
 
@@ -172,6 +172,35 @@ else
 
     private DDReview.Web.UserContext? ctx;
     private bool allowed, busy;
+    private bool hideZero = true;   // Weekdays view: leave out lines that are zero everywhere; remembered in this browser
+    private const string HideZeroKey = "ddreview.receipts.hideZeroLines";
+    private DataTable? wkFor; private bool wkHide; private IReadOnlyList<WeekLine> wkLines = ReceiptsWeekdays.Lines;
+    private IReadOnlyList<WeekLine> WkLines
+    {
+        get
+        {
+            if (!ReferenceEquals(wkFor, result) || wkHide != hideZero) { wkLines = ReceiptsWeekdays.VisibleLines(result, hideZero); wkFor = result; wkHide = hideZero; }
+            return wkLines;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", HideZeroKey);
+            if (saved is "0" or "1") { var v = saved == "1"; if (v != hideZero) { hideZero = v; StateHasChanged(); } }
+        }
+        catch (Exception) { /* storage blocked or not ready: keep the default */ }
+    }
+
+    private async Task ToggleZeroAsync()
+    {
+        hideZero = !hideZero;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", HideZeroKey, hideZero ? "1" : "0"); } catch (Exception) { }
+    }
+
     private bool weekdays = true;   // the old page opened with Weekdays on: labels down the left, Mon..Sun and a Total across
     private IReadOnlyList<StoreInfo> stores = [];
     private readonly HashSet<int> selected = [];

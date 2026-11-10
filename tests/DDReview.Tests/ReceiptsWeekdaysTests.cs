@@ -32,3 +32,29 @@ public class ReceiptsWeekdaysTests
     }
     [Fact] public void Total_Row_Sums_Then_Divides() { var t = Row().Table; var r2 = t.NewRow(); r2["CheckCount1"] = 4m; r2["NetReceiptAmount1"] = 30m; t.Rows.Add(r2); var s = ReceiptsWeekdays.Sums(t); Assert.Equal("15.00", ReceiptsWeekdays.Cell(s, L("Net/Table"), 0)); }
 }
+
+public class ReceiptsWeekdaysZeroLineTests
+{
+    [Fact]
+    public void Zero_Lines_Are_Left_Out_Except_The_Few_That_Always_Stay()
+    {
+        var t = new System.Data.DataTable();
+        foreach (var c in new[] { "R1", "NetReceiptAmount1", "DiscountAmount1", "TotalReceipts" }) t.Columns.Add(c, typeof(decimal));
+        var r = t.NewRow(); r["R1"] = 0m; r["NetReceiptAmount1"] = 50m; r["DiscountAmount1"] = 0m; r["TotalReceipts"] = 0m; t.Rows.Add(r);
+        var shown = ReceiptsWeekdays.VisibleLines(t, true).Select(l => l.Label).ToList();
+        Assert.Contains("Expected", shown);          // always stays
+        Assert.Contains("Net Sales", shown);         // has data
+        Assert.DoesNotContain("Discounts", shown);   // zero everywhere
+        Assert.DoesNotContain("VISA", shown);        // not in the result at all
+        Assert.Equal(ReceiptsWeekdays.Lines.Count, ReceiptsWeekdays.VisibleLines(t, false).Count);
+    }
+
+    [Fact]
+    public void A_Line_With_Data_In_Any_Row_Or_Day_Stays()
+    {
+        var t = new System.Data.DataTable();
+        t.Columns.Add("DiscountAmount3", typeof(decimal)); t.Columns.Add("DiscountAmount1", typeof(decimal));
+        t.Rows.Add(0m, 0m); t.Rows.Add(4m, 0m);
+        Assert.Contains("Discounts", ReceiptsWeekdays.VisibleLines(t, true).Select(l => l.Label));
+    }
+}
