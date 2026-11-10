@@ -128,3 +128,57 @@ public class DayHourNameTests
         Assert.Contains("'Midnight'", old);
     }
 }
+
+public class SalesStaffFilterStoreIdTests
+{
+    sealed class NoLookups : DDReview.Core.Sales.Legacy.ISalesLookups
+    {
+        public System.Data.DataTable GetTable(string name, string sql) => new System.Data.DataTable(name);
+    }
+
+    static int Count(string s, string t) => (s.Length - s.Replace(t, "").Length) / t.Length;
+
+    [Fact]
+    public void A_Server_Filter_With_Only_Day_Selected_Still_Carries_StoreID_In_The_Lower_Query()
+    {
+        var a = new DateOnly(2026, 8, 1); var b = new DateOnly(2026, 8, 31);
+        var svc = new SalesService();
+        var plain = svc.BuildScript("", new SalesRequest(a, b, SalesDimensions.Day, [1, 2]), new NoLookups());
+        var staff = svc.BuildScript("", new SalesRequest(a, b, SalesDimensions.Day, [1, 2], null, new Dictionary<SalesDimensions, string> { [SalesDimensions.StoreStaff] = "1:7" }), new NoLookups());
+        Assert.True(Count(staff, "css.StoreID as StoreID") > Count(plain, "css.StoreID as StoreID"));
+        Assert.True(Count(staff, "css.StoreID") > Count(plain, "css.StoreID"));
+    }
+}
+
+public class SalesFilterViewByMatrixTests
+{
+    sealed class NoLookups : DDReview.Core.Sales.Legacy.ISalesLookups
+    {
+        public System.Data.DataTable GetTable(string name, string sql) => new System.Data.DataTable(name);
+    }
+
+    // Every filter paired with every view-by: whenever the script joins tblStores on the lower query's StoreID,
+    // that lower query has to actually carry StoreID (this is the "Invalid column name 'StoreID'" family of bugs).
+    [Fact]
+    public void Every_Filter_With_Every_ViewBy_Carries_StoreID_Wherever_It_Is_Joined_On()
+    {
+        var a = new DateOnly(2026, 8, 1); var b = new DateOnly(2026, 8, 31);
+        var svc = new SalesService();
+        var dims = Enum.GetValues<SalesDimensions>().Where(d => d != SalesDimensions.None).ToList();
+        var bad = new List<string>();
+        foreach (var view in dims.Prepend(SalesDimensions.None))
+            foreach (var f in dims)
+            {
+                string sql;
+                try
+                {
+                    sql = svc.BuildScript("", new SalesRequest(a, b, view, [1, 2], null,
+                        new Dictionary<SalesDimensions, string> { [f] = "1:7" }), new NoLookups());
+                }
+                catch (ArgumentException) { continue; }
+                if (sql.Contains("cs.StoreID=tblStores.StoreID") && !sql.Contains("css.StoreID as StoreID"))
+                    bad.Add($"view {view} + filter {f}");
+            }
+        Assert.True(bad.Count == 0, string.Join("; ", bad));
+    }
+}

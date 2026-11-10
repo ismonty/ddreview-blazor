@@ -1280,7 +1280,7 @@ namespace DDReview.Core.Sales.Legacy {
 			if (StoreGroupFlag==1 || StoreGroupListCSV.Length>0 || StoreFlag==1 || ProfitCenterFlag==1
 					|| MainGroupFlag==1 || SaleTypeFlag==1 || DiscountFlag==1 || MenuItemFlag==1 
 					|| MenuItemPLUFlag==1 || SpecialFlag==1 || CostMode>0 || FrequentDinerPlanFlag==1
-					|| FrequentDinerCustomerFlag==1 || StoreStaffFlag==1
+					|| FrequentDinerCustomerFlag==1 || StoreStaffFlag==1 || StoreStaffListCSV.Length>0
 					|| CheckNumberFlag==1 || DiscountListCSV.Length>0 || ColumnNumberExpressionRequiresDetailJoin)
 				sbSQLData.Append ("\t\t\t\t\t\tcss.StoreID as StoreID," + "\n");
 			if (ProfitCenterFlag==1)
@@ -1786,7 +1786,7 @@ namespace DDReview.Core.Sales.Legacy {
 			if (StoreGroupFlag==1 || StoreGroupListCSV.Length>0 || StoreFlag==1 || ProfitCenterFlag==1 || MainTypeFlag==1
 					|| MainGroupFlag==1 || SaleTypeFlag==1 || DiscountFlag==1 || MenuItemFlag==1 || MenuItemPLUFlag==1
 					|| SpecialFlag==1 || CostMode>0 || FrequentDinerPlanFlag==1 || FrequentDinerCustomerFlag==1
-					|| StoreStaffFlag==1 || CheckNumberFlag==1 || DiscountListCSV.Length>0) {
+					|| StoreStaffFlag==1 || StoreStaffListCSV.Length>0 || CheckNumberFlag==1 || DiscountListCSV.Length>0) {
 				if (isGroupBys)
 					sbSQLData.Append ("," + "\n");
 				else
