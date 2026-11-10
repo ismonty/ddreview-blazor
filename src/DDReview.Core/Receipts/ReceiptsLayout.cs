@@ -140,6 +140,28 @@ public static class ReceiptsWeekdays
         A("Tips/Payment", "TipsAmount", "Q", "TotalTipsAmount", "TotalCount"),
     ];
 
+    /// <summary>Lines that always stay, so a quiet result still reads as a report.</summary>
+    static readonly HashSet<string> AlwaysShown = ["Expected", "Net Sales", "Total Sales"];
+
+    /// <summary>
+    /// The lines worth showing: with <paramref name="hideZero"/>, a line whose figures are zero in every row (all seven days and the Total) is left out,
+    /// except the few that always stay. Ratio lines are judged on their top figure, since a ratio of nothing is nothing.
+    /// </summary>
+    public static IReadOnlyList<WeekLine> VisibleLines(DataTable? t, bool hideZero)
+    {
+        if (!hideZero || t is null) return Lines;
+        return Lines.Where(l => AlwaysShown.Contains(l.Label) || HasData(t, l)).ToList();
+    }
+
+    static bool HasData(DataTable t, WeekLine l)
+    {
+        var fields = Enumerable.Range(0, 7).Select(d => DayName(l.DayField, d)).Append(l.TotalField).ToList();
+        foreach (DataRow r in t.Rows)
+            foreach (var f in fields)
+                if (Value(r, f) != 0m) return true;
+        return false;
+    }
+
     /// <summary>The field name for day <paramref name="day"/> (0 = Monday): the digit goes at the end, or in place of '#' when the name has one.</summary>
     public static string DayName(string field, int day) => field.Contains('#') ? field.Replace("#", (day + 1).ToString()) : field + (day + 1);
 
