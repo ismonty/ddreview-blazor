@@ -27,6 +27,7 @@
     <EmbeddedResource Include="..\..\sql\013_client_gl_blazor_mapping.sql" LogicalName="ClientScripts/013_client_gl_blazor_mapping.sql" />
     <EmbeddedResource Include="..\..\sql\014_client_gl_blazor_batch_totals.sql" LogicalName="ClientScripts/014_client_gl_blazor_batch_totals.sql" />
     <EmbeddedResource Include="..\..\sql\015_client_gl_blazor_no_recompile.sql" LogicalName="ClientScripts/015_client_gl_blazor_no_recompile.sql" />
+    <EmbeddedResource Include="..\..\sql\016_client_concise_recap_blazor.sql" LogicalName="ClientScripts/016_client_concise_recap_blazor.sql" />
   </ItemGroup>
 
 </Project>

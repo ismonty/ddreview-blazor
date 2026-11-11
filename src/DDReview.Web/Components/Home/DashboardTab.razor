@@ -28,6 +28,8 @@ else
         <div class="chartbox narrow"><BarChart Title="Total Sales" Groups="totalGroup" ShowLegend="false" /></div>
     </div>
 }
+@* The Daily Recap (the old emailed recap) is for the Ending Date and loads on its own, so a problem there never hides the gauges. *@
+<RecapCard Ctx="Ctx" Ending="end" />
 @code {
     [Parameter, EditorRequired] public UserContextHolder Ctx { get; set; } = null!;
     private DateOnly start, end, compare; private DashboardScope scope = DashboardScope.DateRange;
