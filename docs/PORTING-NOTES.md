@@ -140,3 +140,10 @@ a weekly budget through a scalar function run on every budget row, completeness,
 `tblCashAndSalesSales` once for all three days, only from the Monday of each week, only for the user's stores (the store list now filters inside the query), and only the recap's figures. The rules are copied from InnerCore.
 One difference on purpose: a store with sales earlier in the month but none in the current week is no longer listed with zeros (InnerCore listed it). The recap card moved above the gauges, under the date bar.
 Unverified against a live database; compare with `sql/tools_concise_recap_compare.sql` (expect no rows, apart from that difference and possibly the 9999 lines) and time both functions.
+
+Slice 11c (fast recap, `sql/018`): 017 was still more than a minute. Cause: it worked out the three day numbers inside the query with `fn_CalcDayNumber`, a scalar function that calls another scalar function
+(`fn_CalcWeekNumberBaseDate`), so SQL Server could not size the week, could not seek to it, and may have run both functions for every row of `tblCashAndSalesSales`. 018 adds `fn_ConciseDailyRecapBlazor2`
+(scripts 016/017's function is left in place, unused now): `HomeService` asks the database for the three day numbers once (three cheap calls) and passes them in as ints, and each of the three weeks is
+its own query with the numbers in its WHERE (a plain range seek on the clustered `DayNumber` indexes), still only for the user's stores. Same columns, same rules as 017.
+Unverified against a live database; time it with `set statistics time on` (see `sql/tools_concise_recap_compare.sql`).
+

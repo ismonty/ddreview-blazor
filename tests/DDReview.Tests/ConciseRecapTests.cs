@@ -161,4 +161,23 @@ public class ConciseRecapTests
         Assert.Contains("NOT csb.StoreID IN (1, 4, 11)", sql);
         Assert.NotEmpty(DDReview.Core.Updater.SqlBatches.Split(sql));
     }
+
+    [Fact]
+    public void Fast_recap_script_takes_the_day_numbers_as_plain_numbers_and_seeks_each_week_on_its_own()
+    {
+        var s = DDReview.Core.Updater.ClientScripts.All.Single(x => x.Id == "018");
+        var sql = s.ReadSql();
+        var body = sql[sql.IndexOf("ALTER FUNCTION", StringComparison.Ordinal)..];
+        Assert.Contains("fn_ConciseDailyRecapBlazor2 (@EndingDate datetime, @DayNumber0 int, @DayNumber1 int, @DayNumber2 int, @StoreListCSV varchar(8000))", body);
+        Assert.DoesNotContain("fn_CalcDayNumber(", body.Replace("dbo.fn_CalcDayNumber(@d)", "").Replace("dbo.fn_CalcDayNumber(dateadd(day,-364,@d))", "").Replace("dbo.fn_CalcDayNumber(dateadd(day,-728,@d))", ""));  // only the usage example mentions it
+        Assert.DoesNotContain("fn_ConciseDailyRecapInnerCore(", body);
+        for (var k = 0; k < 3; k++)
+        {
+            Assert.Contains($"css.DayNumber BETWEEN (@DayNumber{k} / 7) * 7 AND @DayNumber{k}", body);       // each week is its own range seek on the clustered DayNumber index
+            Assert.Contains($"csb.DayNumber >= (@DayNumber{k} / 7) * 7 AND csb.DayNumber <= @DayNumber{k}", body);
+        }
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(body, @"INNER JOIN StoreList sl ON sl\.StoreID = m\.DestinationStoreID").Count);   // only the user's stores are read, in all three
+        Assert.Contains("css.MainTypeID IN (1, 2, 3)", body);
+        Assert.NotEmpty(DDReview.Core.Updater.SqlBatches.Split(sql));
+    }
 }
