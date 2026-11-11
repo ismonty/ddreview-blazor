@@ -89,6 +89,14 @@ public static class ClientScripts
                                when object_id('dbo.fn_ConciseDailyRecapBlazor', 'IF') is not null then 1
                                else 0 end as int) as Present,
                      cast(1 as int) as Usable"),
+        // Replaces the body of the 016 function with a faster one that reads the sales tables once (see the script's header). A database without the recap has nothing to add.
+        new("017", "Home screen: faster Daily Recap (rewrites dbo.fn_ConciseDailyRecapBlazor to read the sales tables once; nothing else is changed)", "ClientScripts/017_client_concise_recap_lean.sql",
+            @"select cast(case when object_id('dbo.fn_ConciseDailyRecapInnerCore', 'TF') is null then 1
+                               when object_id('dbo.fn_ConciseDailyRecapBlazor', 'IF') is null then 0
+                               when object_definition(object_id('dbo.fn_ConciseDailyRecapBlazor', 'IF')) is null then 1
+                               when charindex('-- LEAN RECAP', object_definition(object_id('dbo.fn_ConciseDailyRecapBlazor', 'IF'))) > 0 then 1
+                               else 0 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 

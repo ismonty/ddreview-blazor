@@ -125,7 +125,7 @@ Unverified against a live database: whether the text sits exactly where the old 
 Source: the emailed Daily Sales Recap, `dbo.fn_ConciseDailyRecapHTML2` in the client database. That function only formats HTML (a cursor and nested tables) over `fn_ConciseDailyRecapUpright(date)`,
 which gets its numbers from `fn_ConciseDailyRecapInnerCore(date)`. The email lined up three days per store: the ending day, 364 days back and 728 days back (same weekday).
 Port: new client function `dbo.fn_ConciseDailyRecapBlazor(@EndingDate, @StoreListCSV)` (`sql/016`, registered with Database Updater; nothing existing is changed) calls InnerCore for the three
-days and returns one row per store plus one All Stores row. `HomeService.ConciseRecapAsync` calls it; `ConciseRecap` (Core/Home) groups the rows; `RecapCard.razor` shows it at the bottom of the Dashboard
+days and returns one row per store plus one All Stores row. `HomeService.ConciseRecapAsync` calls it; `ConciseRecap` (Core/Home) groups the rows; `RecapCard.razor` shows it on the Dashboard, between the date bar and the gauges,
 for the Dashboard's Ending Date, in a collapsible block, with the app's own colours (theme variables only; none of the email's pastels).
 Decisions:
 - **The store filter is in the SQL, on all three days, and the All Stores row adds up only the listed stores.** InnerCore reports every store in the database, so without this a login that sees two stores would also have seen a total of all of them. An empty list returns nothing.
@@ -134,3 +134,9 @@ Decisions:
 - The email's All Stores block was InnerCore's own total row, which groups by batch count and can come out as more than one line. The port's total is one sum of the stores shown.
 - A database without `sql/016` shows a note on the card (the rest of the Dashboard still loads); Database Updater adds the function.
 Unverified against a live database: `sql/016` has not been run anywhere. Run `sql/tools_concise_recap_compare.sql` on a test copy; it should return no rows (apart from possibly the 9999 lines, see its header).
+
+Slice 11b (faster recap, `sql/017`): the first version called InnerCore three times, and each call reads sales from the 1st of the month, works out figures the recap never shows (Last 7 Days, Month To Date,
+a weekly budget through a scalar function run on every budget row, completeness, batch counts) for every store in the database, one call after another. 017 rewrites `fn_ConciseDailyRecapBlazor` (same name and columns) to read
+`tblCashAndSalesSales` once for all three days, only from the Monday of each week, only for the user's stores (the store list now filters inside the query), and only the recap's figures. The rules are copied from InnerCore.
+One difference on purpose: a store with sales earlier in the month but none in the current week is no longer listed with zeros (InnerCore listed it). The recap card moved above the gauges, under the date bar.
+Unverified against a live database; compare with `sql/tools_concise_recap_compare.sql` (expect no rows, apart from that difference and possibly the 9999 lines) and time both functions.
