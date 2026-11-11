@@ -28,7 +28,7 @@ public class SetupTableDeclarationTests
     };
 
     // Columns that older client databases may not have yet (the old Access form fell back without them).
-    private static readonly HashSet<string> MayBeMissing = ["UseTaxApplies", "UseTaxPercentage", "POSWindowID", "TipsShortfall", "DefaultQuickBooksType", "AccountNameQB", "AssignedStoreID", "AssignedCustomerID"];
+    private static readonly HashSet<string> MayBeMissing = ["UseTaxApplies", "UseTaxPercentage", "POSWindowID", "TipsShortfall", "DailyRecapEnabled", "DefaultQuickBooksType", "AccountNameQB", "AssignedStoreID", "AssignedCustomerID"];
 
     [Fact] public void Every_declared_column_exists_in_the_real_schema_or_is_known_to_be_optional()
     {

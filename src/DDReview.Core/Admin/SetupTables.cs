@@ -382,6 +382,8 @@ public static class SetupTables
         new("SalesTaxBreakoutMode", "Break down sales tax by rate on review / export", SetupKind.Bool),
         new("OutputCashAndSalesByAccountClass", "Output by account class on review / export", SetupKind.Bool),
         new("ExportDistReference", "Export dist reference to accounting software", SetupKind.Bool),
+        new("DailyRecapEnabled", "Daily Recap on", SetupKind.Bool,
+            Help: "Turns the Daily Recap tab on or off for this whole database. Needs Database Updater script 019 (the column is hidden until it has been run)."),
     ], AllowAdd: false, AllowDelete: false,
     Help: "The settings that control how the general ledger and A/R exports are put together. They apply to every store.");
 

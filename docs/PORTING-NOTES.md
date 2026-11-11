@@ -153,3 +153,8 @@ Slice 12: Daily Recap on its own tab, and links that sign in first
   (`DDReview.Core.Admin.SignInReturn.SafePath`: only paths on this site, never the login or account-action pages, so it cannot be used as an open redirect). For Google the path travels in the protected sign-in state, and in the external cookie when "Choose a Database" comes in between.
   So `https://<site>/?tab=recap` in an email works for a signed-out person (password or Google) and for one who is already signed in. Not covered by tests that run the site: the redirect itself was not tried against a live central master.
 
+Slice 13: Daily Recap on/off switch per database
+- **Setup > Global Settings > "Daily Recap on"** (a check box) turns the Daily Recap tab on or off for the whole database. Stored in a new column, `dbo.tblGlobal.DailyRecapEnabled` (bit, default 1), added by Database Updater script `sql/019`; nothing existing is changed, and a database that has not run 019 behaves as if the switch were on (the Setup page hides the column until then).
+- When it is off, the tab disappears from the home screen and a `/?tab=recap` link lands on the Dashboard. `HomeService.DailyRecapEnabledAsync` reads it (on when the column or row is missing or the value is null).
+- Anything else that sends the recap by itself (the old emailed Daily Sales Recap job) can read the same column; this slice does not touch that job.
+- Not covered by tests that run the site: the tab hiding itself and the Setup save were not tried against a live database.

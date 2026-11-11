@@ -171,7 +171,7 @@ public class SetupMiscTests
 
     [Fact] public void Access_script_creates_both_tables_with_a_live_grant_index_and_is_registered_last()
     {
-        Assert.Equal(["002", "004", "007", "010", "011", "012", "013", "014", "015", "016", "017", "018"], ClientScripts.All.Select(s => s.Id));
+        Assert.Equal(["002", "004", "007", "010", "011", "012", "013", "014", "015", "016", "017", "018", "019"], ClientScripts.All.Select(s => s.Id));
         var sql = ClientScripts.All.Single(s => s.Id == "007").ReadSql();
         Assert.Contains("create table dbo.tblDDReviewAdminAccess", sql);
         Assert.Contains("create table dbo.tblDDReviewAdminAudit", sql);
@@ -222,6 +222,26 @@ public class GoogleChallengeTests
     {
         var url = Base + "&login_prompt=1";
         Assert.EndsWith("&prompt=select_account", DDReview.Core.Security.GoogleChallenge.WithDefaultPrompt(url));
+    }
+}
+
+public class DailyRecapSwitchTests
+{
+    [Fact] public void Script_019_adds_the_switch_column_on_by_default_and_can_run_again()
+    {
+        var script = DDReview.Core.Updater.ClientScripts.All.Single(s => s.Id == "019");
+        var sql = script.ReadSql();
+        Assert.Contains("add DailyRecapEnabled bit not null", sql);
+        Assert.Contains("default (1)", sql);
+        Assert.Contains("col_length(N'dbo.tblGlobal', N'DailyRecapEnabled') is not null", sql);   // already there: nothing to do
+        Assert.DoesNotContain("drop ", sql, StringComparison.OrdinalIgnoreCase);                    // adds only
+        Assert.Contains("col_length('dbo.tblGlobal', 'DailyRecapEnabled') is not null", script.CheckSql);
+    }
+
+    [Fact] public void Global_settings_page_offers_the_switch_as_a_yes_no_column()
+    {
+        var col = DDReview.Core.Admin.SetupTables.Global.Columns.Single(c => c.Name == "DailyRecapEnabled");
+        Assert.Equal(DDReview.Core.Admin.SetupKind.Bool, col.Kind);
     }
 }
 

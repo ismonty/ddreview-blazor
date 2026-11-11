@@ -5,6 +5,7 @@
 @using DDReview.Web.Components.Home
 @inject UserContextService Users
 @inject NavigationManager Nav
+@inject DDReview.Core.Home.HomeService HomeData
 
 <PageTitle>MontySoft DD Review™</PageTitle>
 @if (ctx is null)
@@ -15,7 +16,7 @@ else
 {
     <h1 class="client">@ctx.Account.UserName</h1>
     <nav class="tabs" aria-label="Home">
-        @foreach (var (key, text) in Tabs)
+        @foreach (var (key, text) in VisibleTabs)
         {
             <a href="@(key == "dashboard" ? "/" : "/?tab=" + key)" class="@(Current == key ? "on" : null)">@text</a>
         }
@@ -45,12 +46,15 @@ else
         ("dashboard", "Dashboard"), ("daily", "Daily Summary"), ("recap", "Daily Recap"), ("thisweek", "This Week"), ("lastweek", "Last Week"),
         ("alerts", "Alerts"), ("reports", "Reports"),
     ];
-    private string Current => Tabs.Any(t => t.Item1 == Tab) ? Tab! : "dashboard";
+    private bool recapOn = true;                                          // Setup > Global Settings > "Daily Recap on" (per database)
+    private IEnumerable<(string, string)> VisibleTabs => Tabs.Where(t => t.Item1 != "recap" || recapOn);
+    private string Current => VisibleTabs.Any(t => t.Item1 == Tab) ? Tab! : "dashboard";   // a /?tab=recap link falls back to the Dashboard when the recap is off
 
     protected override async Task OnInitializedAsync()
     {
         ctx = await Users.GetAsync();
         if (ctx is null) return;
+        recapOn = await HomeData.DailyRecapEnabledAsync(ctx.ClientConnectionString);
         if (Current == "reports") return;                                 // the Reports tab needs no store list
         var stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Sales);
         if (stores.Count > 0) holder = new UserContextHolder(ctx.ClientConnectionString, stores);

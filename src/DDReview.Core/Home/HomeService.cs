@@ -30,6 +30,19 @@ public sealed class HomeService
     static SqlParameter Date(string n, DateOnly d) => new(n, SqlDbType.DateTime) { Value = d.ToDateTime(TimeOnly.MinValue) };
     static SqlParameter List(string n, IEnumerable<int> ids) => new(n, SqlDbType.VarChar, 8000) { Value = Csv(ids) };
 
+    /// <summary>
+    /// Whether this database shows the Daily Recap tab (Setup > Global Settings > "Daily Recap on", dbo.tblGlobal.DailyRecapEnabled, sql/019).
+    /// On when the column is not there yet, the table has no row, or the value is null; a database that has never run 019 keeps its recap.
+    /// </summary>
+    public async Task<bool> DailyRecapEnabledAsync(string cs, CancellationToken ct = default)
+    {
+        const string sql = @"
+            if col_length(N'dbo.tblGlobal', N'DailyRecapEnabled') is null select cast(1 as int) as Enabled
+            else exec sp_executesql N'select top 1 cast(coalesce(DailyRecapEnabled, 1) as int) as Enabled from dbo.tblGlobal order by ItemID'";
+        var t = await QueryAsync(cs, sql, "RecapSwitch", 30, ct);
+        return t.Rows.Count == 0 || Convert.ToInt32(t.Rows[0]["Enabled"]) != 0;
+    }
+
     /// <summary>Alerts: SectionNumber 1 = missing / immature batches, 2 and 4 = void summaries. monthsBack 0 = current month.</summary>
     public Task<DataTable> AlertsAsync(string cs, IEnumerable<int> authorizedStores, int monthsBack, CancellationToken ct = default) =>
         QueryAsync(cs, "select * from dbo.fn_DashBoardAlerts(@list, @m, 0) order by SectionNumber, StoreReportName, PostingDate",
