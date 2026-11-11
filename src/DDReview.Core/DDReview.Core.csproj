@@ -29,6 +29,7 @@
     <EmbeddedResource Include="..\..\sql\015_client_gl_blazor_no_recompile.sql" LogicalName="ClientScripts/015_client_gl_blazor_no_recompile.sql" />
     <EmbeddedResource Include="..\..\sql\016_client_concise_recap_blazor.sql" LogicalName="ClientScripts/016_client_concise_recap_blazor.sql" />
     <EmbeddedResource Include="..\..\sql\017_client_concise_recap_lean.sql" LogicalName="ClientScripts/017_client_concise_recap_lean.sql" />
+    <EmbeddedResource Include="..\..\sql\018_client_concise_recap_fast.sql" LogicalName="ClientScripts/018_client_concise_recap_fast.sql" />
   </ItemGroup>
 
 </Project>

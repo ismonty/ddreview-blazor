@@ -62,7 +62,7 @@ public sealed class HomeService
 
     /// <summary>
     /// The Daily Recap (the numbers of the emailed recap) for one ending day, limited to <paramref name="stores"/>.
-    /// Returns null when this database does not have dbo.fn_ConciseDailyRecapBlazor yet (sql/016, added by Database Updater).
+    /// Returns null when this database does not have dbo.fn_ConciseDailyRecapBlazor2 yet (sql/018, added by Database Updater).
     /// </summary>
     public async Task<ConciseRecap?> ConciseRecapAsync(string cs, IEnumerable<int> stores, DateOnly ending, CancellationToken ct = default)
     {
@@ -70,8 +70,13 @@ public sealed class HomeService
         if (ids.Count == 0) return ConciseRecap.Empty(ending);          // no stores: nothing to show (the function would return nothing too)
         try
         {
-            var t = await QueryAsync(cs, "select * from dbo.fn_ConciseDailyRecapBlazor(@d, @list) order by RowSeq", "Recap", 300, ct,
-                Date("@d", ending), List("@list", ids));
+            // The three day numbers (the day, 364 and 728 days back) are worked out once here and passed in as plain numbers: inside the query they made SQL Server run a
+            // nested scalar function over the sales table (see sql/018).
+            var days = (await QueryAsync(cs,
+                "select dbo.fn_CalcDayNumber(@d) as D0, dbo.fn_CalcDayNumber(dateadd(day, -364, @d)) as D1, dbo.fn_CalcDayNumber(dateadd(day, -728, @d)) as D2",
+                "RecapDays", 30, ct, Date("@d", ending))).Rows[0];
+            var t = await QueryAsync(cs, "select * from dbo.fn_ConciseDailyRecapBlazor2(@d, @n0, @n1, @n2, @list) order by RowSeq", "Recap", 300, ct,
+                Date("@d", ending), new SqlParameter("@n0", (int)days["D0"]), new SqlParameter("@n1", (int)days["D1"]), new SqlParameter("@n2", (int)days["D2"]), List("@list", ids));
             return ConciseRecap.From(t, ending);
         }
         catch (SqlException ex) when (ex.Number is 208 or 4121)

@@ -97,6 +97,12 @@ public static class ClientScripts
                                when charindex('-- LEAN RECAP', object_definition(object_id('dbo.fn_ConciseDailyRecapBlazor', 'IF'))) > 0 then 1
                                else 0 end as int) as Present,
                      cast(1 as int) as Usable"),
+        // The fast Daily Recap function the home screen calls (the day numbers are passed in as plain integers; scripts 016 and 017 are left as they are). A database without the recap has nothing to add.
+        new("018", "Home screen: fast Daily Recap function dbo.fn_ConciseDailyRecapBlazor2 (nothing existing is changed)", "ClientScripts/018_client_concise_recap_fast.sql",
+            @"select cast(case when object_id('dbo.fn_ConciseDailyRecapInnerCore', 'TF') is null then 1
+                               when object_id('dbo.fn_ConciseDailyRecapBlazor2', 'IF') is not null then 1
+                               else 0 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 
