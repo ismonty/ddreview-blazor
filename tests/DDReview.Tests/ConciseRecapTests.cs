@@ -142,4 +142,23 @@ public class ConciseRecapTests
         Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(sql, @"IN \(SELECT StoreNumber FROM Allowed\)").Count);
         Assert.NotEmpty(DDReview.Core.Updater.SqlBatches.Split(sql));
     }
+
+    [Fact]
+    public void Lean_recap_script_reads_sales_once_for_three_days_and_filters_the_stores_inside_the_query()
+    {
+        var s = DDReview.Core.Updater.ClientScripts.All.Single(x => x.Id == "017");
+        var sql = s.ReadSql();
+        Assert.Contains("-- LEAN RECAP", sql);                                         // the marker the updater's check looks for
+        Assert.Contains("ALTER FUNCTION dbo.fn_ConciseDailyRecapBlazor", sql);
+        Assert.DoesNotContain("fn_ConciseDailyRecapInnerCore(", sql);                  // no longer calls the slow function
+        Assert.Contains("DATEADD(day, -364, @EndingDate)", sql);
+        Assert.Contains("DATEADD(day, -728, @EndingDate)", sql);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(sql, @"FROM\s+Dates\s+dn\s+INNER JOIN dbo\.tblCashAndSalesSales"));   // one pass over the sales for all three days
+        Assert.Contains("INNER JOIN StoreList sl ON sl.StoreID = m.DestinationStoreID", sql);                                                 // only the user's stores are read
+        Assert.Contains("css.MainTypeID IN (1, 2, 3)", sql);
+        Assert.Contains("tss.ExcludeFromSales = 0", sql);
+        Assert.Contains("sg.DisplayOrder <> 0", sql);
+        Assert.Contains("NOT csb.StoreID IN (1, 4, 11)", sql);
+        Assert.NotEmpty(DDReview.Core.Updater.SqlBatches.Split(sql));
+    }
 }
