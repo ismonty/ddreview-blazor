@@ -27,6 +27,7 @@ else
         else switch (Current)
         {
             case "daily": <DailySummaryTab Ctx="holder" /> break;
+            case "recap": <RecapTab Ctx="holder" /> break;
             case "thisweek": <NumbersTab Ctx="holder" WeeksBack="0" /> break;
             case "lastweek": <NumbersTab Ctx="holder" WeeksBack="-1" /> break;
             case "alerts": <AlertsTab Ctx="holder" /> break;
@@ -41,7 +42,7 @@ else
     private UserContextHolder? holder;
     private static readonly (string, string)[] Tabs =
     [
-        ("dashboard", "Dashboard"), ("daily", "Daily Summary"), ("thisweek", "This Week"), ("lastweek", "Last Week"),
+        ("dashboard", "Dashboard"), ("daily", "Daily Summary"), ("recap", "Daily Recap"), ("thisweek", "This Week"), ("lastweek", "Last Week"),
         ("alerts", "Alerts"), ("reports", "Reports"),
     ];
     private string Current => Tabs.Any(t => t.Item1 == Tab) ? Tab! : "dashboard";

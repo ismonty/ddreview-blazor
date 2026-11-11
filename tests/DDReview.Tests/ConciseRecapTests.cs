@@ -181,3 +181,31 @@ public class ConciseRecapTests
         Assert.NotEmpty(DDReview.Core.Updater.SqlBatches.Split(sql));
     }
 }
+
+public class SignInReturnTests
+{
+    [Theory]
+    [InlineData("/?tab=recap", "/?tab=recap")]
+    [InlineData("/?tab=daily", "/?tab=daily")]
+    [InlineData("/sales?from=2026-11-10", "/sales?from=2026-11-10")]
+    [InlineData("/account", "/account")]
+    [InlineData(null, "/")]
+    [InlineData("", "/")]
+    [InlineData("   ", "/")]
+    [InlineData("https://evil.example/x", "/")]            // another site
+    [InlineData("//evil.example/x", "/")]                  // protocol-relative
+    [InlineData("/\\evil.example", "/")]
+    [InlineData("evil", "/")]                              // not a path
+    [InlineData("/x:y", "/")]
+    [InlineData("/login?ReturnUrl=%2F", "/")]              // never back into the sign-in page
+    [InlineData("/Login", "/")]
+    [InlineData("/account/logout", "/")]
+    [InlineData("/signin-google", "/")]
+    [InlineData("/a\nb", "/")]
+    public void Sign_in_only_returns_to_a_page_on_this_site(string? given, string expected) =>
+        Assert.Equal(expected, DDReview.Core.Admin.SignInReturn.SafePath(given));
+
+    [Fact]
+    public void A_very_long_path_is_dropped() =>
+        Assert.Equal("/", DDReview.Core.Admin.SignInReturn.SafePath("/" + new string('a', 250)));
+}

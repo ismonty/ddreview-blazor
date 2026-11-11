@@ -161,10 +161,10 @@ table.daily .graph { min-width: 420px; background: #0b3957; } table.daily .bars 
 table.daily .amounts { display: grid; grid-template-columns: repeat(6, 1fr); text-align: right; font-variant-numeric: tabular-nums; }
 table.daily tr.total td { font-weight: 700; } table.daily .lbl.small { font-size: .75rem; }
 /* Daily Recap card on the Dashboard: theme variables only, so it follows the app's colours */
-details.recap { margin: 0 0 1rem; border: 1px solid var(--edge); background: var(--card); }
-details.recap > summary { cursor: pointer; padding: .4rem .7rem; font-weight: 700; background: var(--header); color: var(--header-ink); }
-details.recap > summary small { font-weight: 400; margin-left: .6rem; }
-details.recap > p { margin: .6rem .7rem; }
+section.recap { margin: 0 0 1rem; border: 1px solid var(--edge); background: var(--card); }
+section.recap > h2 { margin: 0; padding: .4rem .7rem; font-size: 1rem; font-weight: 700; background: var(--header); color: var(--header-ink); }
+section.recap > h2 small { font-weight: 400; margin-left: .6rem; }
+section.recap > p { margin: .6rem .7rem; }
 .recap-scroll { overflow-x: auto; }
 table.recap { width: 100%; border-collapse: collapse; }
 table.recap th, table.recap td { border: 1px solid var(--line); padding: .2rem .4rem; font-size: .82rem; background: var(--tile); }

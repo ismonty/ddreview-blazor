@@ -147,3 +147,9 @@ Slice 11c (fast recap, `sql/018`): 017 was still more than a minute. Cause: it w
 its own query with the numbers in its WHERE (a plain range seek on the clustered `DayNumber` indexes), still only for the user's stores. Same columns, same rules as 017.
 Unverified against a live database; time it with `set statistics time on` (see `sql/tools_concise_recap_compare.sql`).
 
+Slice 12: Daily Recap on its own tab, and links that sign in first
+- The recap left the Dashboard and is now the **Daily Recap** tab, between Daily Summary and This Week (`/?tab=recap`, `RecapTab.razor`). It has its own Ending Date (native date picker, Submit / Previous / Next, yesterday to begin with); `RecapCard` is the table.
+- **Links that ask for credentials and then open the page.** A signed-out visitor to any page is sent to `/login?ReturnUrl=...` by the cookie sign-in (that part already existed); the login page now keeps `ReturnUrl` in a hidden field of both the password form and the Sign In With Google form, and sign-in redirects there afterwards
+  (`DDReview.Core.Admin.SignInReturn.SafePath`: only paths on this site, never the login or account-action pages, so it cannot be used as an open redirect). For Google the path travels in the protected sign-in state, and in the external cookie when "Choose a Database" comes in between.
+  So `https://<site>/?tab=recap` in an email works for a signed-out person (password or Google) and for one who is already signed in. Not covered by tests that run the site: the redirect itself was not tried against a live central master.
+
