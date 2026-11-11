@@ -1,8 +1,8 @@
 @using System.Globalization
 @using DDReview.Core.Home
 @inject HomeService Home
-<details class="recap" open>
-    <summary>Daily Recap <small>@Ending.ToString("dddd", CultureInfo.InvariantCulture) @Ending.ToString("d", CultureInfo.InvariantCulture)</small></summary>
+<section class="recap">
+    <h2>Daily Recap <small>@Ending.ToString("dddd", CultureInfo.InvariantCulture) @Ending.ToString("d", CultureInfo.InvariantCulture)</small></h2>
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     else if (unavailable) { <p class="muted">The Daily Recap is not available in this database yet. A database administrator can add it with Database Updater on the Account page.</p> }
     else if (recap is null) { <p>Loading…</p> }
@@ -36,7 +36,7 @@
             </table>
         </div>
     }
-</details>
+</section>
 @code {
     [Parameter, EditorRequired] public UserContextHolder Ctx { get; set; } = null!;
     /// <summary>The recap's ending day (the Dashboard's Ending Date).</summary>

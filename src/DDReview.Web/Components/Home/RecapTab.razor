@@ -1,0 +1,29 @@
+@* The Daily Recap tab: the old emailed recap for one ending day. A link to /?tab=recap opens it (signing in first if needed). *@
+<div class="datebar">
+    <label>Ending Date <input type="date" @bind="pick" /></label>
+    <button type="button" class="gold" @onclick="Submit">Submit</button>
+    <button type="button" class="gold" @onclick="() => Shift(-1)">Previous</button>
+    <button type="button" class="gold" @onclick="() => Shift(1)">Next</button>
+</div>
+<RecapCard Ctx="Ctx" Ending="end" />
+@code {
+    [Parameter, EditorRequired] public UserContextHolder Ctx { get; set; } = null!;
+    private DateOnly end;
+    private DateTime pick;
+
+    protected override void OnInitialized()
+    {
+        end = DateOnly.FromDateTime(DateTime.Today.AddDays(-1));          // the recap is for yesterday until another day is chosen
+        pick = end.ToDateTime(TimeOnly.MinValue);
+    }
+    private void Submit()
+    {
+        if (pick.Year >= 1900) end = DateOnly.FromDateTime(pick);         // a cleared or half-typed date keeps the day already shown
+        else pick = end.ToDateTime(TimeOnly.MinValue);
+    }
+    private void Shift(int days)
+    {
+        end = end.AddDays(days);                                          // no limit: the POS can hold future-dated sales
+        pick = end.ToDateTime(TimeOnly.MinValue);
+    }
+}

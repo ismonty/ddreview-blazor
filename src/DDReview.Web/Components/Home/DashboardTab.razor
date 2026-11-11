@@ -10,8 +10,6 @@
     </div>
 }
 <DateBar Start="start" End="end" Compare="compare" ShowScope="true" Scope="scope" OnChange="Apply" />
-@* The Daily Recap (the old emailed recap) is for the Ending Date and loads on its own, so a problem there never hides the gauges. *@
-<RecapCard Ctx="Ctx" Ending="end" />
 @if (error is not null) { <p class="error" role="alert">@error</p> }
 else if (tot is null) { <p>Loading…</p> }
 else

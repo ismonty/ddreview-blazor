@@ -104,7 +104,7 @@ app.UseAntiforgery();
 app.UseLegacyGate();
 app.MapStaticAssets();
 
-static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r, bool viaGoogle = false, string? googleSub = null, bool canSwitch = false)
+static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r, bool viaGoogle = false, string? googleSub = null, bool canSwitch = false, string? returnPath = null)
 {
     switch (r.Outcome)
     {
@@ -116,13 +116,20 @@ static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r, boo
             if (canSwitch) id.AddClaim(new Claim(GoogleClaims.CanSwitch, "1"));
             if (viaGoogle) SetupClaims.StampGoogle(id, DateTimeOffset.UtcNow);   // a Google sign-in is Google vouching for the person right now (the Setup pages look for this)
             await ctx.SignInAsync(new ClaimsPrincipal(id));
-            return Results.Redirect("/");
+            return Results.Redirect(SignInReturn.SafePath(returnPath));      // the page a link asked for (e.g. /?tab=recap), else the home page
         case LoginOutcome.Redirect when Uri.TryCreate(r.RedirectUrl, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps:
             return Results.Redirect(u.ToString());
-        case LoginOutcome.LockedOut: return Results.Redirect("/login?e=locked");
-        case LoginOutcome.NoClientDatabase: return Results.Redirect("/login?e=nodb");
-        default: return Results.Redirect("/login?e=bad");
+        case LoginOutcome.LockedOut: return Results.Redirect(LoginAgain("locked", returnPath));
+        case LoginOutcome.NoClientDatabase: return Results.Redirect(LoginAgain("nodb", returnPath));
+        default: return Results.Redirect(LoginAgain("bad", returnPath));
     }
+}
+
+// Back to the login page with an error, keeping the page a link asked for so a second, correct attempt still lands there.
+static string LoginAgain(string error, string? returnPath)
+{
+    var back = SignInReturn.SafePath(returnPath);
+    return back == SignInReturn.Landing ? "/login?e=" + error : "/login?e=" + error + "&ReturnUrl=" + Uri.EscapeDataString(back);
 }
 
 // The poster installer (MSI) for the Setup page. Administrators only. The file is the newest DDQuickBooksPoster-*.msi in the folder named by the site setting
@@ -151,19 +158,20 @@ app.MapGet("/gl/submission-image/{batchId:int}", async (int batchId, HttpContext
     return Results.Text(DDReview.Core.Gl.SubmissionSvg.Render(report.Commands), "image/svg+xml");
 }).RequireAuthorization();
 
-app.MapPost("/account/login", async (HttpContext ctx, [FromForm] string? userName, [FromForm] string? password, LoginService login) =>
+app.MapPost("/account/login", async (HttpContext ctx, [FromForm] string? userName, [FromForm] string? password, [FromForm] string? returnUrl, LoginService login) =>
 {
     var r = await login.SignInAsync(userName ?? "", password ?? "", ctx.Connection.RemoteIpAddress?.ToString(),
         ctx.Request.Headers.UserAgent.ToString(), ctx.Request.Host.Host, ctx.RequestAborted);
-    return await FinishSignInAsync(ctx, r);
+    return await FinishSignInAsync(ctx, r, returnPath: returnUrl);
 });  // [FromForm] endpoints validate the antiforgery token automatically
 
 // Google: "start" is a POST (antiforgery-checked) so another site cannot start a link in your browser; "done" is where Google sends you back.
 if (googleOn)
 {
-    app.MapPost("/account/google/start", (HttpContext ctx, [FromForm] string? mode) =>
+    app.MapPost("/account/google/start", (HttpContext ctx, [FromForm] string? mode, [FromForm] string? returnUrl) =>
     {
         var props = new AuthenticationProperties { RedirectUri = "/account/google/done" };
+        if (mode != "link") props.Items["return"] = SignInReturn.SafePath(returnUrl);   // travels inside the protected sign-in state, and the external cookie if a database must be chosen
         if (mode == "link")
         {
             var me = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -188,6 +196,7 @@ if (googleOn)
             var email = ext.Principal!.FindFirstValue(ClaimTypes.Email);
             var verified = GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified));
             var ip = ctx.Connection.RemoteIpAddress?.ToString();
+            string? back = null; ext.Properties?.Items.TryGetValue("return", out back);
             if (ext.Properties?.Items.TryGetValue("linkUser", out var linkUser) == true)
             {
                 if (ctx.User.FindFirstValue(ClaimTypes.NameIdentifier) != linkUser || !int.TryParse(linkUser, out var uid))
@@ -201,7 +210,7 @@ if (googleOn)
             if (opts.MustChoose) { keepExternal = true; return Results.Redirect("/account/pick"); }
             var r = await login.SignInWithGoogleChoiceAsync(sub, email, verified, opts.Choices[0].WebUserId, ip,
                 ctx.Request.Headers.UserAgent.ToString(), ctx.Request.Host.Host, ctx.RequestAborted);
-            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r, viaGoogle: true, googleSub: sub);
+            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r, viaGoogle: true, googleSub: sub, returnPath: back);
         }
         catch (Microsoft.Data.SqlClient.SqlException ex)   // e.g. sql/003 not run on the central master yet
         {
@@ -217,13 +226,14 @@ if (googleOn)
         var ext = await ctx.AuthenticateAsync(ExternalScheme);
         var sub = ext.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!ext.Succeeded || string.IsNullOrEmpty(sub)) return Results.Redirect("/login?e=google");
+        string? back = null; ext.Properties?.Items.TryGetValue("return", out back);
         try
         {
             var r = await login.SignInWithGoogleChoiceAsync(sub, ext.Principal!.FindFirstValue(ClaimTypes.Email),
                 GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified)), loginId, ctx.Connection.RemoteIpAddress?.ToString(),
                 ctx.Request.Headers.UserAgent.ToString(), ctx.Request.Host.Host, ctx.RequestAborted);
             await ctx.SignOutAsync(ExternalScheme);
-            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r, viaGoogle: true, googleSub: sub, canSwitch: true);
+            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r, viaGoogle: true, googleSub: sub, canSwitch: true, returnPath: back);
         }
         catch (Microsoft.Data.SqlClient.SqlException ex)
         {
