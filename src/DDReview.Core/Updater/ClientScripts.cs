@@ -103,6 +103,12 @@ public static class ClientScripts
                                when object_id('dbo.fn_ConciseDailyRecapBlazor2', 'IF') is not null then 1
                                else 0 end as int) as Present,
                      cast(1 as int) as Usable"),
+        // Adds the per-database Daily Recap on/off switch (one new column on the one-row dbo.tblGlobal, on by default; nothing existing is changed).
+        new("019", "Setup: Daily Recap on/off switch (adds dbo.tblGlobal.DailyRecapEnabled, on by default; nothing existing is changed)", "ClientScripts/019_client_daily_recap_switch.sql",
+            @"select cast(case when object_id('dbo.tblGlobal', 'U') is null then 1
+                               when col_length('dbo.tblGlobal', 'DailyRecapEnabled') is not null then 1
+                               else 0 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 
