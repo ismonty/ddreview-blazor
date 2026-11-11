@@ -82,6 +82,13 @@ public static class ClientScripts
                                when charindex('@ARFlag) OPTION (RECOMPILE)', object_definition(object_id('dbo.fn_CashAndSalesGLandARBlazor', 'TF'))) > 0 then 0
                                else 1 end as int) as Present,
                      cast(1 as int) as Usable"),
+        // Adds a NEW function for the home screen's Daily Recap (the numbers of the emailed recap, limited to the user's stores). Needs the database's own fn_ConciseDailyRecapInnerCore;
+        // a database without it has nothing to add.
+        new("016", "Home screen: Daily Recap function dbo.fn_ConciseDailyRecapBlazor (the numbers of the emailed recap; nothing existing is changed)", "ClientScripts/016_client_concise_recap_blazor.sql",
+            @"select cast(case when object_id('dbo.fn_ConciseDailyRecapInnerCore', 'TF') is null then 1
+                               when object_id('dbo.fn_ConciseDailyRecapBlazor', 'IF') is not null then 1
+                               else 0 end as int) as Present,
+                     cast(1 as int) as Usable"),
     ];
 }
 

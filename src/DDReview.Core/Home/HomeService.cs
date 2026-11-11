@@ -60,6 +60,26 @@ public sealed class HomeService
         return (rows, await StatusAsync(cs, stores, ct));
     }
 
+    /// <summary>
+    /// The Daily Recap (the numbers of the emailed recap) for one ending day, limited to <paramref name="stores"/>.
+    /// Returns null when this database does not have dbo.fn_ConciseDailyRecapBlazor yet (sql/016, added by Database Updater).
+    /// </summary>
+    public async Task<ConciseRecap?> ConciseRecapAsync(string cs, IEnumerable<int> stores, DateOnly ending, CancellationToken ct = default)
+    {
+        var ids = stores.Distinct().ToList();
+        if (ids.Count == 0) return ConciseRecap.Empty(ending);          // no stores: nothing to show (the function would return nothing too)
+        try
+        {
+            var t = await QueryAsync(cs, "select * from dbo.fn_ConciseDailyRecapBlazor(@d, @list) order by RowSeq", "Recap", 300, ct,
+                Date("@d", ending), List("@list", ids));
+            return ConciseRecap.From(t, ending);
+        }
+        catch (SqlException ex) when (ex.Number is 208 or 4121)
+        {
+            return null;                                                  // an older database: the card says so and the rest of the page still loads
+        }
+    }
+
     /// <summary>Register-processing status per group of stores; StoreProcessingStatus above 0 means running behind.</summary>
     public async Task<DataTable> StatusAsync(string cs, IEnumerable<int> stores, CancellationToken ct = default)
     {

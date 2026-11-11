@@ -1,0 +1,80 @@
+@using System.Globalization
+@using DDReview.Core.Home
+@inject HomeService Home
+<details class="recap" open>
+    <summary>Daily Recap <small>@Ending.ToString("dddd", CultureInfo.InvariantCulture) @Ending.ToString("d", CultureInfo.InvariantCulture)</small></summary>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    else if (unavailable) { <p class="muted">The Daily Recap is not available in this database yet. A database administrator can add it with Database Updater on the Account page.</p> }
+    else if (recap is null) { <p>Loading…</p> }
+    else if (!recap.HasActivity) { <p class="muted">No activity for that day.</p> }
+    else
+    {
+        <div class="recap-scroll">
+            <table class="recap">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="store">Store</th>
+                        <th colspan="3">Net Sales</th><th colspan="3">Week To Date</th><th colspan="3">Covers</th>
+                    </tr>
+                    <tr>
+                        @for (var i = 0; i < 3; i++)
+                        {
+                            <th title="@recap.TwoYearsAgo.ToString("d", CultureInfo.InvariantCulture)">@recap.TwoYearsAgo.Year</th>
+                            <th title="@recap.LastYear.ToString("d", CultureInfo.InvariantCulture)">@recap.LastYear.Year</th>
+                            <th title="@recap.Ending.ToString("d", CultureInfo.InvariantCulture)">@recap.Ending.Year</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var g in recap.Groups)
+                    {
+                        <tr class="group"><th colspan="10">@g.Name</th></tr>
+                        @foreach (var s in g.Stores) { @Row(s) }
+                    }
+                    @if (recap.Total is { } t) { @Row(t) }
+                </tbody>
+            </table>
+        </div>
+    }
+</details>
+@code {
+    [Parameter, EditorRequired] public UserContextHolder Ctx { get; set; } = null!;
+    /// <summary>The recap's ending day (the Dashboard's Ending Date).</summary>
+    [Parameter, EditorRequired] public DateOnly Ending { get; set; }
+
+    private ConciseRecap? recap; private string? error; private bool unavailable;
+    private DateOnly? loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedFor == Ending) return;
+        loadedFor = Ending;
+        await Load(Ending);
+    }
+
+    private async Task Load(DateOnly day)
+    {
+        recap = null; error = null; unavailable = false;
+        try
+        {
+            var r = await Home.ConciseRecapAsync(Ctx.ConnectionString, Ctx.StoreIds, day);
+            if (day != Ending) return;                                    // the date moved on while this was loading; the newer load wins
+            unavailable = r is null;
+            recap = r;
+        }
+        catch (Exception ex)
+        {
+            if (day == Ending) error = "The recap could not be loaded: " + ex.Message;
+        }
+    }
+
+    static string M(decimal? v) => ConciseRecap.Money(v);
+    static string C(decimal? v) => ConciseRecap.Count(v);
+
+    private RenderFragment Row(RecapLine l) => @<tr class="@(l.IsTotal ? "total" : null)">
+        <td class="store">@l.StoreName</td>
+        <td class="n">@M(l.TwoYearsAgo.Net)</td><td class="n">@M(l.LastYear.Net)</td><td class="n now">@M(l.Now.Net)</td>
+        <td class="n">@M(l.TwoYearsAgo.WeekToDate)</td><td class="n">@M(l.LastYear.WeekToDate)</td><td class="n now">@M(l.Now.WeekToDate)</td>
+        <td class="n">@C(l.TwoYearsAgo.Covers)</td><td class="n">@C(l.LastYear.Covers)</td><td class="n now">@C(l.Now.Covers)</td>
+    </tr>;
+}
