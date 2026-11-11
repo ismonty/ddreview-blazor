@@ -119,10 +119,17 @@ static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r, boo
             return Results.Redirect(SignInReturn.SafePath(returnPath));      // the page a link asked for (e.g. /?tab=recap), else the home page
         case LoginOutcome.Redirect when Uri.TryCreate(r.RedirectUrl, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps:
             return Results.Redirect(u.ToString());
-        case LoginOutcome.LockedOut: return Results.Redirect("/login?e=locked");
-        case LoginOutcome.NoClientDatabase: return Results.Redirect("/login?e=nodb");
-        default: return Results.Redirect("/login?e=bad");
+        case LoginOutcome.LockedOut: return Results.Redirect(LoginAgain("locked", returnPath));
+        case LoginOutcome.NoClientDatabase: return Results.Redirect(LoginAgain("nodb", returnPath));
+        default: return Results.Redirect(LoginAgain("bad", returnPath));
     }
+}
+
+// Back to the login page with an error, keeping the page a link asked for so a second, correct attempt still lands there.
+static string LoginAgain(string error, string? returnPath)
+{
+    var back = SignInReturn.SafePath(returnPath);
+    return back == SignInReturn.Landing ? "/login?e=" + error : "/login?e=" + error + "&ReturnUrl=" + Uri.EscapeDataString(back);
 }
 
 // The poster installer (MSI) for the Setup page. Administrators only. The file is the newest DDQuickBooksPoster-*.msi in the folder named by the site setting
