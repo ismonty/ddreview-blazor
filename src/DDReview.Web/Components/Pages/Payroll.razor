@@ -3,12 +3,14 @@
 @using System.Data
 @using System.Globalization
 @using System.IO.Compression
+@using DDReview.Core.Features
 @using DDReview.Core.Gl
 @using DDReview.Core.Tenancy
 @using DDReview.Payroll
 @using DDReview.Web.Components.Home
 @inject UserContextService Users
 @inject PayrollService PayrollSvc
+@inject FeatureService Features
 @inject IJSRuntime JS
 
 <PageTitle>MontySoft DD Review™</PageTitle>
@@ -96,7 +98,8 @@ else
     {
         ctx = await Users.GetAsync();
         if (ctx is null) return;
-        allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll);
+        allowed = (ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll))
+                  && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.Payroll);
         if (!allowed) return;
         stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
         foreach (var s in stores) selected.Add(s.StoreId);
@@ -113,6 +116,7 @@ else
         busy = true; error = null; notice = null;
         try
         {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.Payroll);
             var ids = AllowedSelection();
             var req = new PayrollReviewRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), ids, byStore, byEmployee, byWeek, byDepartment);
             result = await PayrollSvc.ReviewAsync(ctx.ClientConnectionString, req);
@@ -120,9 +124,9 @@ else
             rangeStart = start; rangeEnd = end;
             ranStore = byStore; ranEmployee = byEmployee; ranWeek = byWeek; ranDepartment = byDepartment;
         }
-        catch (Exception ex) when (ex is ArgumentException or Microsoft.Data.SqlClient.SqlException)
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException or Microsoft.Data.SqlClient.SqlException)
         {
-            result = null; totals = null; error = ex is ArgumentException ? ex.Message : "The payroll query could not be run. Check the dates and stores, then try again.";
+            result = null; totals = null; error = ex is not Microsoft.Data.SqlClient.SqlException ? ex.Message : "The payroll query could not be run. Check the dates and stores, then try again.";
         }
         finally { busy = false; }
     }
@@ -133,6 +137,7 @@ else
         busy = true; error = null; notice = null;
         try
         {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.Payroll);
             var ids = AllowedSelection();
             var authorized = stores.Select(s => s.StoreId).ToHashSet();
             var res = await PayrollSvc.ExportAdpAsync(ctx.ClientConnectionString, DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), ids, authorized);

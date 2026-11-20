@@ -1,10 +1,12 @@
 @inherits LayoutComponentBase
+@inject DDReview.Web.UserContextService Users
+@inject DDReview.Core.Features.FeatureService Features
 
 <header class="top">
     <a href="/" class="brand">DD Review</a>
     <AuthorizeView>
         <Authorized>
-            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a> <a href="/payroll">Payroll</a> <a href="/gl">General ledger</a></nav>
+            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a>@if (showPayroll) { <text> <a href="/payroll">Payroll</a></text> } <a href="/gl">General ledger</a></nav>
             <form method="post" action="/account/logout" class="logout">
                 <AntiforgeryToken />
                 <a href="/account" title="Your account">@context.User.Identity?.Name</a>
@@ -20,3 +22,17 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private bool showPayroll;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            var ctx = await Users.GetAsync();
+            showPayroll = ctx is not null && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, DDReview.Core.Features.WebFeature.Payroll);
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or InvalidOperationException) { showPayroll = false; }
+    }
+}

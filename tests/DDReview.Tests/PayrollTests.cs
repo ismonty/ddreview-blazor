@@ -166,3 +166,36 @@ public class PayrollTotalsTests
         Assert.Equal(new PayrollTotals(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), PayrollTotals.Compute([]));
     }
 }
+
+public class FeatureSwitchTests
+{
+    static DDReview.Core.Tenancy.UserAccess User(bool admin) => new() { Administrator = admin, ClientWebUserId = 7 };
+
+    [Fact]
+    public async Task Administrators_always_have_every_feature_without_touching_the_database()
+    {
+        var f = new DDReview.Core.Features.FeatureService();
+        var on = await f.EnabledForAsync("not a connection string", User(true));
+        Assert.Equal(Enum.GetValues<DDReview.Core.Features.WebFeature>().Length, on.Count);
+        Assert.True(await f.IsEnabledAsync("not a connection string", User(true), DDReview.Core.Features.WebFeature.ConsolidatedPayroll));
+    }
+
+    [Fact]
+    public async Task Only_an_administrator_may_list_or_change_the_switches()
+    {
+        var f = new DDReview.Core.Features.FeatureService();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.ListUsersAsync("Server=.", User(false)));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.SetAsync("Server=.", User(false), 7, DDReview.Core.Features.WebFeature.Payroll, true));
+    }
+
+    [Fact]
+    public void The_switch_script_is_registered_after_the_grant_procedure_and_adds_only_a_table()
+    {
+        var s = DDReview.Core.Updater.ClientScripts.All.Single(x => x.Id == "005");
+        Assert.Equal("005", DDReview.Core.Updater.ClientScripts.All[^1].Id);
+        var sql = s.ReadSql();
+        Assert.Contains("create table dbo.tblWebUserFeatures", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("drop ", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("alter ", sql, StringComparison.OrdinalIgnoreCase);
+    }
+}

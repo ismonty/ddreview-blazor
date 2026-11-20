@@ -31,6 +31,7 @@ builder.Services.AddSingleton<DDReview.Core.Home.HomeService>();
 builder.Services.AddSingleton<DDReview.Core.Receipts.ReceiptsService>();
 builder.Services.AddSingleton<DDReview.Core.Labor.LaborService>();
 builder.Services.AddSingleton<DDReview.Payroll.PayrollService>();
+builder.Services.AddSingleton<DDReview.Core.Features.FeatureService>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton(sp => new LoginService(sp.GetRequiredService<ICentralDirectory>(), sp.GetRequiredService<LoginThrottle>(),
     sp.GetRequiredService<IOptions<TenantOptions>>().Value.UseCredentialTable));

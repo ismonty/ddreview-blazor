@@ -1,0 +1,73 @@
+@page "/admin/features"
+@attribute [Authorize]
+@using DDReview.Core.Features
+@inject UserContextService Users
+@inject FeatureService Features
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Optional features</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!ctx.Access.Administrator) { <p class="error">Only an administrator may use this page.</p> }
+else
+{
+    <p class="muted">Payroll and Consolidated Payroll are off for everyone until you turn them on here. Administrators always have them.
+        A user also needs the Payroll report authorization for their stores. If a switch will not save, run the <a href="/admin/updater">Database updater</a> first.</p>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (users is not null)
+    {
+        <table>
+            <thead><tr><th>User</th>@foreach (var f in All) { <th>@Label(f)</th> }</tr></thead>
+            <tbody>
+            @foreach (var u in users)
+            {
+                <tr>
+                    <td>@u.UserName@(u.Administrator ? " (administrator)" : "")</td>
+                    @foreach (var f in All)
+                    {
+                        <td>
+                            @if (u.Administrator) { <span>Always</span> }
+                            else { <input type="checkbox" checked="@u.Enabled.Contains(f)" disabled="@busy" aria-label="@(Label(f) + " for " + u.UserName)" @onchange="e => SetAsync(u, f, (bool)e.Value!)" /> }
+                        </td>
+                    }
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private static readonly WebFeature[] All = Enum.GetValues<WebFeature>();
+    private DDReview.Web.UserContext? ctx;
+    private IReadOnlyList<FeatureUser>? users;
+    private string? error;
+    private bool busy;
+
+    private static string Label(WebFeature f) => f == WebFeature.ConsolidatedPayroll ? "Consolidated payroll" : "Payroll";
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null || !ctx.Access.Administrator) return;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { users = await Features.ListUsersAsync(ctx!.ClientConnectionString, ctx.Access); }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The user list could not be read."; }
+    }
+
+    private async Task SetAsync(FeatureUser u, WebFeature f, bool on)
+    {
+        if (busy || ctx is null) return;
+        busy = true; error = null;
+        try { await Features.SetAsync(ctx.ClientConnectionString, ctx.Access, u.WebUserId, f, on); }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The change could not be saved. The database login may need permission on the feature table (see the Database updater)."; }
+        finally { await LoadAsync(); busy = false; }
+    }
+}

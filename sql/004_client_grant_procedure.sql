@@ -28,6 +28,8 @@ begin
     -- ===== THE LIST: one line per permission the web login needs. Add new ones here. =====
     if type_id(N'dbo.DrillPair') is not null
         insert @todo (Stmt) values (N'grant execute on type::dbo.DrillPair to ' + @q + N';');
+    if object_id(N'dbo.tblWebUserFeatures', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, delete on dbo.tblWebUserFeatures to ' + @q + N';');
     -- insert @todo (Stmt) values (N'grant select on dbo.SomeTable to ' + @q + N';');
     -- =====================================================================================
 

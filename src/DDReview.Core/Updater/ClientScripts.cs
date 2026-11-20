@@ -32,6 +32,13 @@ public static class ClientScripts
         new("004", "Grant procedure (dbo.usp_DDReviewGrantAccess): every permission the web login needs, in one place", "ClientScripts/004_client_grant_procedure.sql",
             @"select cast(case when object_id('dbo.usp_DDReviewGrantAccess', 'P') is null then 0 else 1 end as int) as Present,
                      cast(case when object_id('dbo.usp_DDReviewGrantAccess', 'P') is not null then 1 else 0 end as int) as Usable"),
+        new("005", "Optional-feature switches (dbo.tblWebUserFeatures): which users an administrator has turned Payroll on for", "ClientScripts/005_client_web_features.sql",
+            @"select cast(case when object_id('dbo.tblWebUserFeatures', 'U') is null then 0 else 1 end as int) as Present,
+                     cast(case when object_id('dbo.tblWebUserFeatures', 'U') is not null
+                               and has_perms_by_name('dbo.tblWebUserFeatures', 'OBJECT', 'SELECT') = 1
+                               and has_perms_by_name('dbo.tblWebUserFeatures', 'OBJECT', 'INSERT') = 1
+                               and has_perms_by_name('dbo.tblWebUserFeatures', 'OBJECT', 'DELETE') = 1 then 1 else 0 end as int) as Usable",
+            "grant select, insert, delete on dbo.tblWebUserFeatures to [{user}];  "),
     ];
 }
 
