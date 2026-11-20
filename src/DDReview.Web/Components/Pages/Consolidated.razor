@@ -1,0 +1,125 @@
+@page "/consolidated"
+@attribute [Authorize]
+@using DDReview.Core.Features
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@using DDReview.Payroll.Consolidated
+@inject UserContextService Users
+@inject ConsolidatedPayrollService Svc
+@inject FeatureService Features
+@inject IJSRuntime JS
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Consolidated payroll</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <p class="muted">Data entry and review of consolidated tip outs is not available here yet. The sales and tips file for ADP is.</p>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (notice is not null) { <p role="status">@notice</p> }
+
+    <h2>Settings for the ADP file</h2>
+    @if (settings is not null)
+    {
+        <EditForm Model="settings" OnSubmit="SaveAsync" FormName="consolidated-settings" class="filters">
+            <label>Company code <input @bind="settings.CoCode" maxlength="20" disabled="@(!ctx.Access.Administrator)" /></label>
+            <label>Batch number <input @bind="settings.BatchId" maxlength="10" disabled="@(!ctx.Access.Administrator)" /></label>
+            <label>Batch description <input @bind="settings.BatchDescription" maxlength="30" disabled="@(!ctx.Access.Administrator)" /></label>
+            <label>Total tips earnings slot
+                <select @bind="settings.TotalTipsEarnings34" disabled="@(!ctx.Access.Administrator)">
+                    <option value="">None</option><option value="3">3</option><option value="4">4</option>
+                </select></label>
+            <label>Total tips earnings code <input @bind="settings.TotalTipsEarningsCode" maxlength="10" disabled="@(!ctx.Access.Administrator)" /></label>
+            <label>Total sales memo code <input @bind="settings.TotalSalesMemoCode" maxlength="10" disabled="@(!ctx.Access.Administrator)" /></label>
+            <label>Charged tips memo code <input @bind="settings.ChargedTipsMemoCode" maxlength="10" disabled="@(!ctx.Access.Administrator)" /></label>
+            <label>Charged sales memo code <input @bind="settings.ChargedSalesMemoCode" maxlength="10" disabled="@(!ctx.Access.Administrator)" /></label>
+            <label>Unpaid charged tips deduction code <input @bind="settings.UnpaidChargedTipsNegativeDeductionCode" maxlength="10" disabled="@(!ctx.Access.Administrator)" /></label>
+            @if (ctx.Access.Administrator) { <button type="submit" disabled="@busy">Save settings</button> }
+        </EditForm>
+    }
+
+    <h2>Export sales and tips</h2>
+    <EditForm Model="this" OnSubmit="ExportAsync" FormName="consolidated-export" class="filters">
+        <label>Store
+            <select @bind="storeId">
+                <option value="0">Select a store</option>
+                @foreach (var s in stores) { <option value="@s.StoreId">@s.StoreNumber – @s.StoreName</option> }
+            </select></label>
+        <label>Period start <input type="date" @bind="start" /></label>
+        <label>Period end <input type="date" @bind="end" /></label>
+        <label class="inline"><input type="checkbox" @bind="byReceipt" /> Classify by individual receipt</label>
+        <button type="submit" disabled="@busy">@(busy ? "Working…" : "Export")</button>
+    </EditForm>
+}
+
+@code {
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy, byReceipt;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private int storeId;
+    private DateTime start = DateTime.Today.AddDays(-14), end = DateTime.Today.AddDays(-1);
+    private SettingsEdit? settings;
+    private string? error, notice;
+
+    // EditForm needs a mutable object; the settings record is immutable.
+    private sealed class SettingsEdit
+    {
+        public string CoCode = "", BatchId = "", BatchDescription = "", TotalTipsEarnings34 = "", TotalTipsEarningsCode = "", TotalSalesMemoCode = "", ChargedTipsMemoCode = "", ChargedSalesMemoCode = "", UnpaidChargedTipsNegativeDeductionCode = "";
+        public ConsolidatedTipSettings ToRecord() => new(CoCode.Trim(), BatchId.Trim(), BatchDescription.Trim(), ChargedTipsMemoCode.Trim(), ChargedSalesMemoCode.Trim(), TotalSalesMemoCode.Trim(), TotalTipsEarnings34.Trim(), TotalTipsEarningsCode.Trim(), UnpaidChargedTipsNegativeDeductionCode.Trim());
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = (ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll))
+                  && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+        if (stores.Count == 1) storeId = stores[0].StoreId;
+        try
+        {
+            var s = await Svc.GetSettingsAsync(ctx.ClientConnectionString);
+            settings = new SettingsEdit { CoCode = s.CoCode, BatchId = s.BatchId, BatchDescription = s.BatchDescription, TotalTipsEarnings34 = s.TotalTipsEarnings34, TotalTipsEarningsCode = s.TotalTipsEarningsCode,
+                TotalSalesMemoCode = s.TotalSalesMemoCode, ChargedTipsMemoCode = s.ChargedTipsMemoCode, ChargedSalesMemoCode = s.ChargedSalesMemoCode, UnpaidChargedTipsNegativeDeductionCode = s.UnpaidChargedTipsNegativeDeductionCode };
+        }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The export settings could not be read from this database."; }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (busy || ctx is null || settings is null) return;
+        busy = true; error = null; notice = null;
+        try
+        {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+            await Svc.SaveSettingsAsync(ctx.ClientConnectionString, ctx.Access, settings.ToRecord());
+            notice = "Settings saved.";
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The settings could not be saved. The database login may need permission to run cs_spGlobalSettingsSet."; }
+        finally { busy = false; }
+    }
+
+    private async Task ExportAsync()
+    {
+        if (busy || ctx is null) return;
+        busy = true; error = null; notice = null;
+        try
+        {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+            if (storeId == 0) { error = "Select a store."; return; }
+            var authorized = stores.Select(s => s.StoreId).ToHashSet();
+            var file = await Svc.ExportTipFileAsync(ctx.ClientConnectionString, storeId, DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), byReceipt, authorized);
+            if (file is null) { notice = "Sales and tips were not exported: there is nothing to export for that store and period."; return; }
+            await JS.InvokeVoidAsync("ddDownload", file.Name, Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(file.Content)), "text/csv");
+            notice = $"Sales and tips exported ({file.Lines} line{(file.Lines == 1 ? "" : "s")}).";
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The export could not be created. Check the store and dates, and that the database login may run cs_spConsolidatedTipOut3Crunch."; }
+        finally { busy = false; }
+    }
+}

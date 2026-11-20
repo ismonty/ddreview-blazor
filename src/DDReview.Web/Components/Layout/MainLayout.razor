@@ -6,7 +6,7 @@
     <a href="/" class="brand">DD Review</a>
     <AuthorizeView>
         <Authorized>
-            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a>@if (showPayroll) { <text> <a href="/payroll">Payroll</a></text> } <a href="/gl">General ledger</a></nav>
+            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a>@if (showPayroll) { <text> <a href="/payroll">Payroll</a></text> }@if (showConsolidated) { <text> <a href="/consolidated">Consolidated payroll</a></text> } <a href="/gl">General ledger</a></nav>
             <form method="post" action="/account/logout" class="logout">
                 <AntiforgeryToken />
                 <a href="/account" title="Your account">@context.User.Identity?.Name</a>
@@ -24,15 +24,17 @@
 </div>
 
 @code {
-    private bool showPayroll;
+    private bool showPayroll, showConsolidated;
 
     protected override async Task OnParametersSetAsync()
     {
         try
         {
             var ctx = await Users.GetAsync();
-            showPayroll = ctx is not null && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, DDReview.Core.Features.WebFeature.Payroll);
+            var on = ctx is null ? new HashSet<DDReview.Core.Features.WebFeature>() : await Features.EnabledForAsync(ctx.ClientConnectionString, ctx.Access);
+            showPayroll = on.Contains(DDReview.Core.Features.WebFeature.Payroll);
+            showConsolidated = on.Contains(DDReview.Core.Features.WebFeature.ConsolidatedPayroll);
         }
-        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or InvalidOperationException) { showPayroll = false; }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or InvalidOperationException) { showPayroll = showConsolidated = false; }
     }
 }

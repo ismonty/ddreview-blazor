@@ -27,3 +27,12 @@ Payroll and Consolidated Payroll are optional features. They are off for everyon
 - The Payroll page checks the switch when it opens and again on every Run and Export; the nav link only shows when it is on.
 - The web login needs `select, insert, delete` on that table; script 004's grant procedure now lists it, and the updater shows the one grant line if it is missing.
 - `WebFeature.ConsolidatedPayroll` exists and is switchable now; the Consolidated Payroll screen itself is not built yet and will use the same check.
+
+## Consolidated payroll (page `/consolidated`, switch `ConsolidatedPayroll`)
+Ported: the **ADP sales and tips file** (the Export form of Data Entry/Review) and its settings (tblGlobalSettings tags `ADPCoCode` ... `ADPUnpaidChargedTipsNegativeDeductionCode`; saved by administrators through `cs_spGlobalSettingsSet`).
+It runs `cs_spConsolidatedTipOut3Crunch`, then reads `fn_ConsolidatedTipOutADPExport3` (payroll group 1, as the old form passed), and writes the CSV (header from the first row, memos rounded to whole dollars, deduction as is).
+- The crunch procedure empties and refills one shared table (`tblConsolidatedTipOutTempTable`), so runs are queued per database inside the program. That does not protect against two web servers on one database, or against Access running at the same moment.
+- The web login needs execute on `cs_spConsolidatedTipOut3Crunch` and `cs_spGlobalSettingsSet`; script 004's grant procedure now lists both (re-run it, or run the two grant lines).
+- The ADP period dates and batch number are not advanced by this export (the old form did not either).
+
+**Not ported: the Data Entry/Review screen itself.** The Access screen calls `cs_spConsolidatedTipOut3Crunch2` and `fn_ConsolidatedTipOut32`, which are not in the schema dump (only the `...3` versions are), and the form's layout was not in the Access export. Needed: those two objects' scripts from the consolidated client's database, and the form's columns and Display Mode choices (a screenshot is enough).

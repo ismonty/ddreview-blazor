@@ -199,3 +199,45 @@ public class FeatureSwitchTests
         Assert.DoesNotContain("alter ", sql, StringComparison.OrdinalIgnoreCase);
     }
 }
+
+public class ConsolidatedTipFileTests
+{
+    static DDReview.Payroll.Consolidated.ConsolidatedTipRow Row(long file, decimal earn, decimal memo1, decimal ded, string? memo2 = null, decimal memo2Amt = 0) =>
+        new("T7S", 999, file, "Digital Dining Tips", 3, "T", earn, "2", memo1, memo2, memo2Amt, null, null, "W", ded);
+
+    [Fact]
+    public void Header_comes_from_the_first_row_and_each_row_writes_only_the_pieces_it_has()
+    {
+        var f = DDReview.Payroll.Consolidated.ConsolidatedTipFile.Build([Row(1234, 100.5m, 2000, 12.34m), Row(1235, 50, 0.4m, 0.4m)])!;
+        var lines = f.Content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal("Co Code,Batch ID,File #,Batch Description,Earnings 3 Code,Earnings 3 Amount,Memo Code,Memo Amount,Adjust DED Code,Adjust DED Amount", lines[0]);
+        Assert.Equal("T7S,999,1234,Digital Dining Tips,T,100.5,2,2000,W,12.34", lines[1]);
+        Assert.Equal("T7S,999,1235,Digital Dining Tips,T,50", lines[2]);     // memo rounds to 0 and the deduction rounds to 0, so both are left out
+        Assert.Equal(2, f.Lines);
+    }
+
+    [Fact]
+    public void Memos_round_to_whole_dollars_and_the_deduction_is_written_as_is()
+    {
+        var f = DDReview.Payroll.Consolidated.ConsolidatedTipFile.Build([Row(1, 10, 1999.5m, 7.5m, "C", 10.4m)])!;
+        var lines = f.Content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.StartsWith("Co Code,Batch ID,File #,Batch Description,Earnings 3 Code,Earnings 3 Amount,Memo Code,Memo Amount,Memo Code,Memo Amount,Adjust DED", lines[0]);
+        Assert.Equal("T7S,999,1,Digital Dining Tips,T,10,2,2000,C,10,W,7.5", lines[1]);
+    }
+
+    [Fact]
+    public void Earnings_slot_four_and_no_rows()
+    {
+        var row = Row(1, 5, 0, 0) with { EarningsType = 4 };
+        Assert.Contains("Earnings 4 Code,Earnings 4 Amount", DDReview.Payroll.Consolidated.ConsolidatedTipFile.Build([row])!.Content);
+        Assert.Null(DDReview.Payroll.Consolidated.ConsolidatedTipFile.Build([]));
+    }
+
+    [Fact]
+    public async Task Settings_can_only_be_saved_by_an_administrator_and_the_store_must_be_authorized()
+    {
+        var svc = new DDReview.Payroll.Consolidated.ConsolidatedPayrollService();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.SaveSettingsAsync("Server=.", new DDReview.Core.Tenancy.UserAccess { Administrator = false }, new()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.ExportTipFileAsync("Server=.", 5, new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 7), false, new HashSet<int> { 1, 2 }));
+    }
+}

@@ -30,6 +30,10 @@ begin
         insert @todo (Stmt) values (N'grant execute on type::dbo.DrillPair to ' + @q + N';');
     if object_id(N'dbo.tblWebUserFeatures', N'U') is not null
         insert @todo (Stmt) values (N'grant select, insert, delete on dbo.tblWebUserFeatures to ' + @q + N';');
+    if object_id(N'dbo.cs_spConsolidatedTipOut3Crunch', N'P') is not null
+        insert @todo (Stmt) values (N'grant execute on dbo.cs_spConsolidatedTipOut3Crunch to ' + @q + N';');
+    if object_id(N'dbo.cs_spGlobalSettingsSet', N'P') is not null
+        insert @todo (Stmt) values (N'grant execute on dbo.cs_spGlobalSettingsSet to ' + @q + N';');
     -- insert @todo (Stmt) values (N'grant select on dbo.SomeTable to ' + @q + N';');
     -- =====================================================================================
 
