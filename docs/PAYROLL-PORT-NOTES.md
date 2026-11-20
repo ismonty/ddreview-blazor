@@ -56,7 +56,8 @@ Built from the Angus Barn schema script, whose objects override the first schema
 ## Open items for later cleanup (Angus Barn, 2025 tip law)
 
 - **Vicky's column-K fees.** In her example spreadsheet, some rows show a red fee in column K that Bob's net does not subtract (Hester, Hopkins, Kennedy, King, Koerselman, McPeek, Olvera-Martinez, Wright, Banq 1/2, Wine Cellar and others). Not resolved; left as is.
-- **Partly gift-card-paid service charges.** Some rows show an effective fee of about 0.7% or 1.5%, which suggests the 1.75% applies only to the card-paid part. Crunch2 charges it per receipt (floor(1.75*AmountCharge+0.5)/100 for receipt class 2), so a split check should work, but this needs checking against real checks.
+- **Partly gift-card-paid service charges.** Some rows show an effective fee of about 0.7% or 1.5%, which suggests the 1.75% applies only to the card-paid part. Checked against real April 2026 checks: the service charge is split across the receipts, and the fee is charged per receipt on the card-paid part only (floor(1.75*AmountCharge+0.5)/100 for receipt class 2), so a split check is already right and the lower effective rate is expected.
 - **Fee rounding.** Per-receipt half-up rounding makes the overall rate about 1.755%.
 - **AB HRS, DCL and AD2 codes** in Vicky's Paycor import: origin unknown (probably entered by hand).
 - Rates (3.2%, 1.75%) and excluded departments or pay methods should become per-client settings.
+- **Join rule for new SQL.** Receipt types (and most other tables) are per `StoreID`, and a past store switch means the same `ReceiptTypeID` exists under two stores. Any join between tables that both have `StoreID` must include it, or rows double. Existing objects were only spot-checked for this; none in the consolidated or payroll path were found to be affected.
