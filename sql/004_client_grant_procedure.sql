@@ -34,6 +34,20 @@ begin
         insert @todo (Stmt) values (N'grant execute on dbo.cs_spConsolidatedTipOut3Crunch to ' + @q + N';');
     if object_id(N'dbo.cs_spGlobalSettingsSet', N'P') is not null
         insert @todo (Stmt) values (N'grant execute on dbo.cs_spGlobalSettingsSet to ' + @q + N';');
+    if object_id(N'dbo.cs_spConsolidatedTipOut3Crunch2', N'P') is not null
+        insert @todo (Stmt) values (N'grant execute on dbo.cs_spConsolidatedTipOut3Crunch2 to ' + @q + N';');
+    if object_id(N'dbo.cs_spConsolidatedTipOut3CrunchComplianceLetters2', N'P') is not null
+        insert @todo (Stmt) values (N'grant execute on dbo.cs_spConsolidatedTipOut3CrunchComplianceLetters2 to ' + @q + N';');
+    if object_id(N'dbo.fn_ConsolidatedTipOut32', N'TF') is not null
+        insert @todo (Stmt) values (N'grant select on dbo.fn_ConsolidatedTipOut32 to ' + @q + N';');
+    if object_id(N'dbo.fn_ConsolidatedTipOutDateRangeWithYearToDate32', N'TF') is not null
+        insert @todo (Stmt) values (N'grant select on dbo.fn_ConsolidatedTipOutDateRangeWithYearToDate32 to ' + @q + N';');
+    if object_id(N'dbo.fn_ConsolidatedTipOutTotalAdjustments', N'TF') is not null
+        insert @todo (Stmt) values (N'grant select on dbo.fn_ConsolidatedTipOutTotalAdjustments to ' + @q + N';');
+    if object_id(N'dbo.fn_ConsolidatedTipOutADPExport3', N'TF') is not null
+        insert @todo (Stmt) values (N'grant select on dbo.fn_ConsolidatedTipOutADPExport3 to ' + @q + N';');
+    if object_id(N'dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments to ' + @q + N';');
     -- insert @todo (Stmt) values (N'grant select on dbo.SomeTable to ' + @q + N';');
     -- =====================================================================================
 

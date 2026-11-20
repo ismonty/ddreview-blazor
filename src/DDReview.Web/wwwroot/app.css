@@ -178,3 +178,12 @@ tbody.gl-grand tr.total td { border-top: 2px solid currentColor; }
 button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--edge); }
 .login-card form.google { text-align: center; }
 .login-card form.google p { margin: .6rem 0 .4rem; }
+
+/* Consolidated tip outs */
+table.sales tr.group th { text-align: left; background: color-mix(in srgb, currentColor 8%, transparent); }
+button.link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+section.letter { margin: 1.5rem 0; }
+@media print {
+    .no-print, nav, header { display: none !important; }
+    section.letter { break-after: page; }
+}

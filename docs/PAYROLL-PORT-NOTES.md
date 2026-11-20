@@ -18,7 +18,7 @@ Source: the Access presentation layer (`frmPayrollReview`, `mod Payroll Export` 
 
 ## Not done yet
 - No comparison with a real ADP file from the Access program has been made. That is the first thing to do on the restored test databases.
-- Other export types, Payroll Status, Time Entries review, Manual / Additional Payroll, Consolidated Tip Outs (Data Entry/Review) and its ADP tip export.
+- Other export types, Payroll Status, Time Entries review, Manual / Additional Payroll.
 
 ## Who can use it
 Payroll and Consolidated Payroll are optional features. They are off for everyone except administrators until an administrator turns them on for a user
@@ -26,7 +26,7 @@ Payroll and Consolidated Payroll are optional features. They are off for everyon
 - Stored in `dbo.tblWebUserFeatures` (new script `sql/005_client_web_features.sql`, added by Admin > Database updater): a row means on, no row means off. If the table is not there yet, non-administrators have nothing.
 - The Payroll page checks the switch when it opens and again on every Run and Export; the nav link only shows when it is on.
 - The web login needs `select, insert, delete` on that table; script 004's grant procedure now lists it, and the updater shows the one grant line if it is missing.
-- `WebFeature.ConsolidatedPayroll` exists and is switchable now; the Consolidated Payroll screen itself is not built yet and will use the same check.
+- `WebFeature.ConsolidatedPayroll` exists and is switchable now; the Consolidated Payroll pages use the same check.
 
 ## Consolidated payroll (page `/consolidated`, switch `ConsolidatedPayroll`)
 Ported: the **ADP sales and tips file** (the Export form of Data Entry/Review) and its settings (tblGlobalSettings tags `ADPCoCode` ... `ADPUnpaidChargedTipsNegativeDeductionCode`; saved by administrators through `cs_spGlobalSettingsSet`).
@@ -35,4 +35,15 @@ It runs `cs_spConsolidatedTipOut3Crunch`, then reads `fn_ConsolidatedTipOutADPEx
 - The web login needs execute on `cs_spConsolidatedTipOut3Crunch` and `cs_spGlobalSettingsSet`; script 004's grant procedure now lists both (re-run it, or run the two grant lines).
 - The ADP period dates and batch number are not advanced by this export (the old form did not either).
 
-**Not ported: the Data Entry/Review screen itself.** The Access screen calls `cs_spConsolidatedTipOut3Crunch2` and `fn_ConsolidatedTipOut32`, which are not in the schema dump (only the `...3` versions are), and the form's layout was not in the Access export. Needed: those two objects' scripts from the consolidated client's database, and the form's columns and Display Mode choices (a screenshot is enough).
+## Consolidated tip outs: Data Entry/Review (`/consolidated/tipouts`, `/consolidated/report`, `/consolidated/letters`)
+Built from the Angus Barn schema script, whose objects override the first schema for everything consolidated.
+- The screen runs `cs_spConsolidatedTipOut3Crunch2` for the one day, then reads `fn_ConsolidatedTipOut32(store, day, day, sourceFlag, staff, byReceipt, payrollGroup) where SourceLevel<99`, exactly as the form's Retrieve did. Display Mode bit 1 is "Show source levels", bit 16 is "Classify by individual receipt". A store whose `PayrollGroupNumber` is not above 0 shows nothing, as in Access.
+- Totals are column sums; hovering the sales and tips totals shows the adjustment part and the Digital Dining part (`fn_ConsolidatedTipOutTotalAdjustments`, first row), like the old control tips.
+- Clicking an employee drills to that person (the Access double-click opened a one-person form in source mode); Adjustments opens the day's adjustment lines for that batch with add, change and delete.
+- Adjustments are checked more strictly than the Access datasheet: a person on at least one side, a department group with each person, both people and groups in the batch's store, percentages 0 to 100, source level 1 to 98. The crunch silently drops a line whose person or group does not exist, so Access let mistakes hide.
+- The print report (`rptConsolidatedTipOuts`) uses payroll group 0, no source detail, and rows with `NonZeroBit<>0`. The compliance letters crunch the year-to-date start through the period end with `cs_spConsolidatedTipOut3CrunchComplianceLetters2`, read `fn_ConsolidatedTipOutDateRangeWithYearToDate32(..., 1) where NonZeroBit<>0`, and show the note from `tblGlobal.ConsolidatedTipReportingComplianceLetterNote`. The store total row (source level 99) is shown separately.
+- Layouts are a reasonable guess: the Access form and report designs were not in the export. Column choice and the letter wording are easy to change once you see them.
+- Each of the three work tables (`tblConsolidatedTipOutTempTable`, `...TempTable2`, `...ComplianceLetters2`) has its own queue inside the program. Same limits as above.
+- The period start, period end and year-to-date dates were remembered in the Windows registry by Access; the web does not remember them.
+- **Check this with the client:** the day screen uses `Crunch2` / `fn_ConsolidatedTipOut32`, but the ADP sales-and-tips export still uses the older `Crunch` / `fn_ConsolidatedTipOutADPExport3` (as the Access export form does). The newer procedure splits the tip out by cash/credit and service-charge sales and takes 1.75% off discretionary tips on service charges; the older one does not, and applies the dated second tip-out rate only to the sales portion. The two can disagree for dates after a rate change.
+- The web login needs the grants in script 004's list (execute on both crunch procedures, select on the functions, select/insert/update/delete on the adjustments table). Re-run the grant procedure.

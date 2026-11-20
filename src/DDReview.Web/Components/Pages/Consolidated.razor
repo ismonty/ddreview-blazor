@@ -16,7 +16,7 @@
 else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
 else
 {
-    <p class="muted">Data entry and review of consolidated tip outs is not available here yet. The sales and tips file for ADP is.</p>
+    <p><a href="/consolidated/tipouts">Data entry / review of consolidated tip outs</a> · <a href="/consolidated/letters">Compliance letters</a></p>
 
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (notice is not null) { <p role="status">@notice</p> }

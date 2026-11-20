@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Data;
 using DDReview.Core.Tenancy;
 using DDReview.Payroll.Adp;
@@ -12,10 +11,6 @@ public sealed record ConsolidatedTipSettings(string CoCode = "", string BatchId 
 
 public sealed class ConsolidatedPayrollService
 {
-    // The crunch procedure empties and refills one shared work table that the function then reads, so two runs at once
-    // (in one database) could read each other's rows. Runs are queued per database inside this program.
-    static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new();
-
     static readonly (string Tag, Func<ConsolidatedTipSettings, string> Get, Func<ConsolidatedTipSettings, string, ConsolidatedTipSettings> Set)[] Fields =
     [
         ("ADPCoCode", s => s.CoCode, (s, v) => s with { CoCode = v }),
@@ -77,8 +72,7 @@ public sealed class ConsolidatedPayrollService
         var s = await GetSettingsAsync(connectionString, ct);
         if (!int.TryParse(s.BatchId.Trim(), out var batch)) batch = 0;     // the old code used Val(): text that is not a number counts as 0
 
-        var key = new SqlConnectionStringBuilder(connectionString) { Password = "", UserID = "" };
-        var gate = Locks.GetOrAdd($"{key.DataSource}|{key.InitialCatalog}", _ => new SemaphoreSlim(1, 1));
+        var gate = CrunchGate.For(connectionString, "tblConsolidatedTipOutTempTable");
         await gate.WaitAsync(ct);
         try
         {
