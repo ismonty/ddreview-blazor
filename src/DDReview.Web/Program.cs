@@ -39,6 +39,7 @@ builder.Services.AddSingleton<DDReview.Core.Labor.LaborService>();
 builder.Services.AddSingleton<DDReview.Payroll.PayrollService>();
 builder.Services.AddSingleton<DDReview.Payroll.Consolidated.ConsolidatedPayrollService>();
 builder.Services.AddSingleton<DDReview.Payroll.Consolidated.ConsolidatedTipOutService>();
+builder.Services.AddSingleton<DDReview.Core.Reports.CustomReportService>();
 builder.Services.AddSingleton<DDReview.Core.Features.FeatureService>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton(sp => new LoginService(sp.GetRequiredService<ICentralDirectory>(), sp.GetRequiredService<LoginThrottle>(),

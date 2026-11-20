@@ -56,6 +56,16 @@ begin
         insert @todo (Stmt) values (N'grant select on dbo.fn_ConsolidatedTipOutADPExport3 to ' + @q + N';');
     if object_id(N'dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments', N'U') is not null
         insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments to ' + @q + N';');
+    -- custom report exports: the index function and every report function it lists (a name that is not a plain dbo function is skipped)
+    if object_id(N'dbo.fn_CustomReports_Index') is not null
+    begin
+        insert @todo (Stmt) values (N'grant select on dbo.fn_CustomReports_Index to ' + @q + N';');
+        insert @todo (Stmt)
+        select N'grant select on dbo.' + quotename(o.name) + N' to ' + @q + N';'
+        from dbo.fn_CustomReports_Index() i
+        join sys.objects o on o.schema_id = schema_id(N'dbo') and o.type in ('TF','IF')
+         and o.name = replace(replace(replace(i.CustomReportSQLFunctionName, N'[', N''), N']', N''), N'dbo.', N'');
+    end
     -- insert @todo (Stmt) values (N'grant select on dbo.SomeTable to ' + @q + N';');
     -- =====================================================================================
 

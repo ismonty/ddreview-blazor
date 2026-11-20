@@ -5,10 +5,10 @@ using System.Globalization;
 
 namespace DDReview.Core.Support;
 
-/// <summary>A minimal .xlsx writer (one sheet, bold header, optional bold totals row, numbers kept as numbers) so no extra package is needed.</summary>
+/// <summary>A minimal .xlsx writer (one sheet, bold header, optional bold totals row, numbers kept as numbers; with plainIntegers, whole numbers such as employee numbers are written without the 2-decimal format) so no extra package is needed.</summary>
 public static class XlsxWriter
 {
-    public static byte[] Write(string sheetName, string? title, IReadOnlyList<string> headers, IEnumerable<object?[]> rows, object?[]? totals = null, string? note = null)
+    public static byte[] Write(string sheetName, string? title, IReadOnlyList<string> headers, IEnumerable<object?[]> rows, object?[]? totals = null, string? note = null, bool plainIntegers = false)
     {
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, true))
@@ -21,18 +21,18 @@ public static class XlsxWriter
             Add(zip, "xl/styles.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/></cellXfs></styleSheet>""");
             var sb = new StringBuilder("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>""");
             int r = 1;
-            if (!string.IsNullOrEmpty(title)) Row(sb, r++, [title], bold: true);
-            if (!string.IsNullOrEmpty(note)) Row(sb, r++, [note], bold: false);
-            Row(sb, r++, headers.Cast<object?>().ToArray(), bold: true);
-            foreach (var row in rows) Row(sb, r++, row, false);
-            if (totals is not null) Row(sb, r++, totals, bold: true);
+            if (!string.IsNullOrEmpty(title)) Row(sb, r++, [title], bold: true, plainIntegers);
+            if (!string.IsNullOrEmpty(note)) Row(sb, r++, [note], bold: false, plainIntegers);
+            Row(sb, r++, headers.Cast<object?>().ToArray(), bold: true, plainIntegers);
+            foreach (var row in rows) Row(sb, r++, row, false, plainIntegers);
+            if (totals is not null) Row(sb, r++, totals, bold: true, plainIntegers);
             sb.Append("</sheetData></worksheet>");
             Add(zip, "xl/worksheets/sheet1.xml", sb.ToString());
         }
         return ms.ToArray();
     }
 
-    static void Row(StringBuilder sb, int r, object?[] cells, bool bold)
+    static void Row(StringBuilder sb, int r, object?[] cells, bool bold, bool plainIntegers)
     {
         sb.Append($"<row r=\"{r}\">");
         for (int c = 0; c < cells.Length; c++)
@@ -42,6 +42,8 @@ public static class XlsxWriter
             switch (v)
             {
                 case null or DBNull: break;
+                case int or long or short when plainIntegers:
+                    sb.Append($"<c r=\"{addr}\" s=\"{(bold ? 1 : 0)}\"><v>{Convert.ToString(v, CultureInfo.InvariantCulture)}</v></c>"); break;
                 case decimal or double or float or int or long or short:
                     sb.Append($"<c r=\"{addr}\" s=\"{(bold ? 3 : 2)}\"><v>{Convert.ToString(v, CultureInfo.InvariantCulture)}</v></c>"); break;
                 case DateTime d:
