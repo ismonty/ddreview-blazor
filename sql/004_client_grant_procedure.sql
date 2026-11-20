@@ -64,11 +64,15 @@ begin
     if object_id(N'dbo.fn_CustomReports_Index') is not null
     begin
         insert @todo (Stmt) values (N'grant select on dbo.fn_CustomReports_Index to ' + @q + N';');
-        insert @todo (Stmt)
-        select N'grant select on dbo.' + quotename(o.name) + N' to ' + @q + N';'
-        from dbo.fn_CustomReports_Index() i
-        join sys.objects o on o.schema_id = schema_id(N'dbo') and o.type in ('TF','IF')
-         and o.name = replace(replace(replace(i.CustomReportSQLFunctionName, N'[', N''), N']', N''), N'dbo.', N'');
+        -- dynamic, so this procedure still compiles on a database whose index function is not there or is shaped differently
+        declare @list nvarchar(max);
+        exec sys.sp_executesql
+            N'select @s = isnull(@s, N'''') + N''grant select on dbo.'' + quotename(o.name) + N'' to '' + @qq + N'';''
+              from dbo.fn_CustomReports_Index() i
+              join sys.objects o on o.schema_id = schema_id(N''dbo'') and o.type in (''TF'', ''IF'')
+               and o.name = replace(replace(replace(i.CustomReportSQLFunctionName, N''['', N''''), N'']'', N''''), N''dbo.'', N'''')',
+            N'@s nvarchar(max) output, @qq nvarchar(300)', @s = @list output, @qq = @q;
+        if @list is not null insert @todo (Stmt) values (@list);
     end
     -- insert @todo (Stmt) values (N'grant select on dbo.SomeTable to ' + @q + N';');
     -- =====================================================================================
