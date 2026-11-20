@@ -47,3 +47,16 @@ Built from the Angus Barn schema script, whose objects override the first schema
 - The period start, period end and year-to-date dates were remembered in the Windows registry by Access; the web does not remember them.
 - **Check this with the client:** the day screen uses `Crunch2` / `fn_ConsolidatedTipOut32`, but the ADP sales-and-tips export still uses the older `Crunch` / `fn_ConsolidatedTipOutADPExport3` (as the Access export form does). The newer procedure splits the tip out by cash/credit and service-charge sales and takes 1.75% off discretionary tips on service charges; the older one does not, and applies the dated second tip-out rate only to the sales portion. The two can disagree for dates after a rate change.
 - The web login needs the grants in script 004's list (execute on both crunch procedures, select on the functions, select/insert/update/delete on the adjustments table). Re-run the grant procedure.
+
+## Exports page (custom reports)
+
+- `/reports/custom` (nav "Exports", same permission and feature as Payroll) lists `dbo.fn_CustomReports_Index()` from the client database, runs the chosen report function with the authorized store list and the two dates, previews it, and downloads .xlsx or .csv. A function is only run if it is in that index, is a plain `dbo` name, and takes exactly `@StoreIDList, @StartingDate, @EndingDate`. A leading `ItemID` column is dropped from the export. Script 004 grants select on the index and on each listed function.
+- `fn_CustomReport_TipsExport` ignores `@StoreIDList` (store 13 is hard-coded). The Exports page passes the list correctly, so that report will only be right once the function is fixed; the new-format export will honor the list.
+
+## Open items for later cleanup (Angus Barn, 2025 tip law)
+
+- **Vicky's column-K fees.** In her example spreadsheet, some rows show a red fee in column K that Bob's net does not subtract (Hester, Hopkins, Kennedy, King, Koerselman, McPeek, Olvera-Martinez, Wright, Banq 1/2, Wine Cellar and others). Not resolved; left as is.
+- **Partly gift-card-paid service charges.** Some rows show an effective fee of about 0.7% or 1.5%, which suggests the 1.75% applies only to the card-paid part. Crunch2 charges it per receipt (floor(1.75*AmountCharge+0.5)/100 for receipt class 2), so a split check should work, but this needs checking against real checks.
+- **Fee rounding.** Per-receipt half-up rounding makes the overall rate about 1.755%.
+- **AB HRS, DCL and AD2 codes** in Vicky's Paycor import: origin unknown (probably entered by hand).
+- Rates (3.2%, 1.75%) and excluded departments or pay methods should become per-client settings.

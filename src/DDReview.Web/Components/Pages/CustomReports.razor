@@ -1,0 +1,135 @@
+@page "/reports/custom"
+@attribute [Authorize]
+@using System.Globalization
+@using DDReview.Core.Features
+@using DDReview.Core.Gl
+@using DDReview.Core.Reports
+@using DDReview.Core.Tenancy
+@inject UserContextService Users
+@inject CustomReportService Svc
+@inject FeatureService Features
+@inject IJSRuntime JS
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Exports</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <p class="muted">These are this database's own export reports (the old Reports tab's T&amp;A Export, Tips Export and the like).</p>
+    <EditForm Model="this" OnSubmit="PreviewAsync" FormName="exports" class="filters">
+        <label>Report
+            <select @bind="reportId">
+                <option value="0">Select a report</option>
+                @foreach (var r in reports.Where(x => x.Runnable)) { <option value="@r.Id">@r.Name</option> }
+            </select></label>
+        <label>Start <input type="date" @bind="start" /></label>
+        <label>End <input type="date" @bind="end" /></label>
+        <fieldset class="stores"><legend>Stores</legend>
+            @foreach (var s in stores)
+            {
+                <label class="inline"><input type="checkbox" checked="@selected.Contains(s.StoreId)" @onchange="e => Toggle(s.StoreId, e.Value is true)" /> @s.StoreNumber – @s.StoreName</label>
+            }
+        </fieldset>
+        <button type="submit" disabled="@busy">@(busy ? "Working…" : "Preview")</button>
+        <button type="button" disabled="@busy" @onclick="() => DownloadAsync(false)">Download Excel</button>
+        <button type="button" disabled="@busy" @onclick="() => DownloadAsync(true)">Download CSV</button>
+    </EditForm>
+
+    @foreach (var r in reports.Where(x => !x.Runnable))
+    {
+        <p class="muted">@r.Name is listed but cannot be run here: @r.Problem</p>
+    }
+    @if (reports.Count == 0) { <p class="muted">This database has no export reports.</p> }
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+
+    @if (preview is not null)
+    {
+        <p class="range">@preview.Rows.Count rows@(preview.Rows.Count > PreviewRows ? $" (the first {PreviewRows} are shown)" : "")</p>
+        <table class="sales">
+            <thead><tr>@foreach (var h in preview.Headers) { <th>@h</th> }</tr></thead>
+            <tbody>
+                @foreach (var row in preview.Rows.Take(PreviewRows))
+                {
+                    <tr>@foreach (var v in row) { <td>@Show(v)</td> }</tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private const int PreviewRows = 200;
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private IReadOnlyList<CustomReportInfo> reports = [];
+    private readonly HashSet<int> selected = [];
+    private int reportId;
+    private DateTime start = DateTime.Today.AddDays(-14), end = DateTime.Today.AddDays(-1);
+    private CustomReportResult? preview;
+    private string? error;
+
+    private static string Show(object? v) => v switch
+    {
+        null => "",
+        decimal d => d.ToString("0.####", CultureInfo.InvariantCulture),
+        DateTime t => t.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture),
+        _ => Convert.ToString(v, CultureInfo.InvariantCulture) ?? ""
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = (ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll))
+                  && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.Payroll);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+        foreach (var s in stores) selected.Add(s.StoreId);
+        try { reports = await Svc.ListAsync(ctx.ClientConnectionString); }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "This database's export list could not be read."; }
+    }
+
+    private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+
+    private async Task<CustomReportResult?> RunAsync()
+    {
+        if (ctx is null) return null;
+        await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.Payroll);
+        if (reportId == 0) { error = "Select a report."; return null; }
+        return await Svc.RunAsync(ctx.ClientConnectionString, stores.Select(s => s.StoreId).ToHashSet(), reportId, selected, DateOnly.FromDateTime(start), DateOnly.FromDateTime(end));
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (busy) return;
+        busy = true; error = null; preview = null;
+        try { preview = await RunAsync(); }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The report could not be run. Check that the database login may read the report's function."; }
+        finally { busy = false; }
+    }
+
+    private async Task DownloadAsync(bool csv)
+    {
+        if (busy) return;
+        busy = true; error = null;
+        try
+        {
+            var result = await RunAsync();
+            if (result is null) return;
+            var info = reports.First(r => r.Id == reportId);
+            var name = CustomReportService.DownloadName(info.FileName, csv);
+            if (csv)
+                await JS.InvokeVoidAsync("ddDownload", name, Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(CustomReportService.ToCsv(result))), "text/csv");
+            else
+                await JS.InvokeVoidAsync("ddDownload", name, Convert.ToBase64String(CustomReportService.ToXlsx(info.Name, result)), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            preview = result;
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The report could not be run. Check that the database login may read the report's function."; }
+        finally { busy = false; }
+    }
+}

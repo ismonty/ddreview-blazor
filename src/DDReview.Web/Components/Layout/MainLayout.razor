@@ -8,7 +8,7 @@
     <a href="/" class="brand">DD Review</a>
     <AuthorizeView>
         <Authorized>
-            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a>@if (showPayroll) { <text> <a href="/payroll">Payroll</a></text> }@if (showConsolidated) { <text> <a href="/consolidated">Consolidated payroll</a></text> } <a href="/gl">General Ledger</a> <SetupNavLink />@if (Legacy.Value.Enabled) {<text> <a href="/classic-enter?to=@Uri.EscapeDataString(Legacy.Value.PathPrefix + "/Default.aspx")" target="_blank" rel="noopener" title="Opens the classic DDReview in a new tab">Classic&nbsp;&#8599;</a></text>}
+            <nav><a href="/sales">Sales</a> <a href="/receipts">Receipts</a> <a href="/labor">Labor</a>@if (showPayroll) { <text> <a href="/payroll">Payroll</a> <a href="/reports/custom">Exports</a></text> }@if (showConsolidated) { <text> <a href="/consolidated">Consolidated payroll</a></text> } <a href="/gl">General Ledger</a> <SetupNavLink />@if (Legacy.Value.Enabled) {<text> <a href="/classic-enter?to=@Uri.EscapeDataString(Legacy.Value.PathPrefix + "/Default.aspx")" target="_blank" rel="noopener" title="Opens the classic DDReview in a new tab">Classic&nbsp;&#8599;</a></text>}
                 <button type="button" class="fs-btn fs-enter" data-fullscreen="toggle" title="Fill the whole screen with this page">Full Screen</button>
                 <button type="button" class="fs-btn fs-exit" data-fullscreen="toggle" title="Back to the normal window">Normal Screen</button></nav>
             <form method="post" action="/account/logout" class="logout">
