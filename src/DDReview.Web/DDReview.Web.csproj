@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DDReview.Core\DDReview.Core.csproj" />
+    <ProjectReference Include="..\DDReview.Payroll\DDReview.Payroll.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,167 @@
+@page "/payroll"
+@attribute [Authorize]
+@using System.Data
+@using System.Globalization
+@using System.IO.Compression
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@using DDReview.Payroll
+@using DDReview.Web.Components.Home
+@inject UserContextService Users
+@inject PayrollService PayrollSvc
+@inject IJSRuntime JS
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Payroll review</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <EditForm Model="this" OnSubmit="RunAsync" FormName="payroll" class="filters">
+        <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
+        <label>Pay period start <input type="date" @bind="start" /></label>
+        <label>Pay period end <input type="date" @bind="end" /></label>
+        <label class="inline"><input type="checkbox" @bind="byStore" /> Store</label>
+        <label class="inline"><input type="checkbox" @bind="byEmployee" /> Employee</label>
+        <label class="inline"><input type="checkbox" @bind="byWeek" /> Week</label>
+        <label class="inline"><input type="checkbox" @bind="byDepartment" /> Department</label>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+    </EditForm>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (notice is not null) { <p role="status">@notice</p> }
+
+    @if (result is not null)
+    {
+        <p class="range">@($"{rangeStart:dddd, MMMM d, yyyy} - {rangeEnd:dddd, MMMM d, yyyy}")</p>
+        @if (result.Rows.Count == 0) { <p>No payroll records for these stores and dates.</p> }
+        else
+        {
+            <table class="sales">
+                <thead><tr>
+                    @if (ranStore) { <th>Store</th> }
+                    @if (ranEmployee) { <th>Employee</th> }
+                    @if (ranWeek) { <th>Week</th> }
+                    @if (ranDepartment) { <th>Department</th> }
+                    <th class="n">Regular hrs</th><th class="n">Overtime hrs</th><th class="n">Doubletime hrs</th><th class="n">Total hrs</th>
+                    <th class="n">Wages</th><th class="n">Sales</th><th class="n">Tips received</th><th class="n">Payroll tips</th><th class="n">Charged tips</th><th class="n">Extra pay</th>
+                </tr></thead>
+                <tbody>
+                    @foreach (DataRow r in result.Rows)
+                    {
+                        <tr>
+                            @if (ranStore) { <td>@Text(r, "StoreName")</td> }
+                            @if (ranEmployee) { <td>@Text(r, "EmployeeName")</td> }
+                            @if (ranWeek) { <td>@Text(r, "PayrollWeek")</td> }
+                            @if (ranDepartment) { <td>@Text(r, "StaffDepartmentName")</td> }
+                            <td class="n">@Num(r, "RegularHours")</td><td class="n">@Num(r, "OvertimeHours")</td><td class="n">@Num(r, "DoubletimeHours")</td><td class="n">@Num(r, "Hours")</td>
+                            <td class="n">@Num(r, "TotalHourlyPay")</td><td class="n">@Num(r, "TotalSales")</td><td class="n">@Num(r, "TotalTips")</td>
+                            <td class="n">@Money(Dec(r, "POSTipsNetCash") + Dec(r, "POSTipsNetCreditCard"))</td><td class="n">@Num(r, "POSTipsNetCreditCard")</td>
+                            <td class="n">@Money(Dec(r, "AdditionalPayAmount") + Dec(r, "AdditionalOvertimePay"))</td>
+                        </tr>
+                    }
+                </tbody>
+                @if (totals is not null)
+                {
+                    <tfoot><tr class="total">
+                        <td colspan="@LabelCols">Total</td>
+                        <td class="n">@Money(totals.RegularHours)</td><td class="n">@Money(totals.OvertimeHours)</td><td class="n">@Money(totals.DoubletimeHours)</td><td class="n">@Money(totals.TotalHours)</td>
+                        <td class="n">@Money(totals.TotalWages)</td><td class="n">@Money(totals.TotalSales)</td><td class="n">@Money(totals.CustomerTipsReceived)</td>
+                        <td class="n">@Money(totals.PayrollTips)</td><td class="n">@Money(totals.NetChargedTips)</td><td class="n">@Money(totals.ExtraPay)</td>
+                    </tr></tfoot>
+                }
+            </table>
+            <p class="rowcount">Showing @result.Rows.Count Rows</p>
+        }
+    }
+    <p><button type="button" disabled="@busy" @onclick="ExportAsync">Export Payroll File</button></p>
+}
+
+@code {
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy, byStore = true, byEmployee = true, byWeek = true, byDepartment = true;
+    private bool ranStore, ranEmployee, ranWeek, ranDepartment;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private readonly HashSet<int> selected = [];
+    private DateTime start = DateTime.Today.AddDays(-14), end = DateTime.Today.AddDays(-1), rangeStart, rangeEnd;
+    private string? error, notice;
+    private DataTable? result;
+    private PayrollTotals? totals;
+
+    private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
+    private int LabelCols => Math.Max(1, (ranStore ? 1 : 0) + (ranEmployee ? 1 : 0) + (ranWeek ? 1 : 0) + (ranDepartment ? 1 : 0));
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+        foreach (var s in stores) selected.Add(s.StoreId);
+    }
+
+    private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
+
+    // Re-check the picked stores against the access list on every run.
+    private IReadOnlyCollection<int> AllowedSelection() { var ok = stores.Select(s => s.StoreId).ToHashSet(); return selected.Where(ok.Contains).ToList(); }
+
+    private async Task RunAsync()
+    {
+        if (busy || ctx is null) return;
+        busy = true; error = null; notice = null;
+        try
+        {
+            var ids = AllowedSelection();
+            var req = new PayrollReviewRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), ids, byStore, byEmployee, byWeek, byDepartment);
+            result = await PayrollSvc.ReviewAsync(ctx.ClientConnectionString, req);
+            totals = PayrollTotals.Compute(result.Rows.Cast<DataRow>());
+            rangeStart = start; rangeEnd = end;
+            ranStore = byStore; ranEmployee = byEmployee; ranWeek = byWeek; ranDepartment = byDepartment;
+        }
+        catch (Exception ex) when (ex is ArgumentException or Microsoft.Data.SqlClient.SqlException)
+        {
+            result = null; totals = null; error = ex is ArgumentException ? ex.Message : "The payroll query could not be run. Check the dates and stores, then try again.";
+        }
+        finally { busy = false; }
+    }
+
+    private async Task ExportAsync()
+    {
+        if (busy || ctx is null) return;
+        busy = true; error = null; notice = null;
+        try
+        {
+            var ids = AllowedSelection();
+            var authorized = stores.Select(s => s.StoreId).ToHashSet();
+            var res = await PayrollSvc.ExportAdpAsync(ctx.ClientConnectionString, DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), ids, authorized);
+            if (res.Files.Count == 0) { notice = "There is nothing to export for these dates."; return; }
+            if (res.Files.Count == 1)
+                await JS.InvokeVoidAsync("ddDownload", res.Files[0].Name, Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(res.Files[0].Content)), "text/csv");
+            else
+            {
+                using var ms = new MemoryStream();
+                using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, true))
+                    foreach (var f in res.Files)
+                    {
+                        await using var es = zip.CreateEntry(f.Name).Open();
+                        await es.WriteAsync(System.Text.Encoding.UTF8.GetBytes(f.Content));
+                    }
+                await JS.InvokeVoidAsync("ddDownload", $"ADPPayroll_{start:yyyyMMdd}_{end:yyyyMMdd}.zip", Convert.ToBase64String(ms.ToArray()), "application/zip");
+            }
+            await PayrollSvc.SaveNextBatchIdAsync(ctx.ClientConnectionString, res.NextBatchId);
+            notice = $"Payroll file created ({res.Files.Count} file{(res.Files.Count == 1 ? "" : "s")}). The next ADP batch number is {res.NextBatchId}.";
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or UnauthorizedAccessException or InvalidOperationException or Microsoft.Data.SqlClient.SqlException)
+        {
+            error = ex is Microsoft.Data.SqlClient.SqlException ? "The payroll file could not be created. Check the dates and stores, then try again." : ex.Message;
+        }
+        finally { busy = false; }
+    }
+
+    private static decimal Dec(DataRow r, string c) => r.Table.Columns.Contains(c) && r[c] is not DBNull ? Convert.ToDecimal(r[c]) : 0m;
+    private static string Money(decimal v) => v.ToString("#,##0.00", CultureInfo.InvariantCulture);
+    private static string Num(DataRow r, string c) => Money(Dec(r, c));
+    private static string Text(DataRow r, string c) => r.Table.Columns.Contains(c) && r[c] is not DBNull ? Convert.ToString(r[c])!.Trim() : "";
+}
