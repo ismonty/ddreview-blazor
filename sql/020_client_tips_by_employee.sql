@@ -12,13 +12,38 @@
 --     check when it carries a tip, otherwise cash. Same classification as cs_spConsolidatedTipOut3Crunch2.
 --   * Card fee: 1.75 percent per receipt (half up to the cent) of the service charge on receipts whose type has ReceiptClass 2 (credit card / EMV). Gift card, comp,
 --     cash, check, house charge and inventory receipts carry no fee, so a check part paid by gift card carries no fee on that part. The fee on tips is the one the
---     receipt already holds in AmountTipCreditCardFee (negative). The 1.75 is a constant in this script; it becomes a per-client setting later.
+--     receipt already holds in AmountTipCreditCardFee (negative). The 1.75 is the default; a store's own rate is in dbo.tblTipPayrollSettings, and which receipt types carry the fee can be overridden in dbo.tblTipPayrollReceiptTypeFee.
 --   * Tip out: the department group's percentage (the second rate after its effective day) of the day's sales, half up to the cent per employee and day, as
 --     Crunch2 does; the part on service charge sales comes out of SVC, the part on cash and credit card sales comes out of CCT.
 --   * Manual moves (tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments) are applied as the consolidated screen applies them.
+--   * Departments listed in dbo.tblTipPayrollExcludedDepartments are left out. (tblStaffDepartments.ExcludeFromPayrollCalculations is not used: the old consolidated objects ignore it too.)
 --   * Employees are kept to the payroll ID limits in tblGlobal. Needs no features above compatibility level 110 (no STRING_SPLIT).
 -- Untested against a live database when written: compare a known pay period with the consolidated screen and the spreadsheets before relying on it.
 set nocount on;
+GO
+-- Per-client settings (all optional: with no rows the functions behave as if the defaults were entered):
+--   dbo.tblTipPayrollSettings               one row per store: CardFeePercent (default 1.75)
+--   dbo.tblTipPayrollExcludedDepartments    departments left out of fn_TipsByEmployee altogether
+--   dbo.tblTipPayrollReceiptTypeFee         per receipt type: does a service charge paid that way carry the card fee? No row = yes for ReceiptClass 2 (credit card / EMV), no otherwise
+IF OBJECT_ID(N'dbo.tblTipPayrollSettings', N'U') IS NULL
+    CREATE TABLE dbo.tblTipPayrollSettings (
+        StoreID int NOT NULL,
+        CardFeePercent decimal(9, 4) NOT NULL CONSTRAINT DF_tblTipPayrollSettings_Fee DEFAULT (1.75),
+        CONSTRAINT PK_tblTipPayrollSettings PRIMARY KEY (StoreID),
+        CONSTRAINT CK_tblTipPayrollSettings_Fee CHECK (CardFeePercent >= 0 AND CardFeePercent <= 100));
+GO
+IF OBJECT_ID(N'dbo.tblTipPayrollExcludedDepartments', N'U') IS NULL
+    CREATE TABLE dbo.tblTipPayrollExcludedDepartments (
+        StoreID int NOT NULL,
+        StaffDepartmentID int NOT NULL,
+        CONSTRAINT PK_tblTipPayrollExcludedDepartments PRIMARY KEY (StoreID, StaffDepartmentID));
+GO
+IF OBJECT_ID(N'dbo.tblTipPayrollReceiptTypeFee', N'U') IS NULL
+    CREATE TABLE dbo.tblTipPayrollReceiptTypeFee (
+        StoreID int NOT NULL,
+        ReceiptTypeID int NOT NULL,
+        ChargesFee bit NOT NULL,
+        CONSTRAINT PK_tblTipPayrollReceiptTypeFee PRIMARY KEY (StoreID, ReceiptTypeID));
 GO
 SET ANSI_NULLS ON
 GO
@@ -44,7 +69,7 @@ RETURN
                 CROSS APPLY s.doc.nodes('/i') x(i))
     ),
     Rates AS (
-        SELECT CAST(1.75 AS decimal(18, 4)) AS CardFeePercent, CAST(1000000000000000 AS bigint) AS BigNumber,
+        SELECT CAST(1000000000000000 AS bigint) AS BigNumber,
                (SELECT TOP 1 PayrollIDLowerLimit FROM dbo.tblGlobal) AS IDLow, (SELECT TOP 1 PayrollIDUpperLimit FROM dbo.tblGlobal) AS IDHigh
     ),
     Batches AS (
@@ -67,7 +92,8 @@ RETURN
         SELECT b.StoreID, b.BatchID, b.DayNumber, te.StoreStaffID, sd.StaffDepartmentGroupID, cm.Mode,
                ISNULL(d.AmountFood, 0) + ISNULL(d.AmountBeverage, 0) AS Sales,
                ISNULL(d.AmountCharge, 0) AS Charge,
-               CASE WHEN rt.ReceiptClass = 2 AND d.AmountCharge > 0 THEN FLOOR(r.CardFeePercent * d.AmountCharge + 0.5) / 100.0 ELSE 0 END AS ChargeFee,
+               CASE WHEN d.AmountCharge > 0 AND ISNULL(CAST(rf.ChargesFee AS int), CASE WHEN rt.ReceiptClass = 2 THEN 1 ELSE 0 END) = 1
+                    THEN FLOOR(ISNULL(ts.CardFeePercent, 1.75) * d.AmountCharge + 0.5) / 100.0 ELSE 0 END AS ChargeFee,
                CASE WHEN ISNULL(d.ReceiptDetails, '') = 'Cash Tips Earned' THEN ISNULL(d.AmountTip, 0) ELSE 0 END AS CashTip,
                CASE WHEN ISNULL(d.ReceiptDetails, '') <> 'Cash Tips Earned' THEN ISNULL(d.AmountTip, 0) + ISNULL(d.AmountTipCreditCardFee, 0) ELSE 0 END AS NetTip
         FROM dbo.tblCashAndSalesReceiptsDetail d
@@ -76,7 +102,10 @@ RETURN
         INNER JOIN dbo.tblStaffDepartments sd ON sd.StoreID = te.StoreID AND sd.StaffDepartmentID = te.StaffDepartmentID
         LEFT OUTER JOIN CheckMode cm ON cm.StoreID = d.StoreID AND cm.BatchID = d.BatchID AND cm.CheckNumber = d.CheckNumber AND cm.PersonNumber = d.PersonNumber
         LEFT OUTER JOIN dbo.tblReceiptTypes rt ON rt.StoreID = d.StoreID AND rt.ReceiptTypeID = d.ReceiptTypeID
-        CROSS JOIN Rates r
+        LEFT OUTER JOIN dbo.tblTipPayrollReceiptTypeFee rf ON rf.StoreID = d.StoreID AND rf.ReceiptTypeID = d.ReceiptTypeID
+        LEFT OUTER JOIN dbo.tblTipPayrollSettings ts ON ts.StoreID = d.StoreID
+        LEFT OUTER JOIN dbo.tblTipPayrollExcludedDepartments ex ON ex.StoreID = te.StoreID AND ex.StaffDepartmentID = te.StaffDepartmentID
+        WHERE ex.StaffDepartmentID IS NULL
         -- receipts without a check number (the 'Cash Tips Earned' lines may be) have no mode and count only as cash tips
     ),
     PerDay AS (

@@ -81,3 +81,14 @@ Vicky St Clair (the client's payroll authority) is the authority on the tip rule
 - `/payroll/tips/letters`: one letter per employee, with the voluntary block and the compulsory service charge block, this period and year to date. Year to date is just the same function over a longer range, so the "new company" database needs no year-to-date table.
 - Both read `dbo.fn_TipsByEmployee` (script 020) for one store at a time. The old consolidated screens and letters are unchanged.
 - Differences from her sample to settle with her: the sample's "SC less tip out" column has no card fee (August); ours subtracts the 1.75% fee as her later spreadsheets do. The tip out % shown is the department group's rate at that time, not worked out from the amounts.
+
+## Per-client settings for the new-format tips (script 020 and `/payroll/tips/settings`)
+
+- Three small tables, created by script 020 and read by `fn_TipsByEmployee`; with no rows the defaults apply, so nothing has to be entered to get the same result as before.
+  - `tblTipPayrollSettings` (per store): `CardFeePercent`, default 1.75.
+  - `tblTipPayrollExcludedDepartments`: departments left out of the report and the export.
+  - `tblTipPayrollReceiptTypeFee`: per receipt type, whether a service charge paid that way carries the card fee. No row means yes for ReceiptClass 2 (credit card / EMV) and no for everything else, as before.
+- The tip out percentages were never hard-coded: they are per department group in `tblStaffDepartmentGroups` (with a second rate and its effective date) and stay there.
+- The settings page is for administrators with the consolidated payroll feature. It shows only the user's authorized stores and only accepts departments and receipt types of the chosen store.
+- `tblStaffDepartments.ExcludeFromPayrollCalculations` exists but the old consolidated objects ignore it, so the new function does too. If Vicky's figures need it, use the exclusion table or revisit.
+- These tables are user-entered, so they belong in the mirroring list in `docs/MIRRORING-NOTES.md`.

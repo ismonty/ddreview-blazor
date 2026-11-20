@@ -60,6 +60,12 @@ begin
         insert @todo (Stmt) values (N'grant select on dbo.fn_TipsByEmployee to ' + @q + N';');
     if object_id(N'dbo.fn_CustomReport_TipsExportNew', N'TF') is not null
         insert @todo (Stmt) values (N'grant select on dbo.fn_CustomReport_TipsExportNew to ' + @q + N';');
+    if object_id(N'dbo.tblTipPayrollSettings', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblTipPayrollSettings to ' + @q + N';');
+    if object_id(N'dbo.tblTipPayrollExcludedDepartments', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblTipPayrollExcludedDepartments to ' + @q + N';');
+    if object_id(N'dbo.tblTipPayrollReceiptTypeFee', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblTipPayrollReceiptTypeFee to ' + @q + N';');
     -- custom report exports: the index function and every report function it lists (a name that is not a plain dbo function is skipped)
     if object_id(N'dbo.fn_CustomReports_Index') is not null
     begin

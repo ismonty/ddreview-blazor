@@ -18,7 +18,7 @@ else if (!allowed) { <p class="error">You are not authorized for this report.</p
 else
 {
     <div class="no-print">
-        <p><a href="/payroll">Back to payroll</a> · <a href="/payroll/tips/letters">Letters</a></p>
+        <p><a href="/payroll">Back to payroll</a> · <a href="/payroll/tips/letters">Letters</a> @if (ctx.Access.Administrator) { <text>· <a href="/payroll/tips/settings">Settings</a></text> }</p>
         <EditForm Model="this" OnSubmit="RunAsync" FormName="tipreport" class="filters">
             <label>Store
                 <select @bind="storeId">

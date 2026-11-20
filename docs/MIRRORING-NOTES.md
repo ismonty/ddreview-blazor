@@ -16,6 +16,7 @@ Not built. Written from the plan the owner described: the Angus Barn database is
 | `tblGlobal.ConsolidatedTipReportingComplianceLetterNote` and other `tblGlobal` settings | owner / Access | One row, edited rarely. |
 | `tblStaffDepartmentGroups` (tip out percentages, second percentage and its effective day), `tblStaff` (PayrollID), `tblStaffDepartments` | Access screens / poster | Change what the tip math produces. Must match or the two servers disagree. |
 | `tblReceiptTypes` (ReceiptClass, GiftCard, ...) | receipt type editor (web and Access) | The card fee depends on ReceiptClass. Keyed by StoreID plus ReceiptTypeID. |
+| `tblTipPayrollSettings`, `tblTipPayrollExcludedDepartments`, `tblTipPayrollReceiptTypeFee` | tip report settings page (web only) | Small, keyed by StoreID (plus department or receipt type). Change the tip numbers, so both copies must match. Created by script 020. |
 | `tblWebUserFeatures`, `tblWebUserSecurity`, `tblWebUserSecurityStores` | web admin | Probably should differ per server (different people may log in). Decide per table. |
 | Receipt, batch and time entry tables | the poster / nightly import | Larger than everything above. Decide first where they enter (see "One writer"). |
 

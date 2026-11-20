@@ -56,3 +56,32 @@ public class TipReportTests
         Assert.Equal(55m + 22m, t.Cct);
     }
 }
+
+public class TipSettingsTests
+{
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1.75, true)]
+    [InlineData(100, true)]
+    [InlineData(-0.01, false)]
+    [InlineData(100.01, false)]
+    public void Card_fee_percent_must_be_in_range(double pct, bool ok) =>
+        Assert.Equal(ok, TipSettingsService.Validate((decimal)pct) is null);
+
+    [Fact]
+    public void Receipt_type_fee_defaults_to_class_two_unless_overridden()
+    {
+        Assert.True(new TipReceiptType(1, "Visa", 2, null).ChargesFee);
+        Assert.False(new TipReceiptType(2, "Gift", 5, null).ChargesFee);
+        Assert.False(new TipReceiptType(1, "Visa", 2, false).ChargesFee);
+        Assert.True(new TipReceiptType(2, "Gift", 5, true).ChargesFee);
+    }
+
+    [Fact]
+    public async Task Settings_are_refused_for_a_store_the_user_cannot_see()
+    {
+        var svc = new TipSettingsService();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.LoadAsync("Server=x", new HashSet<int> { 1 }, 2));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.SaveAsync("Server=x", new HashSet<int> { 1 }, new TipSettings(2, 1.75m, [], [])));
+    }
+}
