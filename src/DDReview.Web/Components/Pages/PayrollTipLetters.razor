@@ -1,0 +1,116 @@
+@page "/payroll/tips/letters"
+@attribute [Authorize]
+@using System.Globalization
+@using DDReview.Core.Features
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@using DDReview.Payroll.Tips
+@inject UserContextService Users
+@inject TipReportService Svc
+@inject FeatureService Features
+@inject IJSRuntime JS
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Tip letters – voluntary tips and service charge</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <div class="no-print">
+        <p><a href="/payroll/tips">Back to the tip report</a></p>
+        <EditForm Model="this" OnSubmit="RunAsync" FormName="tipletters" class="filters">
+            <label>Store
+                <select @bind="storeId">
+                    <option value="0">Select a store</option>
+                    @foreach (var s in stores) { <option value="@s.StoreId">@s.StoreNumber – @s.StoreName</option> }
+                </select></label>
+            <label>Year to date from <input type="date" @bind="ytdFrom" /></label>
+            <label>Period start <input type="date" @bind="start" /></label>
+            <label>Period end <input type="date" @bind="end" /></label>
+            <button type="submit" disabled="@busy">@(busy ? "Working…" : "Run")</button>
+            @if (letters is { Count: > 0 }) { <button type="button" @onclick="Print">Print</button> }
+        </EditForm>
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+    </div>
+
+    @if (letters is not null)
+    {
+        @if (letters.Count == 0) { <p>No tip activity for this store and period.</p> }
+        @foreach (var l in letters)
+        {
+            <section class="letter">
+                <h2>@l.Period.EmployeeName</h2>
+                <p>@l.Period.Group · @shownStore · period @($"{shownStart:MM/dd/yyyy} – {shownEnd:MM/dd/yyyy}") · year to date @($"{shownYtd:MM/dd/yyyy} – {shownEnd:MM/dd/yyyy}")</p>
+                <h3>Voluntary tips</h3>
+                <table class="sales">
+                    <thead><tr><th></th><th class="n">This period</th><th class="n">Year to date</th></tr></thead>
+                    <tbody>
+                        <tr><td>Cash sales</td><td class="n">@M(l.Period.CashSales)</td><td class="n">@M(l.Ytd.CashSales)</td></tr>
+                        <tr><td>Credit card sales</td><td class="n">@M(l.Period.CreditCardSales)</td><td class="n">@M(l.Ytd.CreditCardSales)</td></tr>
+                        <tr><td>Tip out on these sales</td><td class="n">@M(l.Period.TipOutOnCashCreditSales)</td><td class="n">@M(l.Ytd.TipOutOnCashCreditSales)</td></tr>
+                        <tr><td>Credit card tips less tip out (CCT)</td><td class="n">@M(l.Period.CreditCardTipsLessTipOut)</td><td class="n">@M(l.Ytd.CreditCardTipsLessTipOut)</td></tr>
+                        <tr><td>Cash tips (CTP)</td><td class="n">@M(l.Period.Ctp)</td><td class="n">@M(l.Ytd.Ctp)</td></tr>
+                    </tbody>
+                </table>
+                <h3>Compulsory service charge (not tips)</h3>
+                <table class="sales">
+                    <thead><tr><th></th><th class="n">This period</th><th class="n">Year to date</th></tr></thead>
+                    <tbody>
+                        <tr><td>Service charge sales</td><td class="n">@M(l.Period.ServiceChargeSales)</td><td class="n">@M(l.Ytd.ServiceChargeSales)</td></tr>
+                        <tr><td>Service charge (fixed gratuity)</td><td class="n">@M(l.Period.ServiceChargeGross)</td><td class="n">@M(l.Ytd.ServiceChargeGross)</td></tr>
+                        <tr><td>Card fee</td><td class="n">@M(l.Period.ServiceChargeFee)</td><td class="n">@M(l.Ytd.ServiceChargeFee)</td></tr>
+                        <tr><td>Tip out on service charge sales</td><td class="n">@M(l.Period.TipOutOnServiceChargeSales)</td><td class="n">@M(l.Ytd.TipOutOnServiceChargeSales)</td></tr>
+                        <tr><td>Service charge less tip out and fee (SVC)</td><td class="n">@M(l.Period.Svc)</td><td class="n">@M(l.Ytd.Svc)</td></tr>
+                        <tr><td>Voluntary tips added to service charge checks (CCT)</td><td class="n">@M(l.Period.VoluntaryTipOnServiceCharge)</td><td class="n">@M(l.Ytd.VoluntaryTipOnServiceCharge)</td></tr>
+                    </tbody>
+                </table>
+            </section>
+        }
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "store")] public int StoreParam { get; set; }
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private int storeId;
+    private DateTime ytdFrom = new(DateTime.Today.Year, 1, 1), start = DateTime.Today.AddDays(-14), end = DateTime.Today.AddDays(-1);
+    private IReadOnlyList<TipLetter>? letters;
+    private string? error, shownStore;
+    private DateOnly shownStart, shownEnd, shownYtd;
+
+    private static string M(decimal v) => v.ToString("N2", CultureInfo.InvariantCulture);
+    private async Task Print() => await JS.InvokeVoidAsync("print");
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = (ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll))
+                  && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+        if (stores.Count == 1) storeId = stores[0].StoreId;
+        if (StoreParam != 0 && stores.Any(s => s.StoreId == StoreParam)) storeId = StoreParam;
+    }
+
+    private async Task RunAsync()
+    {
+        if (busy || ctx is null) return;
+        busy = true; error = null;
+        try
+        {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+            if (storeId == 0) { error = "Select a store."; return; }
+            var y = DateOnly.FromDateTime(ytdFrom); var s = DateOnly.FromDateTime(start); var e = DateOnly.FromDateTime(end);
+            letters = await Svc.LettersAsync(ctx.ClientConnectionString, stores.Select(x => x.StoreId).ToHashSet(), storeId, y, s, e);
+            shownStore = stores.First(x => x.StoreId == storeId).StoreName; shownYtd = y; shownStart = s; shownEnd = e;
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The letters could not be created. Check that script 020 has been applied and the database login may read dbo.fn_TipsByEmployee."; }
+        finally { busy = false; }
+    }
+}

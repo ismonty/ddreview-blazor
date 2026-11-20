@@ -74,3 +74,10 @@ Built from the Angus Barn schema script, whose objects override the first schema
 ## Who is right when they disagree
 
 Vicky St Clair (the client's payroll authority) is the authority on the tip rules and figures. The existing Access objects (Crunch2 and the consolidated functions) were built by the owner and are not necessarily correct. Where the old objects and Vicky's spreadsheets or letters differ, follow Vicky, and write the difference down here rather than copying the old behavior. The column-K fee mismatch above is the first thing to settle against her figures: her red fees may be the correct ones, with the old net being the part that is wrong. Script 020 follows Vicky's stated rules; where it borrows Crunch2 (what counts as a service charge check, per-day tip out rounding) that is only because nothing from her contradicts it yet.
+
+## Tip report and letters (new format)
+
+- `/payroll/tips` (same permission and ConsolidatedPayroll feature as the consolidated screens): the two-part report laid out like Vicky's 8/20/25 sample. Page 1 is "Voluntary tips tip report" (cash and card sales, tip out %, tip out portion, credit card tips, less tip out = CCT, cash tips = CTP); page 2 is "Compulsory service charge report" (SC sales, tip out, service charges, card fee, less tip out and fee = SVC, voluntary tips on SC = CCT). Both pages carry the employee names and are grouped by department group; each prints on its own page.
+- `/payroll/tips/letters`: one letter per employee, with the voluntary block and the compulsory service charge block, this period and year to date. Year to date is just the same function over a longer range, so the "new company" database needs no year-to-date table.
+- Both read `dbo.fn_TipsByEmployee` (script 020) for one store at a time. The old consolidated screens and letters are unchanged.
+- Differences from her sample to settle with her: the sample's "SC less tip out" column has no card fee (August); ours subtracts the 1.75% fee as her later spreadsheets do. The tip out % shown is the department group's rate at that time, not worked out from the amounts.

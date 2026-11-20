@@ -105,7 +105,7 @@ RETURN
                CashSales, CreditCardSales, ServiceChargeSales, CashTips, CardTips, VoluntaryTipOnServiceCharge, ServiceChargeGross, ServiceChargeFee,
                FLOOR((CashSales + CreditCardSales) * TipOutPercent + 0.5) / 100.0 AS TipOutOnCashCreditSales,
                FLOOR(ServiceChargeSales * TipOutPercent + 0.5) / 100.0 AS TipOutOnServiceChargeSales,
-               CAST(0 AS money) AS MovedCardTips, CAST(0 AS money) AS MovedServiceChargeTips
+               CAST(0 AS money) AS MovedCardTips, CAST(0 AS money) AS MovedServiceChargeTips, CAST(TipOutPercent AS decimal(18, 4)) AS TipOutPercent
         FROM PerDayRated
         UNION ALL
         -- manual moves: the receiving employee gets +, the giving employee -
@@ -113,7 +113,7 @@ RETURN
                ISNULL(a.CashSales, 0), ISNULL(a.CreditCardSales, 0), ISNULL(a.ServiceChargeSales, 0), ISNULL(a.CashTips, 0), 0, 0, 0, 0,
                FLOOR(a.AddTipOutPercentage * (ISNULL(a.CashSales, 0) + ISNULL(a.CreditCardSales, 0)) + 0.5) / 100.0,
                FLOOR(a.AddTipOutPercentage * ISNULL(a.ServiceChargeSales, 0) + 0.5) / 100.0,
-               ISNULL(a.CreditCardTips, 0), ISNULL(a.ServiceChargeTips, 0)
+               ISNULL(a.CreditCardTips, 0), ISNULL(a.ServiceChargeTips, 0), CAST(0 AS decimal(18, 4))
         FROM dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments a
         INNER JOIN Batches b ON b.StoreID = a.StoreID AND b.BatchID = a.BatchID
         UNION ALL
@@ -121,7 +121,7 @@ RETURN
                -ISNULL(a.CashSales, 0), -ISNULL(a.CreditCardSales, 0), -ISNULL(a.ServiceChargeSales, 0), -ISNULL(a.CashTips, 0), 0, 0, 0, 0,
                -FLOOR(a.SubtractTipOutPercentage * (ISNULL(a.CashSales, 0) + ISNULL(a.CreditCardSales, 0)) + 0.5) / 100.0,
                -FLOOR(a.SubtractTipOutPercentage * ISNULL(a.ServiceChargeSales, 0) + 0.5) / 100.0,
-               -ISNULL(a.CreditCardTips, 0), -ISNULL(a.ServiceChargeTips, 0)
+               -ISNULL(a.CreditCardTips, 0), -ISNULL(a.ServiceChargeTips, 0), CAST(0 AS decimal(18, 4))
         FROM dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments a
         INNER JOIN Batches b ON b.StoreID = a.StoreID AND b.BatchID = a.BatchID
     ),
@@ -131,7 +131,7 @@ RETURN
                SUM(CashTips) AS CashTips, SUM(CardTips) AS CardTips, SUM(VoluntaryTipOnServiceCharge) AS VoluntaryTipOnServiceCharge,
                SUM(ServiceChargeGross) AS ServiceChargeGross, SUM(ServiceChargeFee) AS ServiceChargeFee,
                SUM(TipOutOnCashCreditSales) AS TipOutOnCashCreditSales, SUM(TipOutOnServiceChargeSales) AS TipOutOnServiceChargeSales,
-               SUM(MovedCardTips) AS MovedCardTips, SUM(MovedServiceChargeTips) AS MovedServiceChargeTips
+               SUM(MovedCardTips) AS MovedCardTips, SUM(MovedServiceChargeTips) AS MovedServiceChargeTips, MAX(TipOutPercent) AS TipOutPercent
         FROM Lines
         GROUP BY StoreID, StoreStaffID, StaffDepartmentGroupID
     )
@@ -141,9 +141,11 @@ RETURN
            t.StaffDepartmentGroupID, g.StaffDepartmentGroup, g.PayrollDepartment, g.StaffDepartmentGroupSort,
            CAST(t.CashSales AS money) AS CashSales, CAST(t.CreditCardSales AS money) AS CreditCardSales, CAST(t.ServiceChargeSales AS money) AS ServiceChargeSales,
            CAST(t.TipOutOnCashCreditSales AS money) AS TipOutOnCashCreditSales, CAST(t.TipOutOnServiceChargeSales AS money) AS TipOutOnServiceChargeSales,
+           CAST(ISNULL(NULLIF(t.TipOutPercent, 0), g.StaffDepartmentDefaultTipOutPercentage) AS decimal(18, 4)) AS TipOutPercent,
            CAST(t.ServiceChargeGross AS money) AS ServiceChargeGross, CAST(t.ServiceChargeFee AS money) AS ServiceChargeFee,
            CAST(t.VoluntaryTipOnServiceCharge AS money) AS VoluntaryTipOnServiceCharge,
            CAST(t.CashTips AS money) AS CTP,
+           CAST(t.CardTips + t.MovedCardTips - t.TipOutOnCashCreditSales AS money) AS CreditCardTipsLessTipOut,
            CAST(t.CardTips + t.MovedCardTips - t.TipOutOnCashCreditSales + t.VoluntaryTipOnServiceCharge AS money) AS CCT,
            CAST(t.ServiceChargeGross - t.ServiceChargeFee + t.MovedServiceChargeTips - t.TipOutOnServiceChargeSales AS money) AS SVC
     FROM Totals t
