@@ -1,0 +1,115 @@
+@page "/payroll/tips/settings"
+@attribute [Authorize]
+@using System.Globalization
+@using DDReview.Core.Features
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@using DDReview.Payroll.Tips
+@inject UserContextService Users
+@inject TipSettingsService Svc
+@inject FeatureService Features
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Tip report settings</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">Only an administrator with the consolidated payroll feature may change these settings.</p> }
+else
+{
+    <p><a href="/payroll/tips">Back to the tip report</a></p>
+    <p class="muted">These control dbo.fn_TipsByEmployee for one store. Changes apply to the next report that is run.</p>
+    <EditForm Model="this" OnSubmit="SaveAsync" FormName="tipsettings">
+        <label>Store
+            <select value="@storeId" @onchange="OnStoreChanged">
+                <option value="0">Select a store</option>
+                @foreach (var s in stores) { <option value="@s.StoreId">@s.StoreNumber – @s.StoreName</option> }
+            </select></label>
+        @if (loaded)
+        {
+            <h2>Card fee</h2>
+            <label>Percent charged on the card-paid service charge and on tips <input type="number" step="0.0001" min="0" max="100" @bind="fee" /></label>
+            <h2>Receipt types that carry the card fee on a service charge</h2>
+            <table class="sales">
+                <thead><tr><th>Receipt type</th><th>Class</th><th>Fee on a service charge paid this way</th></tr></thead>
+                <tbody>
+                    @foreach (var t in types)
+                    {
+                        <tr><td>@t.Name</td><td class="n">@t.ReceiptClass</td>
+                            <td><select value="@Mode(t)" @onchange="e => SetMode(t, e.Value?.ToString())">
+                                <option value="default">Default (@(t.ReceiptClass == 2 ? "yes" : "no"))</option>
+                                <option value="yes">Yes</option>
+                                <option value="no">No</option></select></td></tr>
+                    }
+                </tbody>
+            </table>
+            <h2>Departments left out of the report</h2>
+            @foreach (var d in depts)
+            {
+                <label class="inline"><input type="checkbox" checked="@d.Excluded" @onchange="e => d.Excluded = e.Value is true" /> @d.Name</label>
+            }
+            <p><button type="submit" disabled="@busy">@(busy ? "Saving…" : "Save")</button> @if (saved) { <span>Saved.</span> }</p>
+        }
+    </EditForm>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+}
+
+@code {
+    private sealed class Dept { public int Id; public string Name = ""; public bool Excluded; }
+    private sealed class RType { public int Id; public string Name = ""; public int ReceiptClass; public bool? Override; }
+    private static string Mode(RType t) => t.Override is null ? "default" : t.Override.Value ? "yes" : "no";
+    private static void SetMode(RType t, string? v) => t.Override = v switch { "yes" => true, "no" => false, _ => null };
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy, loaded, saved;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private int storeId;
+    private decimal fee = TipSettingsService.DefaultCardFeePercent;
+    private List<Dept> depts = [];
+    private List<RType> types = [];
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = ctx.Access.Administrator && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+    }
+
+    private IReadOnlySet<int> Authorized => stores.Select(s => s.StoreId).ToHashSet();
+
+    private async Task OnStoreChanged(ChangeEventArgs e)
+    {
+        storeId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        loaded = false; saved = false; error = null;
+        if (storeId == 0 || ctx is null) return;
+        try
+        {
+            var s = await Svc.LoadAsync(ctx.ClientConnectionString, Authorized, storeId);
+            fee = s.CardFeePercent;
+            depts = s.Departments.Select(d => new Dept { Id = d.Id, Name = d.Name, Excluded = d.Excluded }).ToList();
+            types = s.ReceiptTypes.Select(t => new RType { Id = t.Id, Name = t.Name, ReceiptClass = t.ReceiptClass, Override = t.Override }).ToList();
+            loaded = true;
+        }
+        catch (UnauthorizedAccessException ex) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The settings could not be read. Check that script 020 has been applied and the database login may read the tblTipPayroll tables."; }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (busy || ctx is null || !loaded) return;
+        busy = true; error = null; saved = false;
+        try
+        {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+            await Svc.SaveAsync(ctx.ClientConnectionString, Authorized, new TipSettings(storeId, fee,
+                depts.Select(d => new TipDepartment(d.Id, d.Name, d.Excluded)).ToList(),
+                types.Select(t => new TipReceiptType(t.Id, t.Name, t.ReceiptClass, t.Override)).ToList()));
+            saved = true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The settings could not be saved. Check that the database login may change the tblTipPayroll tables."; }
+        finally { busy = false; }
+    }
+}

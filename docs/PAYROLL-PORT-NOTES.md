@@ -56,7 +56,39 @@ Built from the Angus Barn schema script, whose objects override the first schema
 ## Open items for later cleanup (Angus Barn, 2025 tip law)
 
 - **Vicky's column-K fees.** In her example spreadsheet, some rows show a red fee in column K that Bob's net does not subtract (Hester, Hopkins, Kennedy, King, Koerselman, McPeek, Olvera-Martinez, Wright, Banq 1/2, Wine Cellar and others). Not resolved; left as is.
-- **Partly gift-card-paid service charges.** Some rows show an effective fee of about 0.7% or 1.5%, which suggests the 1.75% applies only to the card-paid part. Crunch2 charges it per receipt (floor(1.75*AmountCharge+0.5)/100 for receipt class 2), so a split check should work, but this needs checking against real checks.
+- **Partly gift-card-paid service charges.** Some rows show an effective fee of about 0.7% or 1.5%, which suggests the 1.75% applies only to the card-paid part. Checked against real April 2026 checks: the service charge is split across the receipts, and the fee is charged per receipt on the card-paid part only (floor(1.75*AmountCharge+0.5)/100 for receipt class 2), so a split check is already right and the lower effective rate is expected.
 - **Fee rounding.** Per-receipt half-up rounding makes the overall rate about 1.755%.
 - **AB HRS, DCL and AD2 codes** in Vicky's Paycor import: origin unknown (probably entered by hand).
 - Rates (3.2%, 1.75%) and excluded departments or pay methods should become per-client settings.
+- **Join rule for new SQL.** Receipt types (and most other tables) are per `StoreID`, and a past store switch means the same `ReceiptTypeID` exists under two stores. Any join between tables that both have `StoreID` must include it, or rows double. Existing objects were only spot-checked for this; none in the consolidated or payroll path were found to be affected.
+
+## New-format tips (script 020, for the "new company" database)
+
+- `dbo.fn_TipsByEmployee(@StoreIDList, @Start, @End)`: one row per store, employee and department group. It reads the receipts directly (no work table, so nothing stale and no crunch step) and returns the pay lines **CTP** (cash tips), **CCT** (credit card tips less the tip out on cash and card sales, plus the voluntary tip on top of a service charge, tip net of the card fee) and **SVC** (service charge gross, less the 1.75% card fee on the card-paid part, less the tip out on service charge sales). It also returns the pieces separately (`ServiceChargeGross`, `ServiceChargeFee`, `VoluntaryTipOnServiceCharge`, the two tip outs) for the two-part report and letters.
+- `dbo.fn_CustomReport_TipsExportNew`: the Paycor import lines built from it, one CTP/CCT/SVC line per employee and payroll department. It honors the store list. Add it to that database's `fn_CustomReports_Index` to get it on the Exports page.
+- The consolidated screen's manual moves (adjustments table) are applied the same way. Old objects are untouched.
+- **Written without a live database to run against.** First check: pick a pay period, compare `fn_TipsByEmployee` with the consolidated screen and with Vicky's spreadsheet figures (e.g. a server's SC 226.80, fee 3.97, tip out 36.29, SVC 186.54).
+- Known simplifications: the 1.75 is a constant in the script (becomes a per-client setting); a service charge check is any check whose receipts carry a charge (as Crunch2); the voluntary tip uses the fee already stored on the receipt rather than recomputing 1.75% as Crunch2 does for its discretionary column.
+- `fn_CustomReport_TipsExport` (old) joins `tblStaffDepartments` on StoreID alone, which repeats each employee's rows once per department of the store and so can multiply the cash tip sums. The new function does not do this.
+
+## Who is right when they disagree
+
+Vicky St Clair (the client's payroll authority) is the authority on the tip rules and figures. The existing Access objects (Crunch2 and the consolidated functions) were built by the owner and are not necessarily correct. Where the old objects and Vicky's spreadsheets or letters differ, follow Vicky, and write the difference down here rather than copying the old behavior. The column-K fee mismatch above is the first thing to settle against her figures: her red fees may be the correct ones, with the old net being the part that is wrong. Script 020 follows Vicky's stated rules; where it borrows Crunch2 (what counts as a service charge check, per-day tip out rounding) that is only because nothing from her contradicts it yet.
+
+## Tip report and letters (new format)
+
+- `/payroll/tips` (same permission and ConsolidatedPayroll feature as the consolidated screens): the two-part report laid out like Vicky's 8/20/25 sample. Page 1 is "Voluntary tips tip report" (cash and card sales, tip out %, tip out portion, credit card tips, less tip out = CCT, cash tips = CTP); page 2 is "Compulsory service charge report" (SC sales, tip out, service charges, card fee, less tip out and fee = SVC, voluntary tips on SC = CCT). Both pages carry the employee names and are grouped by department group; each prints on its own page.
+- `/payroll/tips/letters`: one letter per employee, with the voluntary block and the compulsory service charge block, this period and year to date. Year to date is just the same function over a longer range, so the "new company" database needs no year-to-date table.
+- Both read `dbo.fn_TipsByEmployee` (script 020) for one store at a time. The old consolidated screens and letters are unchanged.
+- Differences from her sample to settle with her: the sample's "SC less tip out" column has no card fee (August); ours subtracts the 1.75% fee as her later spreadsheets do. The tip out % shown is the department group's rate at that time, not worked out from the amounts.
+
+## Per-client settings for the new-format tips (script 020 and `/payroll/tips/settings`)
+
+- Three small tables, created by script 020 and read by `fn_TipsByEmployee`; with no rows the defaults apply, so nothing has to be entered to get the same result as before.
+  - `tblTipPayrollSettings` (per store): `CardFeePercent`, default 1.75.
+  - `tblTipPayrollExcludedDepartments`: departments left out of the report and the export.
+  - `tblTipPayrollReceiptTypeFee`: per receipt type, whether a service charge paid that way carries the card fee. No row means yes for ReceiptClass 2 (credit card / EMV) and no for everything else, as before.
+- The tip out percentages were never hard-coded: they are per department group in `tblStaffDepartmentGroups` (with a second rate and its effective date) and stay there.
+- The settings page is for administrators with the consolidated payroll feature. It shows only the user's authorized stores and only accepts departments and receipt types of the chosen store.
+- `tblStaffDepartments.ExcludeFromPayrollCalculations` exists but the old consolidated objects ignore it, so the new function does too. If Vicky's figures need it, use the exclusion table or revisit.
+- These tables are user-entered, so they belong in the mirroring list in `docs/MIRRORING-NOTES.md`.

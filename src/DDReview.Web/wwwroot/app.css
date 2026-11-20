@@ -315,7 +315,11 @@ select.datepreset { max-width: 9.5rem; }
 table.sales tr.group th { text-align: left; background: color-mix(in srgb, currentColor 8%, transparent); }
 button.link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
 section.letter { margin: 1.5rem 0; }
+table.sales tr.group td { font-weight: 600; background: color-mix(in srgb, currentColor 8%, transparent); }
+table.sales tfoot tr.total td { font-weight: 600; border-top: 2px solid; }
+section.tip-page { margin: 1.5rem 0; }
 @media print {
     .no-print, nav, header { display: none !important; }
     section.letter { break-after: page; }
+    section.tip-page { break-after: page; font-size: 9pt; }
 }

@@ -31,6 +31,7 @@
     <EmbeddedResource Include="..\..\sql\017_client_concise_recap_lean.sql" LogicalName="ClientScripts/017_client_concise_recap_lean.sql" />
     <EmbeddedResource Include="..\..\sql\018_client_concise_recap_fast.sql" LogicalName="ClientScripts/018_client_concise_recap_fast.sql" />
     <EmbeddedResource Include="..\..\sql\019_client_web_features.sql" LogicalName="ClientScripts/019_client_web_features.sql" />
+    <EmbeddedResource Include="..\..\sql\020_client_tips_by_employee.sql" LogicalName="ClientScripts/020_client_tips_by_employee.sql" />
   </ItemGroup>
 
 </Project>

@@ -56,15 +56,29 @@ begin
         insert @todo (Stmt) values (N'grant select on dbo.fn_ConsolidatedTipOutADPExport3 to ' + @q + N';');
     if object_id(N'dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments', N'U') is not null
         insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments to ' + @q + N';');
+    if object_id(N'dbo.fn_TipsByEmployee', N'IF') is not null
+        insert @todo (Stmt) values (N'grant select on dbo.fn_TipsByEmployee to ' + @q + N';');
+    if object_id(N'dbo.fn_CustomReport_TipsExportNew', N'TF') is not null
+        insert @todo (Stmt) values (N'grant select on dbo.fn_CustomReport_TipsExportNew to ' + @q + N';');
+    if object_id(N'dbo.tblTipPayrollSettings', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblTipPayrollSettings to ' + @q + N';');
+    if object_id(N'dbo.tblTipPayrollExcludedDepartments', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblTipPayrollExcludedDepartments to ' + @q + N';');
+    if object_id(N'dbo.tblTipPayrollReceiptTypeFee', N'U') is not null
+        insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblTipPayrollReceiptTypeFee to ' + @q + N';');
     -- custom report exports: the index function and every report function it lists (a name that is not a plain dbo function is skipped)
     if object_id(N'dbo.fn_CustomReports_Index') is not null
     begin
         insert @todo (Stmt) values (N'grant select on dbo.fn_CustomReports_Index to ' + @q + N';');
-        insert @todo (Stmt)
-        select N'grant select on dbo.' + quotename(o.name) + N' to ' + @q + N';'
-        from dbo.fn_CustomReports_Index() i
-        join sys.objects o on o.schema_id = schema_id(N'dbo') and o.type in ('TF','IF')
-         and o.name = replace(replace(replace(i.CustomReportSQLFunctionName, N'[', N''), N']', N''), N'dbo.', N'');
+        -- dynamic, so this procedure still compiles on a database whose index function is not there or is shaped differently
+        declare @list nvarchar(max);
+        exec sys.sp_executesql
+            N'select @s = isnull(@s, N'''') + N''grant select on dbo.'' + quotename(o.name) + N'' to '' + @qq + N'';''
+              from dbo.fn_CustomReports_Index() i
+              join sys.objects o on o.schema_id = schema_id(N''dbo'') and o.type in (''TF'', ''IF'')
+               and o.name = replace(replace(replace(i.CustomReportSQLFunctionName, N''['', N''''), N'']'', N''''), N''dbo.'', N'''')',
+            N'@s nvarchar(max) output, @qq nvarchar(300)', @s = @list output, @qq = @q;
+        if @list is not null insert @todo (Stmt) values (@list);
     end
     -- insert @todo (Stmt) values (N'grant select on dbo.SomeTable to ' + @q + N';');
     -- =====================================================================================
