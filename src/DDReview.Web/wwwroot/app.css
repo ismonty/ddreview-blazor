@@ -310,3 +310,12 @@ button.adj-gap { margin-left: 1.25rem; }
 select.datepreset { max-width: 9.5rem; }
 .viewbybar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin: .6rem 0 .3rem; }
 .viewbybar label { display: inline-flex; align-items: center; gap: .35rem; }
+
+/* Consolidated tip outs */
+table.sales tr.group th { text-align: left; background: color-mix(in srgb, currentColor 8%, transparent); }
+button.link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+section.letter { margin: 1.5rem 0; }
+@media print {
+    .no-print, nav, header { display: none !important; }
+    section.letter { break-after: page; }
+}

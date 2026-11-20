@@ -1,0 +1,99 @@
+@page "/consolidated/report"
+@attribute [Authorize]
+@using System.Globalization
+@using DDReview.Core.Features
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@using DDReview.Payroll.Consolidated
+@inject UserContextService Users
+@inject ConsolidatedTipOutService Svc
+@inject FeatureService Features
+@inject IJSRuntime JS
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Consolidated tip outs</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else if (error is not null) { <p class="error" role="alert">@error</p> }
+else if (rows is null) { <p>Loading…</p> }
+else
+{
+    <p class="range">@storeName – @($"{day:dddd, MMMM d, yyyy}") <button type="button" @onclick="Print">Print</button></p>
+    @if (rows.Count == 0) { <p>No consolidated tip outs for this store and date.</p> }
+    else
+    {
+        <table class="sales">
+            <thead><tr>
+                <th>Department</th><th>Employee</th>
+                <th class="n">Cash sales</th><th class="n">Credit card sales</th><th class="n">Service charge sales</th><th class="n">Total sales</th>
+                <th class="n">Tip out %</th><th class="n">Tip out</th>
+                <th class="n">Credit card tips</th><th class="n">Service charge tips</th><th class="n">Non-cash tips less tip out</th>
+                <th class="n">Cash tips</th><th class="n">Total tips</th><th class="n">Tips not paid</th>
+            </tr></thead>
+            <tbody>
+                @{ string? lastGroup = null; }
+                @foreach (var r in rows)
+                {
+                    @if (r.StaffDepartmentGroup != lastGroup)
+                    {
+                        lastGroup = r.StaffDepartmentGroup;
+                        <tr class="group"><th colspan="14">@r.StaffDepartmentGroup</th></tr>
+                    }
+                    <tr>
+                        <td>@r.PayrollDepartment</td><td>@r.EmployeeName</td>
+                        <td class="n">@M(r.CashSales)</td><td class="n">@M(r.CreditCardSales)</td><td class="n">@M(r.ServiceChargeSales)</td><td class="n">@M(r.TotalSales)</td>
+                        <td class="n">@r.DefaultTipOutPercentage.ToString("0.##", CultureInfo.InvariantCulture)</td><td class="n">@M(r.TipOutPortionOfSales)</td>
+                        <td class="n">@M(r.CreditCardTips)</td><td class="n">@M(r.ServiceChargeTips)</td><td class="n">@M(r.NonCashTipsLessTipOut)</td>
+                        <td class="n">@M(r.CashTips)</td><td class="n">@M(r.TotalTips)</td><td class="n">@M(r.TipsNotPaid)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr class="total">
+                    <td colspan="2">Totals</td>
+                    <td class="n">@M(totals!.CashSales)</td><td class="n">@M(totals.CreditCardSales)</td><td class="n">@M(totals.ServiceChargeSales)</td><td class="n">@M(totals.TotalSales)</td>
+                    <td></td><td class="n">@M(totals.TipOutPortionOfSales)</td>
+                    <td class="n">@M(totals.CreditCardTips)</td><td class="n">@M(totals.ServiceChargeTips)</td><td></td>
+                    <td class="n">@M(totals.CashTips)</td><td class="n">@M(totals.TotalTips)</td><td class="n">@M(totals.TipsNotPaid)</td>
+                </tr>
+            </tfoot>
+        </table>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "store")] public int StoreId { get; set; }
+    [SupplyParameterFromQuery(Name = "date")] public string? DateText { get; set; }
+    [SupplyParameterFromQuery(Name = "receipt")] public int Receipt { get; set; }
+
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed;
+    private string? error, storeName;
+    private DateOnly day;
+    private IReadOnlyList<TipOutRow>? rows;
+    private TipOutTotals? totals;
+
+    private static string M(decimal v) => v.ToString("N2", CultureInfo.InvariantCulture);
+    private async Task Print() => await JS.InvokeVoidAsync("print");
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = (ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll))
+                  && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+        if (!allowed) return;
+        if (!DateOnly.TryParseExact(DateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out day)) { error = "Open this report from the Consolidated tip outs screen."; return; }
+        var stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+        var store = stores.FirstOrDefault(s => s.StoreId == StoreId);
+        if (store is null) { error = "You are not authorized for that store."; return; }
+        storeName = store.StoreName;
+        try
+        {
+            rows = await Svc.DayReportAsync(ctx.ClientConnectionString, stores.Select(s => s.StoreId).ToHashSet(), StoreId, day, Receipt == 1);
+            totals = TipOutTotals.Of(rows);
+        }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The report could not be read. Check that the database login may run cs_spConsolidatedTipOut3Crunch2 and read fn_ConsolidatedTipOut32."; }
+    }
+}

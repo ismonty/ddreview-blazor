@@ -1,0 +1,294 @@
+@page "/consolidated/tipouts"
+@attribute [Authorize]
+@using System.Globalization
+@using DDReview.Core.Features
+@using DDReview.Core.Gl
+@using DDReview.Core.Tenancy
+@using DDReview.Payroll.Consolidated
+@inject UserContextService Users
+@inject ConsolidatedTipOutService Svc
+@inject FeatureService Features
+
+<PageTitle>MontySoft DD Review™</PageTitle>
+<h1>Consolidated tip outs</h1>
+
+@if (ctx is null) { <p>Loading…</p> }
+else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
+else
+{
+    <p><a href="/consolidated">Back to consolidated payroll</a></p>
+    <EditForm Model="this" OnSubmit="() => RetrieveAsync(true)" FormName="tipouts" class="filters">
+        <label>Store
+            <select @bind="storeId">
+                <option value="0">Select a store</option>
+                @foreach (var s in stores) { <option value="@s.StoreId">@s.StoreNumber – @s.StoreName</option> }
+            </select></label>
+        <label>Date <input type="date" @bind="date" /></label>
+        <label class="inline"><input type="checkbox" @bind="bySource" /> Show source levels</label>
+        <label class="inline"><input type="checkbox" @bind="byReceipt" /> Classify by individual receipt</label>
+        <button type="submit" disabled="@busy">@(busy ? "Working…" : "Retrieve")</button>
+    </EditForm>
+
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (notice is not null) { <p role="status">@notice</p> }
+
+    @if (screen is not null)
+    {
+        @if (screen.PayrollGroupMissing)
+        {
+            <p class="error">This store has no payroll group number, so nothing is shown. Set the store's payroll group in DD Admin.</p>
+        }
+        else
+        {
+            <p class="range">@($"{shownDate:dddd, MMMM d, yyyy}") @(staffFilter != 0 ? $" – {staffFilterName}" : "")
+                @if (staffFilter != 0) { <button type="button" @onclick="ShowEveryoneAsync">Show everyone</button> }
+                <a href="@ReportUrl()" target="_blank">Print report</a> · <a href="@LettersUrl()" target="_blank">Compliance letters</a></p>
+
+            @if (screen.Rows.Count == 0) { <p>No consolidated tip outs for this store and date.</p> }
+            else
+            {
+                <table class="sales">
+                    <thead><tr>
+                        <th>Department</th><th>Employee</th>@if (shownBySource) { <th>Source</th> }
+                        <th class="n">Cash sales</th><th class="n">Credit card sales</th><th class="n">Service charge sales</th><th class="n">Total sales</th>
+                        <th class="n">Tip out %</th><th class="n">Tip out</th>
+                        <th class="n">Credit card tips</th><th class="n">Service charge tips</th><th class="n">Non-cash tips less tip out</th>
+                        <th class="n">Cash tips</th><th class="n">Total tips</th><th class="n">Tips not paid</th><th class="n">Tip on top of service charge</th><th></th>
+                    </tr></thead>
+                    <tbody>
+                        @{ string? lastGroup = null; }
+                        @foreach (var r in screen.Rows)
+                        {
+                            @if (r.StaffDepartmentGroup != lastGroup)
+                            {
+                                lastGroup = r.StaffDepartmentGroup;
+                                <tr class="group"><th colspan="@(shownBySource ? 17 : 16)">@r.StaffDepartmentGroup</th></tr>
+                            }
+                            <tr>
+                                <td>@r.PayrollDepartment</td>
+                                <td>@if (staffFilter == 0 && r.StoreStaffId > 0) { <button type="button" class="link" @onclick="() => DrillAsync(r)">@r.EmployeeName</button> } else { @r.EmployeeName }</td>
+                                @if (shownBySource) { <td>@r.SourceLevel</td> }
+                                <td class="n">@M(r.CashSales)</td><td class="n">@M(r.CreditCardSales)</td><td class="n">@M(r.ServiceChargeSales)</td><td class="n">@M(r.TotalSales)</td>
+                                <td class="n">@r.DefaultTipOutPercentage.ToString("0.##", CultureInfo.InvariantCulture)</td><td class="n">@M(r.TipOutPortionOfSales)</td>
+                                <td class="n">@M(r.CreditCardTips)</td><td class="n">@M(r.ServiceChargeTips)</td><td class="n">@M(r.NonCashTipsLessTipOut)</td>
+                                <td class="n">@M(r.CashTips)</td><td class="n">@M(r.TotalTips)</td><td class="n">@M(r.TipsNotPaid)</td><td class="n">@M(r.DiscretionaryTipOnTopOfServiceCharges)</td>
+                                <td>@if (r.BatchId is not null) { <button type="button" @onclick="() => OpenAdjustmentsAsync(r)">Adjustments</button> }</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="total">
+                            <td colspan="@(shownBySource ? 3 : 2)">Totals</td>
+                            <td class="n" title="@Tip("Cash Sales", screen.Adjustments?.CashSales, screen.Totals.CashSales)">@M(screen.Totals.CashSales)</td>
+                            <td class="n" title="@Tip("Credit Card Sales", screen.Adjustments?.CreditCardSales, screen.Totals.CreditCardSales)">@M(screen.Totals.CreditCardSales)</td>
+                            <td class="n" title="@Tip("Service Charged Sales", screen.Adjustments?.ServiceChargeSales, screen.Totals.ServiceChargeSales)">@M(screen.Totals.ServiceChargeSales)</td>
+                            <td class="n">@M(screen.Totals.TotalSales)</td><td></td><td class="n">@M(screen.Totals.TipOutPortionOfSales)</td>
+                            <td class="n" title="@Tip("Credit Card Tips", screen.Adjustments?.CreditCardTips, screen.Totals.CreditCardTips)">@M(screen.Totals.CreditCardTips)</td>
+                            <td class="n" title="@Tip("Service Charged Tips", screen.Adjustments?.ServiceChargeTips, screen.Totals.ServiceChargeTips)">@M(screen.Totals.ServiceChargeTips)</td><td></td>
+                            <td class="n" title="@Tip("Cash Tips", screen.Adjustments?.CashTips, screen.Totals.CashTips)">@M(screen.Totals.CashTips)</td>
+                            <td class="n">@M(screen.Totals.TotalTips)</td><td class="n">@M(screen.Totals.TipsNotPaid)</td><td class="n">@M(screen.Totals.DiscretionaryTips)</td><td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <p class="muted">Hover a total to see how much of it came from adjustments.</p>
+            }
+        }
+    }
+
+    @if (adjBatch is not null)
+    {
+        <h2>Adjustments @(adjName is null ? "" : "– " + adjName)</h2>
+        <table class="sales">
+            <thead><tr><th>Comes from</th><th>Department group</th><th class="n">%</th><th>Goes to</th><th>Department group</th><th class="n">%</th><th class="n">Source</th>
+                <th class="n">Cash sales</th><th class="n">Credit card sales</th><th class="n">Service charge sales</th>
+                <th class="n">Credit card tips</th><th class="n">Service charge tips</th><th class="n">Cash tips</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var a in adjustments)
+                {
+                    <tr>
+                        <td>@a.OutTipper</td><td>@GroupName(a.SubtractStaffDepartmentGroupId)</td><td class="n">@a.SubtractTipOutPercentage.ToString("0.##", CultureInfo.InvariantCulture)</td>
+                        <td>@a.InTipper</td><td>@GroupName(a.AddStaffDepartmentGroupId)</td><td class="n">@a.AddTipOutPercentage.ToString("0.##", CultureInfo.InvariantCulture)</td><td class="n">@a.SourceLevel</td>
+                        <td class="n">@M(a.CashSales)</td><td class="n">@M(a.CreditCardSales)</td><td class="n">@M(a.ServiceChargeSales)</td>
+                        <td class="n">@M(a.CreditCardTips)</td><td class="n">@M(a.ServiceChargeTips)</td><td class="n">@M(a.CashTips)</td>
+                        <td><button type="button" @onclick="() => EditAdjustment(a)">Edit</button> <button type="button" @onclick="() => DeleteAdjustmentAsync(a)">Delete</button></td>
+                    </tr>
+                }
+                @if (adjustments.Count == 0) { <tr><td colspan="14" class="muted">No adjustments for this batch.</td></tr> }
+            </tbody>
+        </table>
+
+        <h3>@(edit.ItemId == 0 ? "Add an adjustment" : "Change the adjustment")</h3>
+        @if (adjError is not null) { <p class="error" role="alert">@adjError</p> }
+        <EditForm Model="edit" OnSubmit="SaveAdjustmentAsync" FormName="adjustment" class="filters">
+            <label>Comes from
+                <select @bind="edit.OutStaff"><option value="0">(nobody)</option>@foreach (var s in staffList) { <option value="@s.Id">@s.Name</option> }</select></label>
+            <label>Department group
+                <select @bind="edit.OutGroup"><option value="0">(none)</option>@foreach (var g in groupList) { <option value="@g.Id">@g.Name</option> }</select></label>
+            <label>Tip out % <input type="number" step="any" @bind="edit.OutPercent" /></label>
+            <label>Goes to
+                <select @bind="edit.InStaff"><option value="0">(nobody)</option>@foreach (var s in staffList) { <option value="@s.Id">@s.Name</option> }</select></label>
+            <label>Department group
+                <select @bind="edit.InGroup"><option value="0">(none)</option>@foreach (var g in groupList) { <option value="@g.Id">@g.Name</option> }</select></label>
+            <label>Tip out % <input type="number" step="any" @bind="edit.InPercent" /></label>
+            <label>Source level <input type="number" step="1" @bind="edit.SourceLevel" /></label>
+            <label>Cash sales <input type="number" step="0.01" @bind="edit.CashSales" /></label>
+            <label>Credit card sales <input type="number" step="0.01" @bind="edit.CreditCardSales" /></label>
+            <label>Service charge sales <input type="number" step="0.01" @bind="edit.ServiceChargeSales" /></label>
+            <label>Credit card tips <input type="number" step="0.01" @bind="edit.CreditCardTips" /></label>
+            <label>Service charge tips <input type="number" step="0.01" @bind="edit.ServiceChargeTips" /></label>
+            <label>Cash tips <input type="number" step="0.01" @bind="edit.CashTips" /></label>
+            <button type="submit" disabled="@busy">Save</button>
+            @if (edit.ItemId != 0) { <button type="button" @onclick="NewAdjustment">Cancel change</button> }
+        </EditForm>
+        <p><button type="button" @onclick="CloseAdjustmentsAsync">Close adjustments and refresh</button></p>
+    }
+}
+
+@code {
+    private DDReview.Web.UserContext? ctx;
+    private bool allowed, busy, bySource, byReceipt;
+    private IReadOnlyList<StoreInfo> stores = [];
+    private int storeId;
+    private DateTime date = DateTime.Today.AddDays(-1);
+    private TipOutScreen? screen;
+    private string? error, notice, adjError;
+    // what the shown screen was retrieved with (the form fields can change after Retrieve)
+    private DateOnly shownDate; private bool shownBySource; private int shownStore; private bool shownByReceipt;
+    private int staffFilter; private string? staffFilterName;
+
+    private int? adjBatch; private string? adjName; private int adjStore;
+    private IReadOnlyList<TipOutAdjustment> adjustments = [];
+    private IReadOnlyList<LookupItem> staffList = [], groupList = [];
+    private AdjEdit edit = new();
+
+    private sealed class AdjEdit
+    {
+        public int ItemId, OutStaff, OutGroup, InStaff, InGroup, SourceLevel = 3;
+        public decimal OutPercent, InPercent, CashSales, CreditCardSales, ServiceChargeSales, CreditCardTips, ServiceChargeTips, CashTips;
+    }
+
+    private static string M(decimal v) => v.ToString("N2", CultureInfo.InvariantCulture);
+    private static string Tip(string label, decimal? adjusted, decimal total) =>
+        adjusted is null ? "" : $"{label} adjustments: {M(adjusted.Value)}, Digital Dining {label.ToLowerInvariant()}: {M(total - adjusted.Value)}";
+    private string GroupName(int? id) => id is null ? "" : groupList.FirstOrDefault(g => g.Id == id)?.Name ?? "";
+    private string ReportUrl() => $"/consolidated/report?store={shownStore}&date={shownDate:yyyy-MM-dd}&receipt={(shownByReceipt ? 1 : 0)}";
+    private string LettersUrl() => $"/consolidated/letters?store={shownStore}&end={shownDate:yyyy-MM-dd}&receipt={(shownByReceipt ? 1 : 0)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        ctx = await Users.GetAsync();
+        if (ctx is null) return;
+        allowed = (ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.Payroll))
+                  && await Features.IsEnabledAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+        if (!allowed) return;
+        stores = await StoreLookup.LoadAuthorizedAsync(ctx.ClientConnectionString, ctx.Access, ReportKind.Payroll);
+        if (stores.Count == 1) storeId = stores[0].StoreId;
+    }
+
+    private IReadOnlySet<int> Authorized() => stores.Select(s => s.StoreId).ToHashSet();
+
+    private async Task RetrieveAsync(bool resetDrill)
+    {
+        if (busy || ctx is null) return;
+        busy = true; error = null; notice = null;
+        try
+        {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+            if (storeId == 0) { error = "Select a store."; return; }
+            if (resetDrill) { staffFilter = 0; staffFilterName = null; await CloseAdjustmentPanel(); }
+            var d = DateOnly.FromDateTime(date);
+            screen = await Svc.RetrieveAsync(ctx.ClientConnectionString, Authorized(), storeId, d, bySource, byReceipt, staffFilter);
+            shownDate = d; shownBySource = bySource; shownStore = storeId; shownByReceipt = byReceipt;
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The tip outs could not be read. Check that the database login may run cs_spConsolidatedTipOut3Crunch2 and read fn_ConsolidatedTipOut32."; }
+        finally { busy = false; }
+    }
+
+    private async Task DrillAsync(TipOutRow r)
+    {
+        // The Access double-click opened a one-person view in source-level mode; here it filters this screen.
+        staffFilter = r.StoreStaffId; staffFilterName = r.EmployeeName; bySource = true;
+        await RetrieveAsync(false);
+    }
+
+    private async Task ShowEveryoneAsync() { staffFilter = 0; staffFilterName = null; await RetrieveAsync(false); }
+
+    private async Task OpenAdjustmentsAsync(TipOutRow r)
+    {
+        if (ctx is null || r.BatchId is null) return;
+        adjError = null;
+        try
+        {
+            (staffList, groupList) = await Svc.LookupsAsync(ctx.ClientConnectionString, Authorized(), r.StoreId);
+            adjBatch = r.BatchId; adjStore = r.StoreId; adjName = staffFilter != 0 ? staffFilterName : null;
+            await LoadAdjustmentsAsync();
+            NewAdjustment();
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { error = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { error = "The adjustments could not be read."; }
+    }
+
+    private async Task LoadAdjustmentsAsync()
+    {
+        if (ctx is null || adjBatch is null) return;
+        adjustments = await Svc.ListAdjustmentsAsync(ctx.ClientConnectionString, Authorized(), adjBatch.Value, staffFilter);
+    }
+
+    private void NewAdjustment() { edit = new AdjEdit(); adjError = null; }
+
+    private void EditAdjustment(TipOutAdjustment a)
+    {
+        adjError = null;
+        edit = new AdjEdit
+        {
+            ItemId = a.ItemId, OutStaff = a.SubtractStoreStaffId ?? 0, OutGroup = a.SubtractStaffDepartmentGroupId ?? 0, OutPercent = a.SubtractTipOutPercentage,
+            InStaff = a.AddStoreStaffId ?? 0, InGroup = a.AddStaffDepartmentGroupId ?? 0, InPercent = a.AddTipOutPercentage, SourceLevel = a.SourceLevel,
+            CashSales = a.CashSales, CreditCardSales = a.CreditCardSales, ServiceChargeSales = a.ServiceChargeSales,
+            CreditCardTips = a.CreditCardTips, ServiceChargeTips = a.ServiceChargeTips, CashTips = a.CashTips
+        };
+    }
+
+    private async Task SaveAdjustmentAsync()
+    {
+        if (busy || ctx is null || adjBatch is null) return;
+        busy = true; adjError = null;
+        try
+        {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+            int? N(int v) => v == 0 ? null : v;
+            var a = new TipOutAdjustment(edit.ItemId, adjBatch.Value, N(edit.OutStaff), N(edit.OutGroup), edit.OutPercent, N(edit.InStaff), N(edit.InGroup), edit.InPercent, edit.SourceLevel,
+                edit.CashSales, edit.CreditCardSales, edit.ServiceChargeSales, edit.CreditCardTips, edit.ServiceChargeTips, edit.CashTips);
+            await Svc.SaveAdjustmentAsync(ctx.ClientConnectionString, Authorized(), a);
+            await LoadAdjustmentsAsync();
+            NewAdjustment();
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { adjError = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { adjError = "The adjustment could not be saved. The database login may need permission to change the adjustments table."; }
+        finally { busy = false; }
+    }
+
+    private async Task DeleteAdjustmentAsync(TipOutAdjustment a)
+    {
+        if (busy || ctx is null || adjBatch is null) return;
+        busy = true; adjError = null;
+        try
+        {
+            await Features.RequireAsync(ctx.ClientConnectionString, ctx.Access, WebFeature.ConsolidatedPayroll);
+            await Svc.DeleteAdjustmentAsync(ctx.ClientConnectionString, Authorized(), adjBatch.Value, a.ItemId);
+            await LoadAdjustmentsAsync();
+            if (edit.ItemId == a.ItemId) NewAdjustment();
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException) { adjError = ex.Message; }
+        catch (Microsoft.Data.SqlClient.SqlException) { adjError = "The adjustment could not be deleted."; }
+        finally { busy = false; }
+    }
+
+    private Task CloseAdjustmentPanel() { adjBatch = null; adjustments = []; return Task.CompletedTask; }
+
+    private async Task CloseAdjustmentsAsync()
+    {
+        await CloseAdjustmentPanel();
+        await RetrieveAsync(false);     // the Access datasheet refreshed the form when it closed
+    }
+}
