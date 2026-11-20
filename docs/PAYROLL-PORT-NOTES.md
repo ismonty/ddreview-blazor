@@ -61,3 +61,12 @@ Built from the Angus Barn schema script, whose objects override the first schema
 - **AB HRS, DCL and AD2 codes** in Vicky's Paycor import: origin unknown (probably entered by hand).
 - Rates (3.2%, 1.75%) and excluded departments or pay methods should become per-client settings.
 - **Join rule for new SQL.** Receipt types (and most other tables) are per `StoreID`, and a past store switch means the same `ReceiptTypeID` exists under two stores. Any join between tables that both have `StoreID` must include it, or rows double. Existing objects were only spot-checked for this; none in the consolidated or payroll path were found to be affected.
+
+## New-format tips (script 020, for the "new company" database)
+
+- `dbo.fn_TipsByEmployee(@StoreIDList, @Start, @End)`: one row per store, employee and department group. It reads the receipts directly (no work table, so nothing stale and no crunch step) and returns the pay lines **CTP** (cash tips), **CCT** (credit card tips less the tip out on cash and card sales, plus the voluntary tip on top of a service charge, tip net of the card fee) and **SVC** (service charge gross, less the 1.75% card fee on the card-paid part, less the tip out on service charge sales). It also returns the pieces separately (`ServiceChargeGross`, `ServiceChargeFee`, `VoluntaryTipOnServiceCharge`, the two tip outs) for the two-part report and letters.
+- `dbo.fn_CustomReport_TipsExportNew`: the Paycor import lines built from it, one CTP/CCT/SVC line per employee and payroll department. It honors the store list. Add it to that database's `fn_CustomReports_Index` to get it on the Exports page.
+- The consolidated screen's manual moves (adjustments table) are applied the same way. Old objects are untouched.
+- **Written without a live database to run against.** First check: pick a pay period, compare `fn_TipsByEmployee` with the consolidated screen and with Vicky's spreadsheet figures (e.g. a server's SC 226.80, fee 3.97, tip out 36.29, SVC 186.54).
+- Known simplifications: the 1.75 is a constant in the script (becomes a per-client setting); a service charge check is any check whose receipts carry a charge (as Crunch2); the voluntary tip uses the fee already stored on the receipt rather than recomputing 1.75% as Crunch2 does for its discretionary column.
+- `fn_CustomReport_TipsExport` (old) joins `tblStaffDepartments` on StoreID alone, which repeats each employee's rows once per department of the store and so can multiply the cash tip sums. The new function does not do this.

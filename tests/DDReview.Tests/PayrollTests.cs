@@ -192,7 +192,8 @@ public class FeatureSwitchTests
     public void The_switch_script_is_registered_after_the_grant_procedure_and_adds_only_a_table()
     {
         var s = DDReview.Core.Updater.ClientScripts.All.Single(x => x.Id == "019");
-        Assert.Equal("019", DDReview.Core.Updater.ClientScripts.All[^1].Id);
+        var ids = DDReview.Core.Updater.ClientScripts.All.Select(x => x.Id).ToList();
+        Assert.True(ids.IndexOf("019") > ids.IndexOf("004"));
         var sql = s.ReadSql();
         Assert.Contains("create table dbo.tblWebUserFeatures", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("drop ", sql, StringComparison.OrdinalIgnoreCase);

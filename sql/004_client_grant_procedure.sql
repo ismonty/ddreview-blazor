@@ -56,6 +56,10 @@ begin
         insert @todo (Stmt) values (N'grant select on dbo.fn_ConsolidatedTipOutADPExport3 to ' + @q + N';');
     if object_id(N'dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments', N'U') is not null
         insert @todo (Stmt) values (N'grant select, insert, update, delete on dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments to ' + @q + N';');
+    if object_id(N'dbo.fn_TipsByEmployee', N'IF') is not null
+        insert @todo (Stmt) values (N'grant select on dbo.fn_TipsByEmployee to ' + @q + N';');
+    if object_id(N'dbo.fn_CustomReport_TipsExportNew', N'TF') is not null
+        insert @todo (Stmt) values (N'grant select on dbo.fn_CustomReport_TipsExportNew to ' + @q + N';');
     -- custom report exports: the index function and every report function it lists (a name that is not a plain dbo function is skipped)
     if object_id(N'dbo.fn_CustomReports_Index') is not null
     begin

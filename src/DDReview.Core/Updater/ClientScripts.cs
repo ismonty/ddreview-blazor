@@ -110,6 +110,12 @@ public static class ClientScripts
                                and has_perms_by_name('dbo.tblWebUserFeatures', 'OBJECT', 'INSERT') = 1
                                and has_perms_by_name('dbo.tblWebUserFeatures', 'OBJECT', 'DELETE') = 1 then 1 else 0 end as int) as Usable",
             "grant select, insert, delete on dbo.tblWebUserFeatures to [{user}];  "),
+        new("020", "Tips by employee for the 2025 tip law: dbo.fn_TipsByEmployee and dbo.fn_CustomReport_TipsExportNew (nothing existing is changed)", "ClientScripts/020_client_tips_by_employee.sql",
+            @"select cast(case when object_id('dbo.fn_TipsByEmployee', 'IF') is not null and object_id('dbo.fn_CustomReport_TipsExportNew', 'TF') is not null then 1 else 0 end as int) as Present,
+                     cast(case when object_id('dbo.tblCashAndSalesReceiptsDetail', 'U') is not null and object_id('dbo.tblCashAndSalesTimeEntries', 'U') is not null
+                               and object_id('dbo.tblStaffDepartmentGroups', 'U') is not null
+                               and object_id('dbo.tblCashAndSalesTimeEntriesConsolidatedTipOutAdjustments', 'U') is not null then 1 else 0 end as int) as Usable",
+            "grant select on dbo.fn_TipsByEmployee to [{user}]; grant select on dbo.fn_CustomReport_TipsExportNew to [{user}];  "),
     ];
 }
 
