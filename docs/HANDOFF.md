@@ -39,6 +39,7 @@ database for the objects DD Review adds (scripts 002 and 004, embedded from `/sq
 itself rights: if the reports' login lacks db_ddladmin it shows the `sp_addrolemember` line to run, and the grant procedure covers the grants.
 
 ## Not ported / open
+- Submission reports are ported (slice 10 in PORTING-NOTES) but not yet seen on staging.
 - Downloads/Payments tab (owner said hold), Options tab, Link/Print, Specials/Daily Discounts, L0-L3/LY buttons, Costs review, saved per-column sort strings, Back/Forward click history.
 - Receipts "Credit Card/Cash" conversion error on an older-schema client DB was fixed (ReceiptClass key column name); the class/type cell not being a link there needs re-checking after the fix.
 - Labor: crash on empty result fixed; employee click now opens punch detail; a client DB where Labor returned no rows at first still needs a look (send the generated script and run in SSMS to find out why).
@@ -51,7 +52,19 @@ itself rights: if the reports' login lacks db_ddladmin it shows the `sp_addrolem
   `Authentication:Google:ClientId/ClientSecret` in `appsettings.Production.json`, sql 003 on the central master with grants); sql 002 and 004 in each client DB (use the Database updater, then
   `exec dbo.usp_DDReviewGrantAccess @UserName = N'<web login user>', @Execute = 1;`). The deploy script's final self-check cannot reach the public name from the server (only a warning).
 - Not tried on staging yet: the Database updater itself, the new GL modes, the all-zero skipping (all pass tests only).
-- Auto-deploy is the owner's to set up. Pull request #1 is still open and unmerged.
+- Everything is merged into `main` (PR #1 and the dashboard PR #2). `deploy\Deploy-Auto.ps1` + `Register-AutoDeploy.ps1` (staging auto-deploy from `main`, docs/DEPLOY-STAGING.md) and `deploy\Deploy-Production.ps1` (manual, only a commit staging runs; docs/DEPLOY-PRODUCTION.md, https://blazor.ddreview.com) are written but not yet run on the server.
+
+## The old site behind the new one (built and working, 2026-11-01)
+Done and merged: the old WebForms site runs on the server as IIS site `ddreview-classic` (127.0.0.1:8081 only, application `/classic`) and the new app proxies it at `/classic` after sign-in
+(YARP; `LegacyProxy` section in `appsettings.Production.json`, off unless `Enabled`). A signed one-time ticket (`/classic-enter`) gives one sign-in; there is a Classic link in the top nav and a
+"signed out of Classic" page. Design and install lessons: `docs/LEGACY-PROXY-PLAN.md`, `docs/LEGACY-OLDSIDE.md` (what is built in VS 2008). The owner builds the old-side code; Claude cannot compile it.
+Still open:
+- Least-privilege SQL for the old site (`sql/005`, `sql/006`, login `ddreview_classic`): run on the central master and Valentini's. Not yet run on the other client data server (owner needs its admin password).
+  The old site still connects with its original login; switching its `web.config` to `ddreview_classic` is not done. Unconfirmed: whether client pages take their login from the connection strings stored in the central master.
+- Check the owner's VS 2008 handoff edits (`LegacyHandoff.cs`, csproj line, `LoginPage.aspx.cs`) into their own source control.
+- Not yet looked at on staging: stacked Discounts on the dashboard/Daily Summary charts, header width on a phone, zero-day submission reports left out, the signed-out page, friendly store names (`StoreReportName`) in dropdowns.
+- Optional: the old master page background `~/images/...` does not load through the proxy.
+Store names: `StoreName` is the licensed hard lock name (it is on the stored submission report picture); `StoreReportName` is the display name, shown almost everywhere (`StoreLookup.NameSql`).
 
 ## Resources the owner has (on the owner's computer, reachable when the session is linked to it)
 - Original source: `C:\Users\ismon\source\repos\DDReview` (solution `DDReviewDev.sln`; `DDReview\` and `DDReviewMarauder\` web projects, `DDReviewAppCode\App_Code` shared classes:

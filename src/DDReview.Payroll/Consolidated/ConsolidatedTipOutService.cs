@@ -39,7 +39,7 @@ public sealed record TipOutAdjustment(
     decimal CashSales, decimal CreditCardSales, decimal ServiceChargeSales, decimal CreditCardTips, decimal ServiceChargeTips, decimal CashTips,
     string? OutTipper = null, string? InTipper = null);
 
-public sealed record NamedId(int Id, string Name);
+public sealed record LookupItem(int Id, string Name);
 
 /// <summary>One person's compliance letter data: the period and the year to date.</summary>
 public sealed record ComplianceRow(
@@ -229,19 +229,19 @@ public sealed class ConsolidatedTipOutService
     }
 
     /// <summary>The names for the adjustment drop-downs: staff and department groups for the batch's store.</summary>
-    public async Task<(IReadOnlyList<NamedId> Staff, IReadOnlyList<NamedId> Groups)> LookupsAsync(string connectionString, IReadOnlySet<int> authorizedStoreIds, int storeId, CancellationToken ct = default)
+    public async Task<(IReadOnlyList<LookupItem> Staff, IReadOnlyList<LookupItem> Groups)> LookupsAsync(string connectionString, IReadOnlySet<int> authorizedStoreIds, int storeId, CancellationToken ct = default)
     {
         RequireStore(authorizedStoreIds, storeId);
         await using var cn = new SqlConnection(connectionString);
         await cn.OpenAsync(ct);
-        var staff = new List<NamedId>();
+        var staff = new List<LookupItem>();
         await using (var cmd = new SqlCommand("select StoreStaffID, isnull(ltrim(rtrim(LastName)) + ', ', '') + isnull(ltrim(rtrim(FirstName)), '') as FullName from dbo.tblStaff where StoreID = @s order by LastName, FirstName", cn) { CommandTimeout = 60 })
         {
             cmd.Parameters.Add("@s", SqlDbType.Int).Value = storeId;
             await using var rd = await cmd.ExecuteReaderAsync(ct);
             while (await rd.ReadAsync(ct)) staff.Add(new(Convert.ToInt32(rd[0]), Convert.ToString(rd[1]) ?? ""));
         }
-        var groups = new List<NamedId>();
+        var groups = new List<LookupItem>();
         await using (var cmd = new SqlCommand("select StaffDepartmentGroupID, StaffDepartmentGroup from dbo.tblStaffDepartmentGroups where StoreID = @s order by StaffDepartmentGroupSort", cn) { CommandTimeout = 60 })
         {
             cmd.Parameters.Add("@s", SqlDbType.Int).Value = storeId;

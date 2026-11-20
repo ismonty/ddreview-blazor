@@ -1,0 +1,11 @@
+@inject SetupAccessService Access
+
+@if (show) { <a href="/admin/setup">Setup</a> }
+
+@code {
+    private bool show;
+    protected override async Task OnInitializedAsync()
+    {
+        try { show = await Access.ShowLinkAsync(); } catch (Microsoft.Data.SqlClient.SqlException) { show = false; }
+    }
+}

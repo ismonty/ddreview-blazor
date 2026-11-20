@@ -42,6 +42,10 @@ public static class PlanBuilder
         var rows = InPostingOrder(unsortedRows);
         var plan = new PostingPlan();
         bool package7Present = rows.Any(r => r.PackageNumber == 7);
+        // How each account is used on the transaction lines (debits minus credits), for accounts whose type is not set in DD Review.
+        var usage = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        foreach (var u in rows)
+            if (u.PackageNumber == 99 && u.Account != null) { var key = QbText.TrimSpacesAroundColons(u.Account); usage[key] = usage.GetValueOrDefault(key) + Net(u); }
 
         foreach (var r in rows)
         {
@@ -52,8 +56,17 @@ public static class PlanBuilder
                     break;
                 case 2:
                     if (r.DefaultQuickBooksType != null && r.Account != null)
-                        plan.Objects.Add(new ObjectRequirement(ObjectKind.Account, QbText.TrimSpacesAroundColons(r.Account))
-                        { DefaultAccountType = QbText.AccountType(r.DefaultQuickBooksType) });
+                    {
+                        // QuickBooks takes only its own type names. A type DD Review holds as text ("Other Current Asset", "Checking or Savings") is turned into one;
+                        // a store that never set it holds "0", which QuickBooks refuses, so a type is guessed and Preview says so.
+                        var name = QbText.TrimSpacesAroundColons(r.Account);
+                        var type = QbAccountTypes.Normalize(r.DefaultQuickBooksType);
+                        plan.Objects.Add(new ObjectRequirement(ObjectKind.Account, name)
+                        {
+                            DefaultAccountType = type ?? QbAccountTypes.Guess(name, usage.GetValueOrDefault(name), usage.ContainsKey(name)),
+                            GuessedTypeFrom = type is null ? r.DefaultQuickBooksType.Trim() : null,
+                        });
+                    }
                     break;
                 case 3:
                     {

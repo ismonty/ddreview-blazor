@@ -26,6 +26,8 @@ public sealed class PostingReport
     public bool Committed { get; init; }
     public List<StepResult> Objects { get; } = new();
     public List<StepResult> Transactions { get; } = new();
+    /// <summary>Things worth a look that are not failures, for example an account type that had to be guessed.</summary>
+    public List<string> Warnings { get; } = new();
     public IEnumerable<StepResult> Added => Transactions.Where(t => t.Outcome == StepOutcome.Created);
     public IEnumerable<StepResult> Modified => Transactions.Where(t => t.Outcome == StepOutcome.Modified);
     public IEnumerable<StepResult> Unchanged => Transactions.Where(t => t.Outcome == StepOutcome.Unchanged);
@@ -115,6 +117,8 @@ public sealed class PostingEngine
                 }
                 continue;
             }
+            if (o.Kind == ObjectKind.Account && o.GuessedTypeFrom != null && accountType == o.DefaultAccountType)
+                report.Warnings.Add($"Account \"{name}\": DD Review has no QuickBooks type for it (it holds \"{o.GuessedTypeFrom}\"), so it {(commit ? "was" : "will be")} created as {accountType}. Set the QuickBooks type in DD Review to choose it yourself.");
             if (!commit) { report.Objects.Add(new($"{o.Kind} {name}", StepOutcome.Created)); continue; }
             var create = new XElement(step.Create);
             if (o.Kind == ObjectKind.Account)

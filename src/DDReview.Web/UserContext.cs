@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using DDReview.Core.Admin;
 using DDReview.Core.Tenancy;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Caching.Memory;
@@ -12,11 +13,14 @@ public sealed class UserContextService(
     AuthenticationStateProvider auth, ICentralDirectory central, ITenantConnectionFactory tenants,
     ClientAccessService clientAccess, IMemoryCache cache)
 {
-    public async Task<UserContext?> GetAsync(CancellationToken ct = default)
+    public async Task<UserContext?> GetAsync(CancellationToken ct = default) =>
+        await GetAsync((await auth.GetAuthenticationStateAsync()).User, ct);
+
+    /// <summary>For plain endpoints (no Blazor circuit): the same context from the request's signed-in user.</summary>
+    public async Task<UserContext?> GetAsync(ClaimsPrincipal user, CancellationToken ct = default)
     {
-        var user = (await auth.GetAuthenticationStateAsync()).User;
         if (!int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id)) return null;
-        return await cache.GetOrCreateAsync($"ctx:{id}", async e =>
+        var ctx = await cache.GetOrCreateAsync($"ctx:{id}", async e =>
         {
             e.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
             var acct = await central.GetByIdAsync(id, ct);
@@ -25,6 +29,16 @@ public sealed class UserContextService(
             var access = await clientAccess.LoadAsync(cs, acct.ClientUser, acct.ClientPassword, ct);
             return access is null ? null : new UserContext(id, acct.UserName, cs, access, acct);
         });
+        // A top-level administrator (signed in with Google) is an administrator in every database they open. Checked against the central
+        // database (cached for a minute), so removing someone from the list takes effect quickly.
+        if (ctx is not null && !ctx.Access.Administrator && SetupClaims.IsGoogleSession(user) && user.FindFirstValue(GoogleClaims.Subject) is { } sub
+            && await cache.GetOrCreateAsync($"topadmin:{sub}", async e =>
+            {
+                e.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1);
+                try { return await central.IsTopAdminAsync(sub, null, false, ct); } catch (Microsoft.Data.SqlClient.SqlException) { return false; }
+            }))
+            return ctx with { Access = ctx.Access.AsAdministrator() };
+        return ctx;
     }
 }
 

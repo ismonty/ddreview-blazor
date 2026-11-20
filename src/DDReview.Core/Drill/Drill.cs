@@ -15,8 +15,10 @@ namespace DDReview.Core.Drill;
 /// <param name="NameFunction">Client-database function that turns a clicked name into the id list (same-named items in several stores); null = use the id.</param>
 /// <param name="SortColumn">Column the dimension sorts by when it is not the display text (a day number rather than a day name).</param>
 /// <param name="FilterName">Name of the request's filter list when it differs from the key.</param>
+/// <param name="IdByName">Fixed name-to-id table used only when the row's id column is empty or missing (the receipt classes, whose
+/// names and ids are fixed in the report's own SQL); null = no fallback.</param>
 public sealed record DrillColumn(string Key, string[] Display, string IdColumn, string NextKey, string? NameFunction = null,
-    string? SortColumn = null, string? FilterName = null)
+    string? SortColumn = null, string? FilterName = null, IReadOnlyDictionary<string, string>? IdByName = null)
 {
     public string Filter => FilterName ?? Key;
 }
@@ -50,8 +52,8 @@ public sealed class DrillState
     {
         var c = Find(cols, key); if (c is not null) Flags.Add(c.NextKey);
     }
-    /// <summary>"Show All": forget this dimension's filter.</summary>
-    public void ShowAll(string key) => Filters.Remove(key);
+    /// <summary>"Show All": forget this dimension's filter and group by the dimension, so its values are listed rather than lost.</summary>
+    public void ShowAll(string key) { Filters.Remove(key); Flags.Add(key); }
     /// <summary>A row's cell was clicked: filter to it, stop grouping by it, group by the next dimension.</summary>
     public void RowClick(IReadOnlyList<DrillColumn> cols, string key, string filterValue)
     {
@@ -174,9 +176,17 @@ public sealed class DrillKeyResolver
         row.Table.Columns.Contains(column) && row[column] is not DBNull
             ? Convert.ToString(row[column], System.Globalization.CultureInfo.InvariantCulture)!.Trim() : "";
 
+    /// <summary>The row's id for a dimension: the id column, or (only when that is empty) the fixed id of the row's name.</summary>
+    static string IdOf(DataRow row, DrillColumn col)
+    {
+        var id = Cell(row, col.IdColumn);
+        if (id.Length > 0 || col.IdByName is null) return id;
+        return col.IdByName.TryGetValue(Cell(row, col.Display[^1]), out var byName) ? byName : "";
+    }
+
     /// <summary>A cell is clickable when it has what the filter is built from: the name for name-looked-up dimensions (as in the old grid), otherwise the id.</summary>
     public static bool CanClick(DataRow row, DrillColumn col) =>
-        Cell(row, col.NameFunction is not null && Functions.Contains(col.NameFunction) ? col.Display[^1] : col.IdColumn).Length > 0;
+        (col.NameFunction is not null && Functions.Contains(col.NameFunction) ? Cell(row, col.Display[^1]) : IdOf(row, col)).Length > 0;
 
     /// <summary>
     /// The filter for a click: the clicked row plus every checked row (the old grid's row check boxes), each added once.
@@ -190,7 +200,7 @@ public sealed class DrillKeyResolver
         bool byName = col.NameFunction is not null && Functions.Contains(col.NameFunction);
         if (!byName)
         {
-            var ids = rows.Select(r => Cell(r, col.IdColumn)).Where(x => x.Length > 0).Distinct().ToList();
+            var ids = rows.Select(r => IdOf(r, col)).Where(x => x.Length > 0).Distinct().ToList();
             var joined = string.Join(",", ids);
             return Safe.IsMatch(joined) ? joined : "";
         }
@@ -224,8 +234,17 @@ public static class FilterText
 {
     public static string Names(System.Data.DataTable? result, IReadOnlyList<DrillColumn> cat, string key, int max = 4)
     {
+        var names = List(result, cat, key);
+        if (names.Count == 0) return "";
+        var more = names.Count > max ? $" +{names.Count - max} more" : "";
+        return string.Join(", ", names.Take(max)) + more;
+    }
+
+    /// <summary>The distinct names for a filter's dimension found in the result rows (empty when there are none).</summary>
+    public static List<string> List(System.Data.DataTable? result, IReadOnlyList<DrillColumn> cat, string key)
+    {
         var col = DrillState.Find(cat, key);
-        if (result is null || col is null) return "";
+        if (result is null || col is null) return [];
         var names = new List<string>();
         foreach (var c in col.Display)
         {
@@ -235,8 +254,6 @@ public static class FilterText
                 .Where(v => v.Length > 0 && !v.Equals("All", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
             if (part.Count > 0) { names = part; if (c == col.Display[^1]) break; }
         }
-        if (names.Count == 0) return "";
-        var more = names.Count > max ? $" +{names.Count - max} more" : "";
-        return string.Join(", ", names.Take(max)) + more;
+        return names;
     }
 }

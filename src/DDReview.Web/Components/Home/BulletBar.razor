@@ -1,15 +1,18 @@
-@* The Daily Summary bar: sales bar, last-year and budget markers, and a box for labor + product cost (and purchases). *@
+@* The Daily Summary bar: net sales with discounts and voids stacked beyond it, last-year and budget markers, and a box for labor then product cost (and purchases). *@
 @using System.Globalization
 @{
     double Sx(decimal v) => 10 + 480 * Math.Clamp(Scale <= 0 ? 0 : (double)v / Scale, 0, 1);
-    var cost = Labor + ProductCost;
+    // Classic layering, back to front: Net + Discounts + Voids (steel blue), Net + Discounts (dark blue), Net (front). Labor then cost stack in the box.
+    decimal withDisc = Sales + Math.Abs(Discounts), withVoids = withDisc + Math.Abs(Voids);
 }
 <svg viewBox="0 0 500 70" class="bullet" width="100%" role="img" aria-label="Sales against last year and budget">
     <rect x="1" y="1" width="498" height="68" rx="3" fill="#b9bbbd" stroke="#6d6f71" />
-    <rect x="10" y="22" width="@F(Sx(cost) - 10)" height="26" fill="#a6a8aa" stroke="#555" />
+    <rect x="10" y="22" width="@F(Sx(Labor) - 10)" height="26" fill="#8d8f91" stroke="#555"><title>Labor: @Labor.ToString("N2", CultureInfo.InvariantCulture)</title></rect>
+    <rect x="@F(Sx(Labor))" y="22" width="@F(Sx(Labor + ProductCost) - Sx(Labor))" height="26" fill="#b4b6b8" stroke="#555"><title>Theoretical cost: @ProductCost.ToString("N2", CultureInfo.InvariantCulture)</title></rect>
     @if (Purchases > 0) { <rect x="10" y="18" width="@F(Sx(Purchases) - 10)" height="6" fill="#7a7c7e" /> }
-    <rect x="10" y="26" width="@F(Sx(Sales) - 10)" height="18" fill="#4f78d4" stroke="#1f3a7a" />
-    <rect x="@F(Sx(Sales) - 6)" y="26" width="6" height="18" fill="#10206a" />
+    @if (Voids != 0) { <rect x="10" y="26" width="@F(Sx(withVoids) - 10)" height="18" fill="#4682b4" stroke="#1f3a7a"><title>Voids: @Math.Abs(Voids).ToString("N2", CultureInfo.InvariantCulture)</title></rect> }
+    @if (Discounts != 0) { <rect x="10" y="26" width="@F(Sx(withDisc) - 10)" height="18" fill="#10206a" stroke="#1f3a7a"><title>Discounts: @Math.Abs(Discounts).ToString("N2", CultureInfo.InvariantCulture)</title></rect> }
+    <rect x="10" y="26" width="@F(Sx(Sales) - 10)" height="18" fill="#4f78d4" stroke="#1f3a7a"><title>Net sales: @Sales.ToString("N2", CultureInfo.InvariantCulture)</title></rect>
     <line x1="@F(Sx(PreviousSales))" y1="14" x2="@F(Sx(PreviousSales))" y2="56" stroke="#111" stroke-width="2"><title>Last year: @PreviousSales.ToString("N2", CultureInfo.InvariantCulture)</title></line>
     @if (Budget > 0) { <line x1="@F(Sx(Budget))" y1="10" x2="@F(Sx(Budget))" y2="60" stroke="#8a1f1f" stroke-width="2" stroke-dasharray="3 2"><title>Budget: @Budget.ToString("N2", CultureInfo.InvariantCulture)</title></line> }
     @for (int i = 0; i <= 4; i++)
@@ -25,6 +28,8 @@
     [Parameter] public decimal Labor { get; set; }
     [Parameter] public decimal ProductCost { get; set; }
     [Parameter] public decimal Purchases { get; set; }
+    [Parameter] public decimal Discounts { get; set; }
+    [Parameter] public decimal Voids { get; set; }
     [Parameter] public double Scale { get; set; } = 1000;
     static string F(double d) => d.ToString("0.##", CultureInfo.InvariantCulture);
 }

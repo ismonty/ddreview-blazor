@@ -11,7 +11,7 @@
 @using DDReview.Web.Components.Home
 
 <PageTitle>MontySoft DD Review™</PageTitle>
-<h1>Receipts review</h1>
+<h1>Receipts Review</h1>
 
 @if (ctx is null) { <p>Loading…</p> }
 else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
@@ -20,8 +20,10 @@ else
     <EditForm Model="this" OnSubmit="RunAsync" FormName="receipts" class="filters">
         <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
         <MultiSelect Caption="View by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<ReceiptsDimensions>(t.Key), t.On)" />
-        <label>Starting date <input type="date" @bind="start" /></label>
-        <label>Ending date <input type="date" @bind="end" /></label>
+        <label>Starting Date <input type="date" @bind="start" @bind:after="StartChanged" /></label>
+        <DatePreset Label="Start Shortcuts" Options="DatePreset.StartOptions" OnPick="StartPick" />
+        <label>Ending Date <input type="date" @bind="end" @bind:after="EndChanged" /></label>
+        <DatePreset Label="End Shortcuts" Options="DatePreset.EndOptions" OnPick="EndPick" />
         <button type="submit" disabled="@busy">@(busy ? "Running…" : "Submit")</button>
     </EditForm>
 
@@ -32,9 +34,7 @@ else
         <p>@result.Rows.Count record(s)</p>
         @if (state.Filters.Count > 0)
         {
-            <p class="filters-on">Filtered on:
-                @foreach (var k in state.Filters.Keys.ToList()) {<button type="button" class="hlink" title="Show All" @onclick="() => Act(s => s.ShowAll(k))">@FilterLabel(k) ✕</button>}
-            </p>
+            <FilterBoxes Boxes="Boxes()" OnShowAll="k => Act(st => st.ShowAll(k))" />
         }
         <table class="receipts">
             <thead>
@@ -51,9 +51,23 @@ else
                         }
                         else { <DrillHeader Title="@l.Label" Sortable="true" Mark="@Mark(l.Label)" OnSort="() => state.Sort(l.Label, false)" /> }
                     }
+                    @if (weekdays)
+                    {
+                        <th></th>
+                        @foreach (var d in ReceiptsWeekdays.Days) { <th class="n">@d</th> }
+                        <th class="n">
+                            <select aria-label="Sort by" @onchange="e => SortWeek(e.Value?.ToString())">
+                                <option value="">Sort by…</option>
+                                @foreach (var l in ReceiptsWeekdays.Lines.Select(x => x.Label).Distinct()) { <option value="@l" selected="@(state.SortHeader == WeekKey(l))">@l</option> }
+                            </select>
+                        </th>
+                    }
+                    else
+                    {
                     @foreach (var c in ReceiptsLayout.Columns)
                     {
                         <th class="n stack">@foreach (var line in c.Lines) {<div><button type="button" class="hlink" title="Sort by this" @onclick="() => state.Sort(LineKey(c, line), true)">@line.Label@Mark(LineKey(c, line))</button></div>}</th>
+                    }
                     }
                 </tr>
             </thead>
@@ -67,9 +81,21 @@ else
                             var dc = DrillState.ForDisplay(Cat, l.Column);
                             <td>@if (dc is not null && CanClick(row, dc)) { <button type="button" class="cell" @onclick="() => RowClick(dc, row)">@Text(row, l.Column)</button> } else { @Text(row, l.Column) }</td>
                         }
+                        @if (weekdays)
+                        {
+                            <td class="n stack wklabels">@foreach (var l in WkLines) {<div class="@(l.Bold ? "b" : null)">@l.Label</div>}</td>
+                            @for (var d = 0; d < 8; d++)
+                            {
+                                var dd = d;
+                                <td class="n stack">@foreach (var l in WkLines) {<div class="@(l.Bold ? "b" : null)">@ReceiptsWeekdays.Cell(row, l, dd)</div>}</td>
+                            }
+                        }
+                        else
+                        {
                         @foreach (var c in ReceiptsLayout.Columns)
                         {
                             <td class="n stack">@foreach (var line in c.Lines) {<div class="@(line.Bold ? "b" : null)">@ReceiptsLayout.Format(row, line)</div>}</td>
+                        }
                         }
                     </tr>
                 }
@@ -79,19 +105,41 @@ else
                 <tr class="total">
                     <td>Total</td>
                     @foreach (var l in Leading) { <td></td> }
+                    @if (weekdays)
+                    {
+                        var wsums = ReceiptsWeekdays.Sums(result);
+                        <td class="n stack wklabels">@foreach (var l in WkLines) {<div class="@(l.Bold ? "b" : null)">@l.Label</div>}</td>
+                        @for (var d = 0; d < 8; d++)
+                        {
+                            var dd = d;
+                            <td class="n stack">@foreach (var l in WkLines) {<div class="@(l.Bold ? "b" : null)">@ReceiptsWeekdays.Cell(wsums, l, dd)</div>}</td>
+                        }
+                    }
+                    else
+                    {
                     @foreach (var c in ReceiptsLayout.Columns)
                     {
                         <td class="n stack">@foreach (var line in c.Lines) {<div class="@(line.Bold ? "b" : null)">@ReceiptsLayout.FormatTotal(sums, line)</div>}</td>
                     }
+                    }
                 </tr>
             </tfoot>
         </table>
-        <ReportButtons Busy="busy" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
+        <QueryTime Elapsed="queryTime" />
+        <ViewByBar Busy="busy" Choices="Choices.Select(c => (c.Value.ToString(), c.Label)).ToList()" OnSubmit="FooterSubmit" />
+        <ReportButtons Busy="busy" ShowZeroToggle="weekdays" HideZero="hideZero" OnToggleZero="ToggleZeroAsync" ShowWeekdaysToggle="true" Weekdays="weekdays" OnToggleWeekdays="() => weekdays = !weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnExcel="ExcelAsync" />
     }
 }
 
 @code {
-    private string FilterLabel(string k) { var n = FilterText.Names(result, Cat, k); return n.Length == 0 ? k : k + ": " + n; }
+    // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
+    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start, DDReview.Core.DateRules.Yesterday);
+    private void StartPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyStart(Enum.Parse<DDReview.Core.DateRules.StartPreset>(key), end, DateTime.Today);
+    private void EndPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyEnd(Enum.Parse<DDReview.Core.DateRules.EndPreset>(key), start, DateTime.Today);
+    private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
+    private DataRow? header;
+    private TimeSpan? queryTime;
+    private IReadOnlyList<FilterBox> Boxes() => FilterHeader.Boxes(header, result, Cat, state.Filters.Keys);
 
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
     private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
@@ -124,6 +172,36 @@ else
 
     private DDReview.Web.UserContext? ctx;
     private bool allowed, busy;
+    private bool hideZero = true;   // Weekdays view: leave out lines that are zero everywhere; remembered in this browser
+    private const string HideZeroKey = "ddreview.receipts.hideZeroLines";
+    private DataTable? wkFor; private bool wkHide; private IReadOnlyList<WeekLine> wkLines = ReceiptsWeekdays.Lines;
+    private IReadOnlyList<WeekLine> WkLines
+    {
+        get
+        {
+            if (!ReferenceEquals(wkFor, result) || wkHide != hideZero) { wkLines = ReceiptsWeekdays.VisibleLines(result, hideZero); wkFor = result; wkHide = hideZero; }
+            return wkLines;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", HideZeroKey);
+            if (saved is "0" or "1") { var v = saved == "1"; if (v != hideZero) { hideZero = v; StateHasChanged(); } }
+        }
+        catch (Exception) { /* storage blocked or not ready: keep the default */ }
+    }
+
+    private async Task ToggleZeroAsync()
+    {
+        hideZero = !hideZero;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", HideZeroKey, hideZero ? "1" : "0"); } catch (Exception) { }
+    }
+
+    private bool weekdays = true;   // the old page opened with Weekdays on: labels down the left, Mon..Sun and a Total across
     private IReadOnlyList<StoreInfo> stores = [];
     private readonly HashSet<int> selected = [];
     private static readonly IReadOnlyList<DrillColumn> Cat = DrillCatalogs.Receipts;
@@ -148,6 +226,16 @@ else
     private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
     private void ToggleDim(ReceiptsDimensions d, bool on) { if (on) state.Flags.Add(d.ToString()); else state.Flags.Remove(d.ToString()); }
 
+    /// <summary>The View By / Drill Up row under the grid: View By groups by that one dimension, each Drill Up adds one; then the report runs again (filters kept).</summary>
+    private async Task FooterSubmit(ViewByBar.Selection s)
+    {
+        if (s.ViewBy is not null) { state.Flags.Clear(); state.Flags.Add(s.ViewBy); }
+        if (s.DrillUp1 is not null) state.Flags.Add(s.DrillUp1);
+        if (s.DrillUp2 is not null) state.Flags.Add(s.DrillUp2);
+        state.SortHeader = null;
+        await ExecuteAsync();
+    }
+
     private async Task Act(Action<DrillState> change) { change(state); await ExecuteAsync(); }
     private async Task RowClick(DrillColumn dc, DataRow row)
     {
@@ -160,6 +248,12 @@ else
     private readonly HashSet<DataRow> checkedRows = [];
     private static bool CanClick(DataRow row, DrillColumn dc) => DrillKeyResolver.CanClick(row, dc);
     private void Check(DataRow row, bool on) { if (on) checkedRows.Add(row); else checkedRows.Remove(row); }
+    private static string WeekKey(string label) => "wk/" + label;
+    private void SortWeek(string? label)
+    {
+        if (string.IsNullOrEmpty(label)) { state.SortHeader = null; return; }
+        state.Sort(WeekKey(label), true);
+    }
     private static string LineKey(StackColumn c, StackLine line) => c.Title + "/" + line.Label;
     private string Mark(string key) => state.SortHeader == key ? (state.SortDescending ? " ▼" : " ▲") : "";
     private IEnumerable<DataRow> Ordered()
@@ -173,6 +267,12 @@ else
             var dc = DrillState.ForDisplay(Cat, lead.Column);
             return GridSort.Rows(result, GridSort.Column(result, dc?.SortColumn is not null && result.Columns.Contains(dc.SortColumn) ? dc.SortColumn : lead.Column), state.SortDescending);
         }
+        if (h.StartsWith("wk/"))
+        {
+            var wl = ReceiptsWeekdays.Lines.FirstOrDefault(x => WeekKey(x.Label) == h);
+            if (wl is null) return result.Rows.Cast<DataRow>();
+            return GridSort.Rows(result, wl.Ratio ? GridSort.Column(result, wl.TotalField, wl.TotalDenominator) : GridSort.Column(result, wl.TotalField), state.SortDescending);
+        }
         foreach (var c in ReceiptsLayout.Columns)
             foreach (var line in c.Lines)
                 if (LineKey(c, line) == h)
@@ -181,13 +281,13 @@ else
     }
     private static string Text(DataRow row, string col) => row.Table.Columns.Contains(col) && row[col] is not DBNull ? row[col].ToString() ?? "" : "";
 
-    /// <summary>The Submit button: a fresh report, so filters and sort start over.</summary>
-    private async Task RunAsync() { state.Filters.Clear(); state.SortHeader = null; await ExecuteAsync(); }
+    /// <summary>The Submit button: runs again with the filters kept (clear one with its box's ✕); the sort starts over.</summary>
+    private async Task RunAsync() { state.SortHeader = null; await ExecuteAsync(); }
 
     private async Task ExecuteAsync()
     {
         if (ctx is null || busy) return;
-        error = null; result = null; checkedRows.Clear();
+        error = null; result = null; header = null; queryTime = null; checkedRows.Clear();
         var dims = state.Dimensions<ReceiptsDimensions>();
         var allowedIds = stores.Select(s => s.StoreId).ToHashSet();                         // re-check against the access list
         var (ids, lists) = DrillFilters.Split(state, Cat, selected.Where(allowedIds.Contains));
@@ -198,7 +298,10 @@ else
         {
             var req = new ReceiptsRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids,
                 lists.Count == 0 ? null : lists.ToDictionary(kv => Enum.Parse<ReceiptsDimensions>(kv.Key), kv => kv.Value));
-            result = await ReceiptsSvc.RunAsync(ctx.ClientConnectionString, req);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var runTask = ReceiptsSvc.RunAsync(ctx.ClientConnectionString, req);
+            var headTask = state.Filters.Count == 0 ? Task.FromResult<DataRow?>(null) : ReceiptsSvc.HeaderAsync(ctx.ClientConnectionString, req);
+            result = await runTask; queryTime = sw.Elapsed; header = await headTask;
             ranDims = dims; rangeStart = start; rangeEnd = end;
         }
         catch (Exception ex) { error = "The query failed: " + ex.Message; }
@@ -207,8 +310,7 @@ else
 
     private async Task Shift(int dir)
     {
-        var days = (int)(end - start).TotalDays + 1;
-        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        (start, end) = DDReview.Core.DateRules.Shift(start, end, dir, DDReview.Core.DateRules.Yesterday);
         await ExecuteAsync();
     }
     private async Task ExcelAsync()
@@ -216,7 +318,7 @@ else
         if (result is null) return;
         var lead = AllLeading.Where(l => ranDims.HasFlag(l.Dim)).Select(l => (l.Label, l.Column)).ToList();
         var (h, rows) = ReceiptsExport.Build(result, lead);
-        var bytes = DDReview.Core.Support.XlsxWriter.Write("Receipts", $"Receipts review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}", h, rows);
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Receipts", $"Receipts review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}", h, rows, null, FilterHeader.Describe(Boxes()));
         await JS.InvokeVoidAsync("ddDownload", $"ReceiptsReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }

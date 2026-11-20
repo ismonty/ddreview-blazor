@@ -11,7 +11,7 @@ public sealed record FeatureUser(int WebUserId, string UserName, bool Administra
 
 /// <summary>
 /// Administrators always have every feature. Anyone else has a feature only if an administrator turned it on for them
-/// (a row in dbo.tblWebUserFeatures; script 005). If that table is not there yet, non-administrators have nothing.
+/// (a row in dbo.tblWebUserFeatures; script 019). If that table is not there yet, non-administrators have nothing.
 /// </summary>
 public sealed class FeatureService
 {

@@ -1,0 +1,72 @@
+@using DDReview.Core.Admin
+@using Microsoft.AspNetCore.WebUtilities
+@inject SetupAccessService Access
+@inject NavigationManager Nav
+
+@* Wraps every Setup page. Shows the page only when the person may use it, otherwise says what is missing and offers the next step.
+   The pages' own save calls check the same rules again; this only decides what is shown. *@
+@if (!loaded) { <p class="muted">Loading…</p> }
+else if (s is null) { <p class="error">Setup is not available for this login.</p> }
+else
+{
+    @if (flag == "failed") { <p class="banner bad" role="alert">Google did not confirm that. Try again.</p> }
+    else if (flag == "notlinked") { <p class="banner bad" role="alert">That Google account is not the one linked to this login. Use the Google account you linked on the <a href="/account">Account</a> page.</p> }
+
+    @if (s.TablesMissing)
+    {
+        <p class="banner bad" role="alert">Setup needs two tables that are not usable in this database yet. An administrator can add them from the <a href="/admin/updater">Database updater</a>
+            (the updater page shows the one line to run if the web login still needs permission).</p>
+    }
+    else if (s.Decision.Denial == SetupDenial.NoRights)
+    {
+        <p>Setup is for administrators and for people an administrator has allowed.</p>
+    }
+    else if (s.Decision.Denial is SetupDenial.NotGoogle or SetupDenial.NeedsVerification)
+    {
+        <p>@(s.Decision.Denial == SetupDenial.NotGoogle ? "Setup needs Google to confirm who you are." : "Google has not confirmed you in the last 30 minutes.")
+            It asks every time, even if you are already signed in to Google in this browser.</p>
+        @if (!s.GoogleEnabled) { <p class="muted">Google sign-in is not turned on for this site.</p> }
+        else
+        {
+            <form method="post" action="/admin/verify">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="@ReturnPath" />
+                <button type="submit">Verify with Google</button>
+            </form>
+            <p class="muted">Use the Google account linked to this login (link one on the <a href="/account">Account</a> page).</p>
+        }
+    }
+    else if (RequireManager && !s.Decision.CanManageAccess)
+    {
+        <p>Only administrators can change who may use Setup.</p>
+    }
+    else if (Area is { } a && !s.Decision.Allows(a))
+    {
+        <p>Your login is not allowed to use @SetupAreas.Title(a).</p>
+    }
+    else
+    {
+        @ChildContent?.Invoke(s)
+    }
+}
+
+@code {
+    /// <summary>The area this page belongs to; null for the landing page (any allowed area is enough).</summary>
+    [Parameter] public SetupArea? Area { get; set; }
+    /// <summary>True for the pages that change who may use Setup.</summary>
+    [Parameter] public bool RequireManager { get; set; }
+    [Parameter] public RenderFragment<SetupSituation>? ChildContent { get; set; }
+
+    private SetupSituation? s;
+    private bool loaded;
+    private string? flag;
+    private string ReturnPath => SetupReturn.SafePath(new Uri(Nav.Uri).AbsolutePath);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var q = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        flag = q.TryGetValue("v", out var v) ? v.ToString() : null;
+        s = await Access.GetAsync();
+        loaded = true;
+    }
+}

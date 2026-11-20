@@ -10,12 +10,20 @@ public sealed record GlRequest(string StoreListCsv, DateOnly Start, DateOnly End
 
 public sealed class GlService
 {
+    /// <summary>The set-based function (script 012) when the database has it, in the legacy order; otherwise the original cursor function.
+    /// RECOMPILE because the plan depends heavily on the store list and date range.</summary>
+    public const string DetailSql = @"
+if object_id('dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor', 'IF') is not null
+    select * from dbo.fn_CashAndSalesGLandARMultiStoreSelectBlazor(@stores, @start, @end, @ar, @tax) order by RowSeq option (recompile)
+else
+    select * from dbo.fn_CashAndSalesGLandARMultiStoreSelect(@stores, @start, @end, @ar, @tax)";
+
     public async Task<IReadOnlyList<GlLine>> GetDetailAsync(string connectionString, GlRequest req, CancellationToken ct = default)
     {
         await using var cn = new SqlConnection(connectionString);
         await cn.OpenAsync(ct);
         await using var cmd = new SqlCommand(
-            "select * from dbo.fn_CashAndSalesGLandARMultiStoreSelect(@stores, @start, @end, @ar, @tax)", cn) { CommandTimeout = 600 };
+            DetailSql, cn) { CommandTimeout = 600 };
         AddCommon(cmd, req);
         cmd.Parameters.Add("@tax", System.Data.SqlDbType.Bit).Value = req.SalesTaxFlag;
 

@@ -44,7 +44,7 @@ h1:focus {
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; min-width: fit-content; }   /* on a narrow screen the page grows to the widest table, so the header, tabs and filter bar are as wide as the data */
 a { color: var(--link); }
 h1 { margin: .2rem 0 .6rem; font-size: 1.6rem; } h2 { font-size: 1.1rem; margin: 1rem 0 .6rem; }
 h1:focus, h1:focus-visible { outline: none; }
@@ -56,8 +56,20 @@ header.top a { color: var(--header-ink); text-decoration: none; font-weight: 700
 header.top a.brand { color: var(--brand-ink); background: var(--brand-bg); padding: .15rem .7rem; border-radius: 6px; font-size: 1.15rem; }
 header.top nav { flex: 1; display: flex; gap: 1.1rem; flex-wrap: wrap; }
 header.top nav a:hover { text-decoration: underline; }
+header.top .fs-btn { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--header-ink); cursor: pointer; }
+header.top .fs-btn:hover { text-decoration: underline; filter: none; }
+/* narrow (tablet portrait): brand and sign-out share the first row, the links get a row of their own instead of wrapping beside them */
+@media (max-width: 900px) {
+  header.top { flex-wrap: wrap; row-gap: .4rem; }
+  header.top .logout { margin-left: auto; }
+  header.top nav { order: 3; flex-basis: 100%; gap: .5rem 1.1rem; }
+}
+header.top .fs-exit, html.fullscreen header.top .fs-enter { display: none; }
+html.fullscreen header.top .fs-exit { display: inline; }
 .logout { display: flex; gap: .6rem; align-items: center; margin: 0; }
 main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+/* A report wider than the 1400px column makes the page as wide as the report (so the header spans the data and the browser can zoom out to fit it all). Setup grids scroll inside their own box instead. */
+main:not(:has(.setup-scroll)) { min-width: min-content; }
 
 input, select, textarea { font: inherit; padding: .5rem .6rem; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); color: var(--ink); min-width: 0; }
 select option { background: var(--field); color: var(--ink); }
@@ -90,6 +102,7 @@ th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
 tr.suspense td { background: var(--warn); }
 tr.total td { color: var(--gold); }
 table.receipts th.stack, table.receipts td.stack { white-space: nowrap; vertical-align: top; }
+table.receipts td.wklabels { text-align: right; font-weight: 600; padding-right: .6rem; border-right: 1px solid currentColor; }
 ul.menu { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .7rem; }
 ul.menu li a { display: block; padding: .8rem 1.4rem; background: var(--tile); border: 1px solid var(--edge); border-left: 5px solid var(--gold); border-radius: 10px; text-decoration: none; font-weight: 700; color: var(--ink); }
 ul.menu li a:hover { border-color: var(--accent); }
@@ -147,6 +160,20 @@ table.daily td.store b { display: block; text-transform: uppercase; } table.dail
 table.daily .graph { min-width: 420px; background: #0b3957; } table.daily .bars { display: flex; justify-content: space-between; } 
 table.daily .amounts { display: grid; grid-template-columns: repeat(6, 1fr); text-align: right; font-variant-numeric: tabular-nums; }
 table.daily tr.total td { font-weight: 700; } table.daily .lbl.small { font-size: .75rem; }
+/* Daily Recap card on the Dashboard: theme variables only, so it follows the app's colours */
+section.recap { margin: 0 0 1rem; border: 1px solid var(--edge); background: var(--card); }
+section.recap > h2 { margin: 0; padding: .4rem .7rem; font-size: 1rem; font-weight: 700; background: var(--header); color: var(--header-ink); }
+section.recap > h2 small { font-weight: 400; margin-left: .6rem; }
+section.recap > p { margin: .6rem .7rem; }
+.recap-scroll { overflow-x: auto; }
+table.recap { width: 100%; border-collapse: collapse; }
+table.recap th, table.recap td { border: 1px solid var(--line); padding: .2rem .4rem; font-size: .82rem; background: var(--tile); }
+table.recap thead th { text-align: center; background: var(--card); border-color: var(--edge); }
+table.recap th.store, table.recap td.store { text-align: left; white-space: nowrap; }
+table.recap tr.group th { text-align: left; background: var(--card); color: var(--gold); border-color: var(--edge); }
+table.recap td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.recap td.now { font-weight: 700; }
+table.recap tr.total td { font-weight: 700; border-top: 2px solid var(--gold); }
 .footbuttons { display: flex; gap: .5rem; flex-wrap: wrap; margin: .8rem 0; }
 
 /* drill / sort controls in review grid headers and cells */
@@ -178,6 +205,111 @@ tbody.gl-grand tr.total td { border-top: 2px solid currentColor; }
 button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--edge); }
 .login-card form.google { text-align: center; }
 .login-card form.google p { margin: .6rem 0 .4rem; }
+.login-card .google-out { text-align: center; margin: .9rem 0 0; font-size: .8rem; }
+
+/* Submission reports (General Ledger): button, thumbnail overlay and full page view */
+.sub-actions { margin: 1rem 0 2rem; }
+button.sub-link { font-weight: 400; font-size: .85rem; margin-left: .6rem; text-decoration: underline; color: var(--link); }
+.sub-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.75); overflow: auto; padding: .6rem; }
+.sub-panel { max-width: 1000px; margin: 0 auto; background: var(--card); border: 1px solid var(--edge); border-radius: 10px; padding: .8rem; }
+.sub-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; margin-bottom: .6rem; }
+.sub-bar-buttons { display: flex; flex-wrap: wrap; gap: .4rem; }
+.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .7rem; }
+button.sub-thumb { display: flex; flex-direction: column; align-items: stretch; gap: .25rem; padding: .3rem; border-radius: 6px; background: var(--tile); border: 1px solid var(--edge); color: var(--ink); font-weight: 400; text-align: left; }
+button.sub-thumb img { width: 100%; aspect-ratio: 816 / 1056; background: #fff; border: 1px solid #888; }
+button.sub-thumb small { font-size: .7rem; line-height: 1.25; color: var(--muted); }
+.sub-cap { font-size: .85rem; color: var(--muted); margin: .2rem 0 .5rem; }
+img.sub-page { display: block; width: 100%; max-width: 816px; margin: 0 auto; background: #fff; border: 1px solid #888; }
+
+/* Setup pages */
+ul.setup-list { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: .35rem; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
+ul.setup-list li { background: var(--card); border: 1px solid var(--edge); border-radius: 6px; padding: .45rem .7rem; }
+.setup-scroll { overflow-x: auto; }
+table.setup th { white-space: nowrap; text-align: left; font-size: .85rem; }
+table.setup td { vertical-align: middle; padding: .2rem .35rem; }
+table.setup td.n { text-align: right; font-variant-numeric: tabular-nums; }
+table.setup td.actions { white-space: nowrap; }
+table.setup tr.editing td { background: color-mix(in srgb, var(--gold) 14%, transparent); }
+table.setup input[type=text], table.setup input[type=date], table.setup select { width: 100%; min-width: 7rem; }
+
+/* Choose a database (Google sign-in with more than one login) */
+.pick-card { max-width: 440px; }
+.pick-list { list-style: none; margin: .8rem 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.pick-btn { width: 100%; text-align: left; padding: .7rem .9rem; min-height: 44px; }
+.pick-filter { display: flex; gap: .4rem; margin: .6rem 0; }
+.pick-filter input { flex: 1; }
+.pick-db { margin: .5rem 0; border: 1px solid var(--edge); border-radius: 8px; padding: .2rem .7rem; }
+.pick-db > summary { cursor: pointer; padding: .5rem 0; font-weight: 600; min-height: 44px; display: flex; align-items: center; gap: .4rem; }
+.pick-db .pick-list { margin: 0 0 .6rem; }
+
+/* Receipt types editor: tiles or list, with a side panel */
+.rt-bar, .rt-bulk { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: .6rem 0; }
+.rt-bar input[type=search] { flex: 1 1 16rem; }
+.rt-bulk { background: var(--card, #1d2731); border: 1px solid var(--edge, #4b7391); border-radius: 8px; padding: .5rem .8rem; }
+.rt-seg { display: inline-flex; gap: 0; }
+.rt-seg button { border-radius: 0; margin: 0; }
+.rt-seg button:first-child { border-radius: 8px 0 0 8px; }
+.rt-seg button:last-child { border-radius: 0 8px 8px 0; }
+.rt-seg button.on { background: #d9b310; color: #07202f; }
+.rt-layout { display: block; }
+.rt-layout.with-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(22rem, 28rem); gap: 1rem; align-items: start; }
+.rt-head { font-size: 1.05rem; margin: 1rem 0 .4rem; }
+.rt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .6rem; }
+.rt-tile { position: relative; background: #09314d; border: 1px solid var(--edge, #4b7391); border-radius: 10px; }
+.rt-tile.warn { border-color: #d9b310; }
+.rt-tile.off { opacity: .6; }
+.rt-tile.current { outline: 2px solid #328cc1; }
+.rt-pick { position: absolute; top: .4rem; right: .5rem; z-index: 1; }
+.rt-open { display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; width: 100%; text-align: left; background: transparent; color: inherit; border: 0; padding: .7rem .8rem; cursor: pointer; }
+.rt-name { font-weight: 700; padding-right: 1.6rem; }
+.rt-acct { font-size: .9rem; }
+.rt-meta { font-size: .8rem; color: var(--muted, #a9bbc9); }
+.rt-warn { color: #d9b310; font-size: .85rem; }
+.rt-panel { position: sticky; top: .5rem; background: var(--card, #1d2731); border: 1px solid var(--edge, #4b7391); border-radius: 10px; padding: .8rem 1rem; max-height: calc(100vh - 1rem); overflow-y: auto; }
+.rt-panel details { margin: .6rem 0; }
+.rt-panel summary { cursor: pointer; font-weight: 700; }
+.rt-field { display: grid; gap: .15rem; margin: .4rem 0; font-size: .9rem; }
+.rt-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; }
+.rt-review { border: 1px dashed var(--edge, #4b7391); border-radius: 8px; padding: .4rem .8rem; }
+@media (max-width: 900px) { .rt-layout.with-panel { grid-template-columns: 1fr; } .rt-panel { position: static; max-height: none; } }
+
+/* Adjust Sales / Adjust GL windows */
+.adj .nowrap { white-space: nowrap; }
+.adj-edit input, .adj-edit select { max-width: 14rem; }
+.adj-acct { cursor: pointer; }
+tr.picked td { background: #fff7d6; color: #000; }
+tr.picked td .sub-link { color: #000; }
+/* The Batch NNNNNN link on a heading: the heading's own colour and size, underlined to show it can be clicked. */
+tr.batch-head button.sub-link { color: inherit; font-size: inherit; font-weight: inherit; font-family: inherit; margin-left: 0; text-decoration: underline; }
+tr.batch-head td { font-weight: 600; background: var(--panel, rgba(255,255,255,.06)); }
+/* Adjust Sales / Adjust GL: each adjustment is a block of labelled fields that wraps, so the window never runs wider than the screen. */
+table.adj, table.adj tbody { display: block; width: 100%; }
+table.adj thead { display: none; }
+table.adj tr { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-end; border: 1px solid var(--edge, #ccc); border-radius: 6px; padding: .5rem .6rem; margin-bottom: .6rem; }
+table.adj td { display: block; padding: 0; border: 0; }
+table.adj td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--muted, #666); }
+table.adj td.n { text-align: left; }
+.adj-edit input, .adj-edit select { max-width: 100%; }
+tr.batch-bal td { font-weight: 600; border-top: 1px solid var(--edge); }
+tr.batch-bal.bad td { color: #ff9a8a; }
+tr.batch-gap td { height: .9rem; padding: 0; border: 0; }
+html { scroll-behavior: smooth; }
+tr.batch-head td.jump { text-align: right; white-space: nowrap; }
+a.jump-btn { display: inline-block; min-width: 1.9rem; text-align: center; padding: .15rem .35rem; border: 1px solid var(--edge); border-radius: 6px; font-size: .8rem; line-height: 1.2; text-decoration: none; color: inherit; }
+a.jump-btn:hover { background: rgba(255,255,255,.12); }
+.query-time { font-weight: normal; opacity: .75; margin-left: .4rem; }
+.gl-topline { margin: .4rem 0; } .gl-topline.bad { color: var(--bad, #b00020); }
+div.filterboxes { display: flex; flex-wrap: wrap; gap: .5rem; margin: .4rem 0; }
+div.fbox { border: 1px solid currentColor; border-radius: 4px; padding: .25rem .5rem; min-width: 7rem; max-width: 22rem; font-size: .85rem; }
+div.fbox .fhead { display: flex; justify-content: space-between; gap: .6rem; align-items: baseline; }
+div.fbox .fnames { margin-top: .15rem; }
+div.fbox details summary { cursor: pointer; }
+button.adj-gap { margin-left: 1.25rem; }
+.tax-banner { display: flex; justify-content: space-between; align-items: flex-start; gap: .75rem; }
+.tax-banner .tax-close { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; padding: 0 .25rem; line-height: 1; }
+select.datepreset { max-width: 9.5rem; }
+.viewbybar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin: .6rem 0 .3rem; }
+.viewbybar label { display: inline-flex; align-items: center; gap: .35rem; }
 
 /* Consolidated tip outs */
 table.sales tr.group th { text-align: left; background: color-mix(in srgb, currentColor 8%, transparent); }

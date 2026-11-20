@@ -64,6 +64,8 @@ robocopy $out $SiteDir /MIR /NFL /NDL /NJH /NJS /NP /XF appsettings.Production.j
 if ($LASTEXITCODE -ge 8) { Remove-Item $offline -Force -ErrorAction SilentlyContinue; throw "robocopy failed (exit $LASTEXITCODE). Restore from $zip if needed." }
 Remove-Item $offline -Force
 Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
+# Remember which commit is live here (Deploy-Auto.ps1 and Deploy-Production.ps1 read this).
+(git rev-parse HEAD) | Set-Content -Path (Join-Path $BackupDir 'last-deployed.txt') -Encoding ASCII
 
 Step 'Checking the site answers'
 try {

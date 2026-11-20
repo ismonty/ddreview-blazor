@@ -23,7 +23,7 @@ Source: the Access presentation layer (`frmPayrollReview`, `mod Payroll Export` 
 ## Who can use it
 Payroll and Consolidated Payroll are optional features. They are off for everyone except administrators until an administrator turns them on for a user
 (Account > Optional features, `/admin/features`). Administrators always have them. A user still needs the Payroll report authorization for their stores.
-- Stored in `dbo.tblWebUserFeatures` (new script `sql/005_client_web_features.sql`, added by Admin > Database updater): a row means on, no row means off. If the table is not there yet, non-administrators have nothing.
+- Stored in `dbo.tblWebUserFeatures` (new script `sql/019_client_web_features.sql`, added by Admin > Database updater): a row means on, no row means off. If the table is not there yet, non-administrators have nothing.
 - The Payroll page checks the switch when it opens and again on every Run and Export; the nav link only shows when it is on.
 - The web login needs `select, insert, delete` on that table; script 004's grant procedure now lists it, and the updater shows the one grant line if it is missing.
 - `WebFeature.ConsolidatedPayroll` exists and is switchable now; the Consolidated Payroll pages use the same check.

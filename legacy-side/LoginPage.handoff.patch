@@ -1,0 +1,23 @@
+--- DDReviewMarauder/LoginPage.aspx.cs
++++ DDReviewMarauder/LoginPage.aspx.cs
+@@
+ 		public LoginPage() {
+ 			Load += new EventHandler(LoginPage_Load);
+ 			}
++		// Runs after every Load handler (including the base class's Page_Load, which clears the session), so a ticket login is not wiped.
++		protected override void OnLoad(EventArgs e) {
++			base.OnLoad(e);
++			string ticket = Request.QueryString["t"];
++			if (!Page.IsPostBack && ticket != null && LegacyHandoff.Enabled && Request.IsLocal) {
++				int webUserId;
++				string userName, password;
++				if (LegacyHandoff.IsLocalReturnUrl(Request.QueryString["ReturnUrl"])
++						&& LegacyHandoff.TryVerify(LegacyHandoff.Secret, ticket, DateTime.UtcNow, out webUserId)
++						&& LegacyHandoff.TryGetCredentials(webUserId, out userName, out password)) {
++					UserName.Text = userName;
++					Password.Text = password;
++					cmdLogin_Click(this, EventArgs.Empty);   // the normal login; on success it redirects to ReturnUrl
++					}
++				}
++			}
+ 		void LoginPage_Load(object sender, EventArgs e) {

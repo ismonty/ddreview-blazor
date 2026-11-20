@@ -14,7 +14,7 @@ The server builds the site itself from git. One script does a deploy and the sam
    ```
    git clone https://github.com/ismonty/ddreview-blazor.git C:\src\ddreview-blazor
    cd C:\src\ddreview-blazor
-   git checkout slice-2-sales-review     # or main, once pull request #1 is merged
+   git checkout main
    ```
 4. **Site folder and IIS site.**
    ```
@@ -84,15 +84,39 @@ with its check query in `src/DDReview.Core/Updater/ClientScripts.cs`.
 - `appsettings.Production.json` is JSON: write `\` as `\\` (`Server=HOST\\INSTANCE`), no square brackets around the SQL login name.
 - The login also needs a user in `DDReviewCentralMaster` with `SELECT` on `tblWebUserSecurity` and `SELECT, INSERT, UPDATE, DELETE` on `tblWebUserGoogle`.
 
-## Running it automatically
-`Deploy-Staging.ps1` asks no questions and exits with code 0 on success and non-zero on any failure (tests, publish, copy), so it can be started by a scheduled task,
-a GitHub self-hosted runner, or a webhook listener, for example:
-```
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\src\ddreview-blazor\deploy\Deploy-Staging.ps1
-```
-Things the automatic account needs: Administrator rights (it writes to the site folder and IIS), read access to the GitHub repo without a prompt (a deploy key or a stored token for `git pull`),
-the .NET 10 SDK on its PATH, and the checkout sitting on the branch you want deployed (the script pulls whatever branch is checked out; it does not switch branches).
-If tests fail, nothing is deployed and the old site keeps running; the backup zips make a bad deploy easy to undo.
+## Updating staging automatically
+
+Every merge into `main` can reach staging by itself. `deploy\Deploy-Auto.ps1` runs every few minutes from a scheduled task: it fetches GitHub, and when `main` has a commit this
+server has not tried yet it fast-forwards the checkout and runs `Deploy-Staging.ps1` (tests first; if they fail nothing is deployed, the old site keeps running, and that commit is not
+retried until a newer one arrives). Its log is `C:\inetpub\backups\blazor-staging.ddreview.com\auto-deploy.log`. Production is never deployed automatically.
+
+One-time setup (Administrator PowerShell on the server):
+
+1. **Let the server read the private repo without a prompt.** Make a read-only token: GitHub > Settings > Developer settings > Personal access tokens > *Fine-grained tokens* >
+   Generate. Repository access: *Only select repositories* > `ddreview-blazor`; Repository permissions: *Contents: Read-only*; pick the longest expiry you are comfortable with
+   (put the renewal date in your calendar; when it expires the log says `git fetch failed`). Then:
+   ```
+   cd C:\src\ddreview-blazor
+   git remote set-url origin https://<the-token>@github.com/ismonty/ddreview-blazor.git
+   git checkout main
+   git pull
+   ```
+   The token is stored in `C:\src\ddreview-blazor\.git\config`, so keep that folder readable by administrators only.
+2. **Try one run by hand** (it does nothing when `main` is already deployed, so first deploy normally once):
+   ```
+   .\deploy\Deploy-Staging.ps1
+   .\deploy\Deploy-Auto.ps1        # prints nothing and exits when there is nothing new
+   Get-Content C:\inetpub\backups\blazor-staging.ddreview.com\auto-deploy.log -Tail 20
+   ```
+3. **Create the scheduled task:**
+   ```
+   .\deploy\Register-AutoDeploy.ps1          # every 5 minutes; -Minutes 10 for less often
+   ```
+   It asks for the Windows account to run as: a local administrator (the one you use here is fine). The task is *Run whether user is logged on or not*, with highest privileges.
+4. **Check it:** merge something small into `main`, wait up to five minutes, and read the log and the version of the site.
+
+To pause it: `Disable-ScheduledTask 'DD Review staging auto-deploy'`; to remove it: `Unregister-ScheduledTask 'DD Review staging auto-deploy'`.
+While you are pausing it, a manual `Deploy-Staging.ps1` still works (the checkout just has to be clean, on the branch you want).
 
 ## Rolling back
 Stop the site, unzip the newest good file from the backups folder over `C:\inetpub\blazor-staging.ddreview.com`, start the site:

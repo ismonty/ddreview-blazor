@@ -44,7 +44,7 @@ else
             total = DailySummaryLine.Total(lines);
             scale = 1000;
             foreach (var l in lines)
-                scale = (double)new[] { (decimal)scale, l.Sales, l.Labor + l.ProductCost, l.Purchases, l.Budget, l.PreviousSales }.Max();
+                scale = (double)new[] { (decimal)scale, l.StackedSalesEnd, l.Labor + l.ProductCost, l.Purchases, l.Budget, l.PreviousSales }.Max();
             error = null;
         }
         catch (Exception ex) { error = "The summary could not be loaded: " + ex.Message; }
@@ -71,7 +71,7 @@ else
             <div></div><div>@M(l.Gross)</div>
         </td>
         <td class="graph">
-            <BulletBar Sales="l.Sales" PreviousSales="l.PreviousSales" Budget="l.Budget" Labor="l.Labor" ProductCost="l.ProductCost" Purchases="l.Purchases" Scale="scale" />
+            <BulletBar Sales="l.Sales" PreviousSales="l.PreviousSales" Budget="l.Budget" Labor="l.Labor" ProductCost="l.ProductCost" Purchases="l.Purchases" Discounts="l.Discounts" Voids="l.Voids" Scale="scale" />
             <div class="amounts">
                 <span>@M(l.Discounts)</span><span>@M(l.Voids)</span><span>@M(l.Labor)</span><span>@M(l.ProductCost)</span><span>@l.Checks.ToString("N0", CultureInfo.InvariantCulture)</span><span>@M(l.Purchases)</span>
             </div>

@@ -107,3 +107,49 @@ turn a clicked name into ids; only their text result is parsed in C# instead of 
 the old text is generated, byte for byte. Lists without a colon stay `item in (...)`.
 Unverified against a live database: run the script on a test client DB, drill a menu item across several stores, and compare totals with the text version
 (drop the type to compare).
+
+## Slice 10: submission reports (General Ledger)
+Source: `DDReviewMarauder/DDAdminGLARSubmissionReportGraphic.aspx.cs`. The register software stores a page for each posted batch as drawing commands in `tblCashAndSalesReport`
+(1 text, 2 bold on/off, 3 line, 4 right-aligned text, 5 centered text; positions in twips). The old page replayed them into an 8.5 x 11 inch JPEG with System.Drawing.
+Port: `Core/Gl/SubmissionReports.cs`. `SubmissionReportService` lists batches (store, date, only those that have stored commands) and reads one batch; both are plain SQL, parameterized,
+and limited to the stores the user's General Ledger access covers (the check is in the SQL, so a typed batch number for another store returns nothing). `SubmissionSvg` replays the commands as SVG
+(816 x 1056 px, Verdana 7 pt; twips / 15 = px, as before). The image comes from `GET /gl/submission-image/{batchId}` (signed-in users only, cached privately for 10 minutes).
+UI (`Gl.razor`): a "Submission report" link on each daily total line of the detail modes opens that day's reports (straight to the page when there is only one);
+a "View Submission Reports" button under the results opens all reports of the run as thumbnails (store and date in small text), tap one for the full page with Previous/Next.
+The viewer opens over the page so the report you ran stays put. Thumbnails load lazily, 48 at a time. At most 1000 reports are listed per request.
+Quiet days (receipts total nothing and every sales line amount is zero) are left out of the list; an older schema missing one of those columns gets the list without that test.
+Unverified against a live database: whether the text sits exactly where the old JPEG put it (the baseline offset is an estimate), and the SQL on a database without `tblCashAndSalesReport` (shows a "not available" message).
+
+
+## Slice 11: Daily Recap on the home screen
+Source: the emailed Daily Sales Recap, `dbo.fn_ConciseDailyRecapHTML2` in the client database. That function only formats HTML (a cursor and nested tables) over `fn_ConciseDailyRecapUpright(date)`,
+which gets its numbers from `fn_ConciseDailyRecapInnerCore(date)`. The email lined up three days per store: the ending day, 364 days back and 728 days back (same weekday).
+Port: new client function `dbo.fn_ConciseDailyRecapBlazor(@EndingDate, @StoreListCSV)` (`sql/016`, registered with Database Updater; nothing existing is changed) calls InnerCore for the three
+days and returns one row per store plus one All Stores row. `HomeService.ConciseRecapAsync` calls it; `ConciseRecap` (Core/Home) groups the rows; `RecapCard.razor` shows it on the Dashboard, between the date bar and the gauges,
+for the Dashboard's Ending Date, in a collapsible block, with the app's own colours (theme variables only; none of the email's pastels).
+Decisions:
+- **The store filter is in the SQL, on all three days, and the All Stores row adds up only the listed stores.** InnerCore reports every store in the database, so without this a login that sees two stores would also have seen a total of all of them. An empty list returns nothing.
+- Columns run oldest to newest (the email's order was last year, two years ago, this year). Shown: Net Sales, Week To Date and Covers, each for the three days. Left out for being "quick": Gross, Discounts and Week To Date covers (the function still returns them, for the day and both comparison days).
+- Stores with no figures on any of the three days are left out, like Daily Summary. A comparison day with no data is blank, not 0.
+- The email's All Stores block was InnerCore's own total row, which groups by batch count and can come out as more than one line. The port's total is one sum of the stores shown.
+- A database without `sql/016` shows a note on the card (the rest of the Dashboard still loads); Database Updater adds the function.
+Unverified against a live database: `sql/016` has not been run anywhere. Run `sql/tools_concise_recap_compare.sql` on a test copy; it should return no rows (apart from possibly the 9999 lines, see its header).
+
+Slice 11b (faster recap, `sql/017`): the first version called InnerCore three times, and each call reads sales from the 1st of the month, works out figures the recap never shows (Last 7 Days, Month To Date,
+a weekly budget through a scalar function run on every budget row, completeness, batch counts) for every store in the database, one call after another. 017 rewrites `fn_ConciseDailyRecapBlazor` (same name and columns) to read
+`tblCashAndSalesSales` once for all three days, only from the Monday of each week, only for the user's stores (the store list now filters inside the query), and only the recap's figures. The rules are copied from InnerCore.
+One difference on purpose: a store with sales earlier in the month but none in the current week is no longer listed with zeros (InnerCore listed it). The recap card moved above the gauges, under the date bar.
+Unverified against a live database; compare with `sql/tools_concise_recap_compare.sql` (expect no rows, apart from that difference and possibly the 9999 lines) and time both functions.
+
+Slice 11c (fast recap, `sql/018`): 017 was still more than a minute. Cause: it worked out the three day numbers inside the query with `fn_CalcDayNumber`, a scalar function that calls another scalar function
+(`fn_CalcWeekNumberBaseDate`), so SQL Server could not size the week, could not seek to it, and may have run both functions for every row of `tblCashAndSalesSales`. 018 adds `fn_ConciseDailyRecapBlazor2`
+(scripts 016/017's function is left in place, unused now): `HomeService` asks the database for the three day numbers once (three cheap calls) and passes them in as ints, and each of the three weeks is
+its own query with the numbers in its WHERE (a plain range seek on the clustered `DayNumber` indexes), still only for the user's stores. Same columns, same rules as 017.
+Unverified against a live database; time it with `set statistics time on` (see `sql/tools_concise_recap_compare.sql`).
+
+Slice 12: Daily Recap on its own tab, and links that sign in first
+- The recap left the Dashboard and is now the **Daily Recap** tab, between Daily Summary and This Week (`/?tab=recap`, `RecapTab.razor`). It has its own Ending Date (native date picker, Submit / Previous / Next, yesterday to begin with); `RecapCard` is the table.
+- **Links that ask for credentials and then open the page.** A signed-out visitor to any page is sent to `/login?ReturnUrl=...` by the cookie sign-in (that part already existed); the login page now keeps `ReturnUrl` in a hidden field of both the password form and the Sign In With Google form, and sign-in redirects there afterwards
+  (`DDReview.Core.Admin.SignInReturn.SafePath`: only paths on this site, never the login or account-action pages, so it cannot be used as an open redirect). For Google the path travels in the protected sign-in state, and in the external cookie when "Choose a Database" comes in between.
+  So `https://<site>/?tab=recap` in an email works for a signed-out person (password or Google) and for one who is already signed in. Not covered by tests that run the site: the redirect itself was not tried against a live central master.
+

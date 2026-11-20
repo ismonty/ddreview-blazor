@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection;
 using System.Security.Claims;
 using DDReview.Core.Gl;
 using DDReview.Core.Security;
@@ -7,6 +7,8 @@ using DDReview.Web;
 using DDReview.Web.Components;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using DDReview.Core.Admin;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -25,6 +27,10 @@ builder.Services.AddSingleton<ICentralDirectory, CentralDirectory>();
 builder.Services.AddSingleton<ITenantConnectionFactory, TenantConnectionFactory>();
 builder.Services.AddSingleton<ClientAccessService>();
 builder.Services.AddSingleton<GlService>();
+builder.Services.AddSingleton<GlTaxVarianceService>();
+builder.Services.AddSingleton<GlAdjustmentService>();
+builder.Services.AddSingleton<BatchResubmissionService>();
+builder.Services.AddSingleton<DDReview.Core.Gl.SubmissionReportService>();
 builder.Services.AddSingleton<DDReview.Core.Updater.ClientUpdater>();
 builder.Services.AddSingleton<DDReview.Core.Sales.SalesService>();
 builder.Services.AddSingleton<DDReview.Core.Home.HomeService>();
@@ -38,6 +44,12 @@ builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton(sp => new LoginService(sp.GetRequiredService<ICentralDirectory>(), sp.GetRequiredService<LoginThrottle>(),
     sp.GetRequiredService<IOptions<TenantOptions>>().Value.UseCredentialTable));
 builder.Services.AddScoped<UserContextService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<SetupAccessStore>();
+builder.Services.AddSingleton<SetupGridService>();
+builder.Services.AddScoped<SetupAccessService>();
+builder.Services.AddSingleton<CentralAdminService>();
 
 var googleId = builder.Configuration["Authentication:Google:ClientId"];
 var googleSecret = builder.Configuration["Authentication:Google:ClientSecret"];
@@ -54,7 +66,18 @@ authBuilder.AddCookie(ExternalScheme, o =>
     o.ExpireTimeSpan = TimeSpan.FromMinutes(10);
 });
 if (googleOn)
-    authBuilder.AddGoogle(o => { o.ClientId = googleId!; o.ClientSecret = googleSecret!; o.SignInScheme = ExternalScheme; o.CallbackPath = "/signin-google"; });
+    authBuilder.AddGoogle(o =>
+    {
+        o.ClientId = googleId!; o.ClientSecret = googleSecret!; o.SignInScheme = ExternalScheme; o.CallbackPath = "/signin-google";
+        o.ClaimActions.MapJsonKey(GoogleClaims.EmailVerified, "email_verified");   // so a top-level administrator added by email is only tied to the account when Google says the email is verified
+        // Always show Google's account chooser, so the browser never signs in silently as whichever Google account it used last,
+        // unless the caller already asked for a different prompt.
+        o.Events.OnRedirectToAuthorizationEndpoint = ctx =>
+        {
+            ctx.Response.Redirect(GoogleChallenge.WithDefaultPrompt(ctx.RedirectUri));   // leaves a prompt the caller chose (Setup's Verify uses prompt=login) alone
+            return Task.CompletedTask;
+        };
+    });
 authBuilder.AddCookie(o =>
 {
     o.LoginPath = "/login";
@@ -66,6 +89,8 @@ authBuilder.AddCookie(o =>
     o.SlidingExpiration = true;
 });
 builder.Services.AddAuthorization();
+builder.AddLegacyProxy();
+builder.AddPosterLinks();   // a wrong PosterLink setting stops the site here, at start, not later on someone's click
 
 var app = builder.Build();
 
@@ -80,9 +105,10 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+app.UseLegacyGate();
 app.MapStaticAssets();
 
-static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r)
+static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r, bool viaGoogle = false, string? googleSub = null, bool canSwitch = false, string? returnPath = null)
 {
     switch (r.Outcome)
     {
@@ -90,29 +116,66 @@ static async Task<IResult> FinishSignInAsync(HttpContext ctx, LoginResult r)
             var id = new ClaimsIdentity(
                 [new Claim(ClaimTypes.NameIdentifier, r.Account!.WebUserId.ToString()), new Claim(ClaimTypes.Name, r.Account.UserName),
                  new Claim("webLoginId", r.WebLoginId.ToString())], CookieAuthenticationDefaults.AuthenticationScheme);
+            if (googleSub is not null) id.AddClaim(new Claim(GoogleClaims.Subject, googleSub));
+            if (canSwitch) id.AddClaim(new Claim(GoogleClaims.CanSwitch, "1"));
+            if (viaGoogle) SetupClaims.StampGoogle(id, DateTimeOffset.UtcNow);   // a Google sign-in is Google vouching for the person right now (the Setup pages look for this)
             await ctx.SignInAsync(new ClaimsPrincipal(id));
-            return Results.Redirect("/");
+            return Results.Redirect(SignInReturn.SafePath(returnPath));      // the page a link asked for (e.g. /?tab=recap), else the home page
         case LoginOutcome.Redirect when Uri.TryCreate(r.RedirectUrl, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps:
             return Results.Redirect(u.ToString());
-        case LoginOutcome.LockedOut: return Results.Redirect("/login?e=locked");
-        case LoginOutcome.NoClientDatabase: return Results.Redirect("/login?e=nodb");
-        default: return Results.Redirect("/login?e=bad");
+        case LoginOutcome.LockedOut: return Results.Redirect(LoginAgain("locked", returnPath));
+        case LoginOutcome.NoClientDatabase: return Results.Redirect(LoginAgain("nodb", returnPath));
+        default: return Results.Redirect(LoginAgain("bad", returnPath));
     }
 }
 
-app.MapPost("/account/login", async (HttpContext ctx, [FromForm] string? userName, [FromForm] string? password, LoginService login) =>
+// Back to the login page with an error, keeping the page a link asked for so a second, correct attempt still lands there.
+static string LoginAgain(string error, string? returnPath)
+{
+    var back = SignInReturn.SafePath(returnPath);
+    return back == SignInReturn.Landing ? "/login?e=" + error : "/login?e=" + error + "&ReturnUrl=" + Uri.EscapeDataString(back);
+}
+
+// The poster installer (MSI) for the Setup page. Administrators only. The file is the newest DDQuickBooksPoster-*.msi in the folder named by the site setting
+// PosterInstaller:Folder; nothing from the request picks the file.
+app.MapGet("/admin/setup/poster-installer", async (HttpContext http, UserContextService users, IConfiguration config) =>
+{
+    var ctx = await users.GetAsync(http.User, http.RequestAborted);
+    if (ctx is null || !ctx.Access.Administrator) return Results.NotFound();
+    var file = DDReview.QuickBooks.Launch.PosterInstallerLocator.FindNewest(config["PosterInstaller:Folder"]);
+    if (file is null) return Results.NotFound();
+    http.Response.Headers.CacheControl = "no-store";
+    return Results.File(new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.Read), "application/x-msi", file.Name);
+}).RequireAuthorization();
+
+// The stored submission report of a batch, drawn as SVG (thumbnails and the full page both use it). Signed-in users only, and only for
+// stores their General Ledger access covers.
+app.MapGet("/gl/submission-image/{batchId:int}", async (int batchId, HttpContext http, UserContextService users, DDReview.Core.Gl.SubmissionReportService reports) =>
+{
+    var ctx = await users.GetAsync(http.User, http.RequestAborted);
+    if (ctx is null || !(ctx.Access.Administrator || ctx.Access.CanSee(ReportKind.DebitCredit))) return Results.NotFound();
+    DDReview.Core.Gl.SubmissionReport? report;
+    try { report = await reports.GetAsync(ctx.ClientConnectionString, batchId, DDReview.Core.Gl.SubmissionReportService.AllowedStores(ctx.Access, ReportKind.DebitCredit), http.RequestAborted); }
+    catch (Microsoft.Data.SqlClient.SqlException) { return Results.NotFound(); }
+    if (report is null || report.Commands.Count == 0) return Results.NotFound();
+    http.Response.Headers.CacheControl = "private, max-age=600";
+    return Results.Text(DDReview.Core.Gl.SubmissionSvg.Render(report.Commands), "image/svg+xml");
+}).RequireAuthorization();
+
+app.MapPost("/account/login", async (HttpContext ctx, [FromForm] string? userName, [FromForm] string? password, [FromForm] string? returnUrl, LoginService login) =>
 {
     var r = await login.SignInAsync(userName ?? "", password ?? "", ctx.Connection.RemoteIpAddress?.ToString(),
         ctx.Request.Headers.UserAgent.ToString(), ctx.Request.Host.Host, ctx.RequestAborted);
-    return await FinishSignInAsync(ctx, r);
+    return await FinishSignInAsync(ctx, r, returnPath: returnUrl);
 });  // [FromForm] endpoints validate the antiforgery token automatically
 
 // Google: "start" is a POST (antiforgery-checked) so another site cannot start a link in your browser; "done" is where Google sends you back.
 if (googleOn)
 {
-    app.MapPost("/account/google/start", (HttpContext ctx, [FromForm] string? mode) =>
+    app.MapPost("/account/google/start", (HttpContext ctx, [FromForm] string? mode, [FromForm] string? returnUrl) =>
     {
         var props = new AuthenticationProperties { RedirectUri = "/account/google/done" };
+        if (mode != "link") props.Items["return"] = SignInReturn.SafePath(returnUrl);   // travels inside the protected sign-in state, and the external cookie if a database must be chosen
         if (mode == "link")
         {
             var me = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -125,37 +188,114 @@ if (googleOn)
     app.MapGet("/account/google/done", async (HttpContext ctx, LoginService login, ICentralDirectory central, ILogger<Program> log) =>
     {
         var ext = await ctx.AuthenticateAsync(ExternalScheme);
-        await ctx.SignOutAsync(ExternalScheme);
         var sub = ext.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!ext.Succeeded || string.IsNullOrEmpty(sub))
-        {
-            log.LogWarning("Google sign-in did not complete: {Reason}", ext.Failure?.Message ?? "no Google account id came back (external cookie missing or expired)");
-            return Results.Redirect("/login?e=google");
-        }
+        var keepExternal = false;   // the "choose a database" page still needs the Google answer
         try
         {
+            if (!ext.Succeeded || string.IsNullOrEmpty(sub))
+            {
+                log.LogWarning("Google sign-in did not complete: {Reason}", ext.Failure?.Message ?? "no Google account id came back (external cookie missing or expired)");
+                return Results.Redirect("/login?e=google");
+            }
+            var email = ext.Principal!.FindFirstValue(ClaimTypes.Email);
+            var verified = GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified));
+            var ip = ctx.Connection.RemoteIpAddress?.ToString();
+            string? back = null; ext.Properties?.Items.TryGetValue("return", out back);
             if (ext.Properties?.Items.TryGetValue("linkUser", out var linkUser) == true)
             {
                 if (ctx.User.FindFirstValue(ClaimTypes.NameIdentifier) != linkUser || !int.TryParse(linkUser, out var uid))
                     return Results.Redirect("/login?e=google");
-                var ok = await central.LinkGoogleAsync(uid, sub, ext.Principal!.FindFirstValue(ClaimTypes.Email), ctx.RequestAborted);
+                var ok = await central.LinkGoogleAsync(uid, sub, email, ctx.RequestAborted);
+                if (ok) await central.AuditAsync("link", sub, email, uid, null, ip, ctx.RequestAborted);
                 return Results.Redirect(ok ? "/account?g=linked" : "/account?g=taken");
             }
-            var r = await login.SignInWithGoogleAsync(sub, ctx.Connection.RemoteIpAddress?.ToString(),
+            var opts = await login.GoogleOptionsAsync(sub, email, verified, ct: ctx.RequestAborted);
+            if (opts.Choices.Count == 0 && !opts.IsTopAdmin) return Results.Redirect("/login?e=nogoogle");
+            if (opts.MustChoose) { keepExternal = true; return Results.Redirect("/account/pick"); }
+            var r = await login.SignInWithGoogleChoiceAsync(sub, email, verified, opts.Choices[0].WebUserId, ip,
                 ctx.Request.Headers.UserAgent.ToString(), ctx.Request.Host.Host, ctx.RequestAborted);
-            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r);
+            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r, viaGoogle: true, googleSub: sub, returnPath: back);
         }
         catch (Microsoft.Data.SqlClient.SqlException ex)   // e.g. sql/003 not run on the central master yet
         {
-            log.LogError(ex, "Google sign-in could not read dbo.tblWebUserGoogle on the central master (has sql/003_central_google_link.sql been run?)");
+            log.LogError(ex, "Google sign-in could not read the Google link tables on the central master (have sql/003 and sql/008 been run?)");
+            return Results.Redirect("/login?e=google");
+        }
+        finally { if (!keepExternal) await ctx.SignOutAsync(ExternalScheme); }
+    });
+
+    // The list of databases (logins) this Google account can open. Shown by /account/pick; this checks the choice again.
+    app.MapPost("/account/pick", async (HttpContext ctx, LoginService login, ILogger<Program> log, [FromForm] int loginId) =>
+    {
+        var ext = await ctx.AuthenticateAsync(ExternalScheme);
+        var sub = ext.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!ext.Succeeded || string.IsNullOrEmpty(sub)) return Results.Redirect("/login?e=google");
+        string? back = null; ext.Properties?.Items.TryGetValue("return", out back);
+        try
+        {
+            var r = await login.SignInWithGoogleChoiceAsync(sub, ext.Principal!.FindFirstValue(ClaimTypes.Email),
+                GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified)), loginId, ctx.Connection.RemoteIpAddress?.ToString(),
+                ctx.Request.Headers.UserAgent.ToString(), ctx.Request.Host.Host, ctx.RequestAborted);
+            await ctx.SignOutAsync(ExternalScheme);
+            return r.Outcome == LoginOutcome.InvalidCredentials ? Results.Redirect("/login?e=nogoogle") : await FinishSignInAsync(ctx, r, viaGoogle: true, googleSub: sub, canSwitch: true, returnPath: back);
+        }
+        catch (Microsoft.Data.SqlClient.SqlException ex)
+        {
+            log.LogError(ex, "Choosing a database could not read the central master");
             return Results.Redirect("/login?e=google");
         }
     });
+
+    // Setup pages: Google must have vouched for the person in the last 30 minutes. This asks Google again (prompt=login, so a Google session
+    // already open in the browser is not enough) and, if it is the Google account linked to THIS login, stamps the session. A password
+    // session that completes this becomes a Google session too, since it has just proved the linked Google account.
+    app.MapPost("/admin/verify", (HttpContext ctx, [FromForm] string? returnUrl) =>
+    {
+        var me = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (me is null) return Results.Redirect("/login");
+        var back = SetupReturn.SafePath(returnUrl);
+        var props = new GoogleChallengeProperties { RedirectUri = "/admin/verify-done?to=" + Uri.EscapeDataString(back), Prompt = "login" };
+        props.Items["verifyUser"] = me;      // travels inside the protected sign-in state
+        return Results.Challenge(props, ["Google"]);
+    }).RequireAuthorization();
+
+    app.MapGet("/admin/verify-done", async (HttpContext ctx, ICentralDirectory central, ILogger<Program> log, [FromQuery] string? to) =>
+    {
+        var back = SetupReturn.SafePath(to);
+        var ext = await ctx.AuthenticateAsync(ExternalScheme);
+        await ctx.SignOutAsync(ExternalScheme);
+        var me = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var sub = ext.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!ext.Succeeded || string.IsNullOrEmpty(sub) || me is null
+            || ext.Properties?.Items.TryGetValue("verifyUser", out var started) != true || started != me)
+            return Results.Redirect(SetupReturn.WithFlag(back, "failed"));
+        try
+        {
+            // Allowed when this Google account is linked to THIS login, or when it is the account this session came from and it is a top-level
+            // administrator (who may be on a login they are not linked to, signed in by password or from the list; they get that login's own access, nothing more).
+            var ok = int.TryParse(me, out var meId) && await central.IsLinkedAsync(sub, meId, ctx.RequestAborted);
+            if (!ok)   // also from a password session: Google has just proved this account, and top-level administrators may use any login
+                ok = await central.IsTopAdminAsync(sub, ext.Principal!.FindFirstValue(ClaimTypes.Email), GoogleClaims.IsTrue(ext.Principal.FindFirstValue(GoogleClaims.EmailVerified)), ctx.RequestAborted);
+            if (!ok) return Results.Redirect(SetupReturn.WithFlag(back, "notlinked"));
+        }
+        catch (Microsoft.Data.SqlClient.SqlException ex)
+        {
+            log.LogError(ex, "Google verification could not read dbo.tblWebUserGoogle on the central master");
+            return Results.Redirect(SetupReturn.WithFlag(back, "failed"));
+        }
+        var id = new ClaimsIdentity(ctx.User.Claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        foreach (var c in id.FindAll(GoogleClaims.Subject).ToList()) id.RemoveClaim(c);
+        id.AddClaim(new Claim(GoogleClaims.Subject, sub));   // Google has just proved this account, so the top-level pages can recognise it
+        SetupClaims.StampGoogle(id, DateTimeOffset.UtcNow);
+        await ctx.SignInAsync(new ClaimsPrincipal(id));
+        return Results.Redirect(back);
+    }).RequireAuthorization();
 
     app.MapPost("/account/google/unlink", async (HttpContext ctx, ICentralDirectory central, [FromForm] string? confirm) =>
     {
         if (!int.TryParse(ctx.User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid)) return Results.Redirect("/login");
         await central.UnlinkGoogleAsync(uid, ctx.RequestAborted);
+        await central.AuditAsync("unlink", ctx.User.FindFirstValue(GoogleClaims.Subject), null, uid, null, ctx.Connection.RemoteIpAddress?.ToString(), ctx.RequestAborted);
         return Results.Redirect("/account?g=unlinked");
     });
 }
@@ -168,6 +308,7 @@ app.MapPost("/account/logout", async (HttpContext ctx, Microsoft.AspNetCore.Anti
     return Results.Redirect("/login");
 });
 
+app.MapLegacyProxy();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.Run();
 

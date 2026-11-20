@@ -12,10 +12,18 @@
     <PlatformTarget>x86</PlatformTarget>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <!-- Shown in the title bar. Publish-Poster.ps1 adds the git commit (-p:SourceRevisionId). -->
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DDReview.QuickBooks\DDReview.QuickBooks.csproj" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The public keys the program trusts to sign "Post to QuickBooks" links (public keys only). Ends up next to the exe as DDQuickBooksPoster.keys.json. -->
+    <None Include="..\..\deploy\poster-trusted-keys.json" Link="DDQuickBooksPoster.keys.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

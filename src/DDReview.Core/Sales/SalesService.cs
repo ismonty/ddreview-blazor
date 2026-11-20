@@ -35,12 +35,21 @@ public sealed class SalesService
         return r.BuildDataScript(true);
     }
 
+    /// <summary>The names behind every active filter (one row), from the old page's own header query; null if it cannot be had.</summary>
+    public Task<DataRow?> HeaderAsync(string connectionString, SalesRequest req, CancellationToken ct = default) =>
+        DDReview.Core.Drill.FilterHeader.RunAsync(connectionString,
+            () => BuildHeaderScript(connectionString, req), ct);
+
+    public string BuildHeaderScript(string connectionString, SalesRequest req, ISalesLookups? lookups = null) =>
+        Configure(connectionString, req, lookups).BuildHeaderScript(string.Join(",", req.StoreIds.Distinct().OrderBy(x => x)));
+
     public async Task<DataTable> RunAsync(string connectionString, SalesRequest req, CancellationToken ct = default)
     {
         if (req.End < req.Start) throw new ArgumentException("The end date is before the start date.");
         if (req.StoreIds.Count == 0) throw new ArgumentException("No stores selected.");
         var (script, pairs) = await DDReview.Core.Drill.PairSupport.BuildAsync(connectionString, () => BuildScript(connectionString, req), ct);
         var (sql, pars) = Parameterize(script);
+        sql = ReportSqlTuning.Apply(sql);
 
         await using var cn = new SqlConnection(connectionString);
         await cn.OpenAsync(ct);

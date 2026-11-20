@@ -126,6 +126,8 @@ public sealed class FakeQuickBooks : IQbRequestProcessor
         var o = MakeList(kind, add);
         if (_lists.Any(l => l.Kind == kind && l.FullName == o.FullName)) return Response(rsName, 3100, "name already in use");
         if (kind == "Account" && add.Element("AccountType") == null) return Response(rsName, 3180, "AccountType required");
+        if (kind == "Account" && !DDReview.QuickBooks.Qbxml.QbAccountTypes.Valid.Contains(add.Element("AccountType")!.Value))
+            return Response(rsName, 3040, $"The enumerated value \"{add.Element("AccountType")!.Value}\" in the field \"AccountType\" is unknown or invalid for the qbXML version in use."); // the message QuickBooks gives
         _lists.Add(o);
         return Response(rsName, 0, "Status OK", o.Ret);
     }

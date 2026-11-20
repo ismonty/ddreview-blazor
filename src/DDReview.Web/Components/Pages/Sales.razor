@@ -11,7 +11,7 @@
 @using DDReview.Web.Components.Home
 
 <PageTitle>MontySoft DD Review™</PageTitle>
-<h1>Sales review</h1>
+<h1>Sales Review</h1>
 
 @if (ctx is null) { <p>Loading…</p> }
 else if (!allowed) { <p class="error">You are not authorized for this report.</p> }
@@ -20,8 +20,10 @@ else
     <EditForm Model="this" OnSubmit="RunAsync" FormName="sales" class="filters">
         <MultiSelect Caption="Stores" NoneText="None selected" Options="@StoreOptions" OnToggle="t => Toggle(int.Parse(t.Key), t.On)" />
         <MultiSelect Caption="Group by" NoneText="None selected" Options="@DimOptions" OnToggle="t => ToggleDim(Enum.Parse<SalesDimensions>(t.Key), t.On)" />
-        <label>From <input type="date" @bind="start" /></label>
-        <label>To <input type="date" @bind="end" /></label>
+        <label>From <input type="date" @bind="start" @bind:after="StartChanged" /></label>
+        <DatePreset Label="From Shortcuts" Options="DatePreset.StartOptions" OnPick="StartPick" />
+        <label>To <input type="date" @bind="end" @bind:after="EndChanged" /></label>
+        <DatePreset Label="To Shortcuts" Options="DatePreset.EndOptions" OnPick="EndPick" />
         <label>Compare to
             <select @bind="compare">
                 <option value="">None</option>
@@ -29,7 +31,7 @@ else
                 <option value="-7">Previous week</option>
             </select>
         </label>
-        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Run")</button>
+        <button type="submit" disabled="@busy">@(busy ? "Running…" : "Submit")</button>
     </EditForm>
 
     @if (error is not null) { <p class="error" role="alert">@error</p> }
@@ -39,9 +41,7 @@ else
         <p class="range">@($"{rangeStart:dddd, MMMM d, yyyy} - {rangeEnd:dddd, MMMM d, yyyy}")</p>
         @if (state.Filters.Count > 0)
         {
-            <p class="filters-on">Filtered on:
-                @foreach (var k in state.Filters.Keys.ToList()) {<button type="button" class="hlink" title="Show All" @onclick="() => Act(s => s.ShowAll(k))">@FilterLabel(k) ✕</button>}
-            </p>
+            <FilterBoxes Boxes="Boxes()" OnShowAll="k => Act(st => st.ShowAll(k))" />
         }
         <table class="sales">
             <thead><tr>
@@ -86,12 +86,21 @@ else
             </tfoot>
         </table>
         <p class="rowcount">Showing @result.Rows.Count Rows</p>
+        <QueryTime Elapsed="queryTime" />
+        <ViewByBar Busy="busy" Choices="Choices.Select(c => (c.Value.ToString(), c.Label)).ToList()" OnSubmit="FooterSubmit" />
         <ReportButtons Busy="busy" ShowWeekdaysToggle="true" Weekdays="weekdays" OnPrevious="() => Shift(-1)" OnNext="() => Shift(1)" OnToggleWeekdays="ToggleWeekdays" OnExcel="ExcelAsync" />
     }
 }
 
 @code {
-    private string FilterLabel(string k) { var n = FilterText.Names(result, Cat, k); return n.Length == 0 ? k : k + ": " + n; }
+    // Changing From moves To: the last day of the month for the 1st of a month, otherwise a week (six days after From).
+    private void StartChanged() => end = DDReview.Core.DateRules.EndFor(start, DDReview.Core.DateRules.Yesterday);
+    private void StartPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyStart(Enum.Parse<DDReview.Core.DateRules.StartPreset>(key), end, DateTime.Today);
+    private void EndPick(string key) => (start, end) = DDReview.Core.DateRules.ApplyEnd(Enum.Parse<DDReview.Core.DateRules.EndPreset>(key), start, DateTime.Today);
+    private void EndChanged() => start = DDReview.Core.DateRules.StartFor(start, end);   // an end before the start pulls the start back to it
+    private DataRow? header;
+    private TimeSpan? queryTime;
+    private IReadOnlyList<FilterBox> Boxes() => FilterHeader.Boxes(header, result, Cat, state.Filters.Keys);
 
     private IReadOnlyList<MultiSelect.Option> StoreOptions => stores.Select(s => new MultiSelect.Option(s.StoreId.ToString(), s.StoreNumber + " – " + s.StoreName, selected.Contains(s.StoreId))).ToList();
     private IReadOnlyList<MultiSelect.Option> DimOptions => Choices.Select(d => new MultiSelect.Option(d.Value.ToString(), d.Label, state.Flags.Contains(d.Value.ToString()))).ToList();
@@ -138,6 +147,16 @@ else
     private void Toggle(int id, bool on) { if (on) selected.Add(id); else selected.Remove(id); }
     private void ToggleDim(SalesDimensions d, bool on) { if (on) state.Flags.Add(d.ToString()); else state.Flags.Remove(d.ToString()); }
 
+    /// <summary>The View By / Drill Up row under the grid: View By groups by that one dimension, each Drill Up adds one; then the report runs again (filters kept).</summary>
+    private async Task FooterSubmit(ViewByBar.Selection s)
+    {
+        if (s.ViewBy is not null) { state.Flags.Clear(); state.Flags.Add(s.ViewBy); }
+        if (s.DrillUp1 is not null) state.Flags.Add(s.DrillUp1);
+        if (s.DrillUp2 is not null) state.Flags.Add(s.DrillUp2);
+        state.SortHeader = null;
+        await ExecuteAsync();
+    }
+
     private async Task Act(Action<DrillState> change) { change(state); await ExecuteAsync(); }
     private async Task RowClick(DrillColumn dc, DataRow row)
     {
@@ -161,13 +180,13 @@ else
         return GridSort.Rows(result, key, state.SortDescending);
     }
 
-    /// <summary>The Run button: a fresh report, so filters and sort start over.</summary>
-    private async Task RunAsync() { state.Filters.Clear(); state.SortHeader = null; await ExecuteAsync(); }
+    /// <summary>The Run button: runs again with the filters kept (clear one with its box's ✕); the sort starts over.</summary>
+    private async Task RunAsync() { state.SortHeader = null; await ExecuteAsync(); }
 
     private async Task ExecuteAsync()
     {
         if (ctx is null || busy) return;
-        error = null; result = null; checkedRows.Clear();
+        error = null; result = null; header = null; queryTime = null; checkedRows.Clear();
         var dims = state.Dimensions<SalesDimensions>();
         var allowedIds = stores.Select(s => s.StoreId).ToHashSet();                         // re-check against the access list
         var (ids, lists) = DrillFilters.Split(state, Cat, selected.Where(allowedIds.Contains));
@@ -180,7 +199,10 @@ else
             int? off = int.TryParse(compare, out var o) ? o : null;
             var filters = lists.Count == 0 ? null : lists.ToDictionary(kv => Enum.Parse<SalesDimensions>(kv.Key), kv => kv.Value);
             var req = new SalesRequest(DateOnly.FromDateTime(start), DateOnly.FromDateTime(end), dims, ids, off, filters);
-            result = await SalesSvc.RunAsync(ctx.ClientConnectionString, req);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var runTask = SalesSvc.RunAsync(ctx.ClientConnectionString, req);
+            var headTask = state.Filters.Count == 0 ? Task.FromResult<DataRow?>(null) : SalesSvc.HeaderAsync(ctx.ClientConnectionString, req);
+            result = await runTask; queryTime = sw.Elapsed; header = await headTask;
             ranDims = dims;
             cols = SalesLayout.Build(ranDims, result, weekdays);
             colDrill = cols.Select(c => c.Kind == SalesCellKind.Text ? DrillState.ForDisplay(Cat, c.Column) : null).ToList();
@@ -198,8 +220,7 @@ else
     }
     private async Task Shift(int dir)
     {
-        var days = (int)(end - start).TotalDays + 1;
-        start = start.AddDays(dir * days); end = end.AddDays(dir * days);
+        (start, end) = DDReview.Core.DateRules.Shift(start, end, dir, DDReview.Core.DateRules.Yesterday);
         await ExecuteAsync();
     }
     private async Task ExcelAsync()
@@ -207,7 +228,7 @@ else
         if (result is null) return;
         var (h, rows, tot) = SalesLayout.Export(result, cols);
         var title = $"Sales review {rangeStart:MM/dd/yyyy} - {rangeEnd:MM/dd/yyyy}";
-        var bytes = DDReview.Core.Support.XlsxWriter.Write("Sales", title, h, rows, tot);
+        var bytes = DDReview.Core.Support.XlsxWriter.Write("Sales", title, h, rows, tot, FilterHeader.Describe(Boxes()));
         await JS.InvokeVoidAsync("ddDownload", $"SalesReview_{rangeStart:yyyyMMdd}_{rangeEnd:yyyyMMdd}.xlsx", Convert.ToBase64String(bytes),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }

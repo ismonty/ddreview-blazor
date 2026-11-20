@@ -15,6 +15,15 @@ public sealed class UserAccess
     /// <summary>Reports where the user has no store restriction (old rule: no store rows for the user = authorized for all stores).</summary>
     public HashSet<ReportKind> AllStores { get; } = [];
 
+    /// <summary>A copy with the Administrator flag on (for top-level administrators). The original, which is cached and shared, is left alone.</summary>
+    public UserAccess AsAdministrator()
+    {
+        var copy = new UserAccess { ClientWebUserId = ClientWebUserId, UserName = UserName, Administrator = true };
+        foreach (var (k, v) in Stores) copy.Stores[k].UnionWith(v);
+        copy.AllStores.UnionWith(AllStores);
+        return copy;
+    }
+
     public bool CanSee(ReportKind kind) => AllStores.Contains(kind) || Stores[kind].Count > 0;
     public string StoreListCsv(ReportKind kind) => string.Join(",", Stores[kind].OrderBy(x => x));
 }

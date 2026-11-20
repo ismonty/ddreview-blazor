@@ -7,6 +7,8 @@ public sealed record ObjectRequirement(ObjectKind Kind, string FullName)
 {
     /// <summary>Account: the QuickBooks account type to create it as (no spaces, e.g. OtherCurrentAsset).</summary>
     public string? DefaultAccountType { get; init; }
+    /// <summary>Account: DD Review had no usable type for it (empty, "0" or unknown), so <see cref="DefaultAccountType"/> is a guess. Holds what DD Review had, for the note shown in Preview.</summary>
+    public string? GuessedTypeFrom { get; init; }
     /// <summary>Service item: the income account its sales go to.</summary>
     public string? ItemAccount { get; init; }
     /// <summary>Customer: customer type, account number, parent, and club minimum figures when present.</summary>

@@ -13,23 +13,29 @@
     }
     <form method="post" action="/account/login">
         <AntiforgeryToken />
+        <input type="hidden" name="returnUrl" value="@Return" />
         <label>User name or email<input name="userName" autocomplete="username" maxlength="250" required autofocus /></label>
         <label>Password<input name="password" type="password" autocomplete="current-password" maxlength="200" required /></label>
-        <button type="submit">Sign in</button>
+        <button type="submit">Sign In</button>
     </form>
     @if (GoogleStatus.Enabled)
     {
         <form method="post" action="/account/google/start" class="google">
             <AntiforgeryToken />
             <input type="hidden" name="mode" value="signin" />
+            <input type="hidden" name="returnUrl" value="@Return" />
             <p class="muted">or</p>
-            <button type="submit" class="secondary">Sign in with Google</button>
+            <button type="submit" class="secondary">Sign In with Google</button>
         </form>
+        <p class="muted small google-out">Shared computer? <a href="https://accounts.google.com/Logout" target="_blank" rel="noopener" title="Signs every Google account out of this browser, so the next Google sign-in asks for the email and password">Sign Out of Google</a></p>
     }
 </div>
 
 @code {
     [SupplyParameterFromQuery(Name = "e")] public string? Error { get; set; }
+    /// <summary>Where a link wanted to go before it asked for credentials (the cookie sign-in adds ReturnUrl); sign-in sends the person there afterwards.</summary>
+    [SupplyParameterFromQuery(Name = "ReturnUrl")] public string? ReturnUrl { get; set; }
+    private string Return => DDReview.Core.Admin.SignInReturn.SafePath(ReturnUrl);
     private string Message => Error switch
     {
         "locked" => "Too many failed attempts. Try again in 15 minutes.",

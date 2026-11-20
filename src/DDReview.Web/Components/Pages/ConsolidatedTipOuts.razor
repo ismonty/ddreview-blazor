@@ -158,7 +158,7 @@ else
 
     private int? adjBatch; private string? adjName; private int adjStore;
     private IReadOnlyList<TipOutAdjustment> adjustments = [];
-    private IReadOnlyList<NamedId> staffList = [], groupList = [];
+    private IReadOnlyList<LookupItem> staffList = [], groupList = [];
     private AdjEdit edit = new();
 
     private sealed class AdjEdit

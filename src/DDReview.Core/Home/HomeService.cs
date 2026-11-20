@@ -60,10 +60,49 @@ public sealed class HomeService
         return (rows, await StatusAsync(cs, stores, ct));
     }
 
+    /// <summary>
+    /// The Daily Recap (the numbers of the emailed recap) for one ending day, limited to <paramref name="stores"/>.
+    /// Returns null when this database does not have dbo.fn_ConciseDailyRecapBlazor2 yet (sql/018, added by Database Updater).
+    /// </summary>
+    public async Task<ConciseRecap?> ConciseRecapAsync(string cs, IEnumerable<int> stores, DateOnly ending, CancellationToken ct = default)
+    {
+        var ids = stores.Distinct().ToList();
+        if (ids.Count == 0) return ConciseRecap.Empty(ending);          // no stores: nothing to show (the function would return nothing too)
+        try
+        {
+            // The three day numbers (the day, 364 and 728 days back) are worked out once here and passed in as plain numbers: inside the query they made SQL Server run a
+            // nested scalar function over the sales table (see sql/018).
+            var days = (await QueryAsync(cs,
+                "select dbo.fn_CalcDayNumber(@d) as D0, dbo.fn_CalcDayNumber(dateadd(day, -364, @d)) as D1, dbo.fn_CalcDayNumber(dateadd(day, -728, @d)) as D2",
+                "RecapDays", 30, ct, Date("@d", ending))).Rows[0];
+            var t = await QueryAsync(cs, "select * from dbo.fn_ConciseDailyRecapBlazor2(@d, @n0, @n1, @n2, @list) order by RowSeq", "Recap", 300, ct,
+                Date("@d", ending), new SqlParameter("@n0", (int)days["D0"]), new SqlParameter("@n1", (int)days["D1"]), new SqlParameter("@n2", (int)days["D2"]), List("@list", ids));
+            return ConciseRecap.From(t, ending);
+        }
+        catch (SqlException ex) when (ex.Number is 208 or 4121)
+        {
+            return null;                                                  // an older database: the card says so and the rest of the page still loads
+        }
+    }
+
     /// <summary>Register-processing status per group of stores; StoreProcessingStatus above 0 means running behind.</summary>
-    public Task<DataTable> StatusAsync(string cs, IEnumerable<int> stores, CancellationToken ct = default) =>
-        QueryAsync(cs, "select StoreProcessingStatus, StoreProcessingStatusDescription, StoreNameList from dbo.fn_StoreRegisterProcessingStatus(@list) order by StoreProcessingStatus desc",
-            "Status", 600, ct, List("@list", stores));
+    public async Task<DataTable> StatusAsync(string cs, IEnumerable<int> stores, CancellationToken ct = default)
+    {
+        try
+        {
+            return await QueryAsync(cs, "select StoreProcessingStatus, StoreProcessingStatusDescription, StoreNameList from dbo.fn_StoreRegisterProcessingStatus(@list) order by StoreProcessingStatus desc",
+                "Status", 600, ct, List("@list", stores));
+        }
+        catch (SqlException ex) when (ex.Number is 208 or 4121)
+        {
+            // An older database without dbo.fn_StoreRegisterProcessingStatus: no "running behind" notice, but the page still loads.
+            var none = new DataTable("Status");
+            none.Columns.Add("StoreProcessingStatus", typeof(int));
+            none.Columns.Add("StoreProcessingStatusDescription", typeof(string));
+            none.Columns.Add("StoreNameList", typeof(string));
+            return none;
+        }
+    }
 
     /// <summary>Dashboard source rows (the gauges and charts add these up). storeIds = the stores to include.</summary>
     public async Task<DataTable> DashboardAsync(string cs, IEnumerable<int> storeIds, DashboardScope scope, DateOnly start, DateOnly end, DateOnly previousStart, CancellationToken ct = default)

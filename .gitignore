@@ -500,3 +500,6 @@ appsettings.Local.json
 
 # QuickBooks test fixtures must be committed
 !tests/DDReview.Tests/QuickBooks/Data/*.csv
+
+# Poster link signing keys: the private half must never be committed
+*.signing-key.private.txt
